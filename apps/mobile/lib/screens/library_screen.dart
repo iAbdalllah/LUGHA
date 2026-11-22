@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../l10n.dart';
 import '../state.dart';
+import 'report_sheet.dart';
 
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({super.key, required this.app});
@@ -60,11 +61,28 @@ class _LibraryScreenState extends State<LibraryScreen> {
               style: Theme.of(context).textTheme.titleLarge,
             ),
           ),
+        if (_result?.reportable ?? false)
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: TextButton.icon(
+              key: const Key('report'),
+              icon: const Icon(Icons.flag_outlined, size: 18),
+              label: Text(L.t('Wrong translation? Report it')),
+              onPressed: () => showReportSheet(context, app, _result!),
+            ),
+          ),
         if (app.history.isNotEmpty) ...[
           const SizedBox(height: 24),
           Text(L.t('History'), style: Theme.of(context).textTheme.titleMedium),
           for (final l in app.history.take(10))
-            ListTile(dense: true, title: Text(l.target ?? '—', textDirection: TextDirection.rtl), subtitle: Text(l.source, textDirection: TextDirection.ltr)),
+            ListTile(
+              dense: true,
+              title: Text(l.target ?? '—', textDirection: TextDirection.rtl),
+              subtitle: Text(l.source, textDirection: TextDirection.ltr),
+              trailing: l.reportable
+                  ? IconButton(tooltip: L.t('Report this line'), icon: const Icon(Icons.flag_outlined), onPressed: () => showReportSheet(context, app, l))
+                  : null,
+            ),
         ],
         if (app.status.isNotEmpty) Text(app.status, style: const TextStyle(color: Colors.orange)),
       ]),

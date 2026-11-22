@@ -5,6 +5,18 @@ public struct Subtitle: Equatable, Sendable {
     public let speaker: String?
     public let source: String
     public let score: Double
+    /// The line's id in its package (= the server's translation id) — what "report this line" sends.
+    public let entryId: Int64
+    public let packageId: String
+
+    public init(text: String, speaker: String?, source: String, score: Double, entryId: Int64 = 0, packageId: String = "") {
+        self.text = text
+        self.speaker = speaker
+        self.source = source
+        self.score = score
+        self.entryId = entryId
+        self.packageId = packageId
+    }
 }
 
 /// OCR text in, subtitle to show out. Pure state machine (testable with a fake clock):
@@ -57,7 +69,7 @@ public final class SubtitlePipeline: @unchecked Sendable {
             current = nil
             return changed
         }
-        let sub = Subtitle(text: hit.target, speaker: hit.speaker, source: text, score: hit.score)
+        let sub = Subtitle(text: hit.target, speaker: hit.speaker, source: text, score: hit.score, entryId: hit.entryId, packageId: hit.packageId)
         if sub != current {
             current = sub
             history.insert(sub, at: 0)

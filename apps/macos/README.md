@@ -18,7 +18,7 @@ First run: choose **Library & account…**, check the server address (default `h
 | Path | What |
 |---|---|
 | `Sources/LughaKit/Engine.swift` | Swift wrapper over the Rust engine's C ABI (`engine/lugha-ffi`) |
-| `Sources/LughaKit/APIClient.swift` | REST API v1: device-code sign-in, devices, library, downloads, heartbeat, licenses |
+| `Sources/LughaKit/APIClient.swift` | REST API v1: device-code sign-in, devices, library, downloads, heartbeat, licenses, report a line |
 | `Sources/LughaKit/PackageStore.swift` | Installed packages + `SyncService` (installs, delta updates with full fallback, license refresh, refund removal) |
 | `Sources/LughaKit/CaptureService.swift` | ScreenCaptureKit region capture; excludes LUGHA's own overlay |
 | `Sources/LughaKit/OCRService.swift` | Vision text recognition (no language correction, so names survive) |

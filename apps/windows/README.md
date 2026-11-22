@@ -9,7 +9,7 @@ GDI region capture ─► Windows.Media.Ocr ─► stable-frame pipeline ─► 
 
 | Path | What |
 |---|---|
-| `src-tauri/src/api.rs` | REST API v1 client (login, device code, devices, library, downloads, heartbeat, licenses) |
+| `src-tauri/src/api.rs` | REST API v1 client (login, device code, devices, library, downloads, heartbeat, licenses, report a line) |
 | `src-tauri/src/sync.rs`, `store.rs` | install / delta / fallback / revoke; packages in `%APPDATA%\LUGHA\packages` |
 | `src-tauri/src/pipeline.rs` | OCR lines → subtitle (2 stable frames, hide after 1.2 s of silence) |
 | `src-tauri/src/tv.rs` | LUGHA Link sender (SPAKE2 pairing, Noise IK session) over TCP |

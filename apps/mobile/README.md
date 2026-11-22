@@ -3,7 +3,7 @@
 The phone app is the package manager and TV remote. It does not capture other apps' screens in v1.
 
 - **Account:** email/password sign-in (token in the Keychain / Android Keystore via `flutter_secure_storage`), device registration with an X25519 key; at the device limit it opens *Devices* so one can be removed.
-- **Library:** syncs entitlements, downloads full or delta packages, verifies checksum, signature, license and content hash with the Rust engine, refreshes licenses, removes refunded packages. *Try a line* runs the real matcher on-device.
+- **Library:** syncs entitlements, downloads full or delta packages, verifies checksum, signature, license and content hash with the Rust engine, refreshes licenses, removes refunded packages. *Try a line* runs the real matcher on-device; a matched line (and each History line) can be reported to the reviewers with a reason and note.
 - **Devices:** list and remove devices on the account.
 - **TV:** finds LUGHA TVs over mDNS (`_lugha._tcp`), pairs with the 6-digit code (SPAKE2), then sends lines and controls the TV's look (font size, position, background) over the encrypted Noise session.
 - **Account screen:** server, interface language, history of lines sent, sign-out.
@@ -17,7 +17,7 @@ The engine is `packages/lugha_engine`, a `dart:ffi` plugin around `engine/lugha-
 flutter test                                         # unit tests
 (cd packages/lugha_engine && flutter test)           # engine on the host (needs: cd engine && cargo build --release -p lugha-ffi)
 flutter run                                          # emulator / simulator; debug builds talk to http://10.0.2.2:8040 (Android) or 127.0.0.1:8040
-flutter test integration_test/app_test.dart          # sign in → sync → install → Arabic lookup, against a running backend
+flutter test integration_test/app_test.dart          # sign in → sync → install → Arabic lookup → report a line, against a running backend
 flutter test integration_test/tv_link_test.dart --dart-define=TV_CODE=123456   # phone → LUGHA TV, with the TV's code
 ```
 

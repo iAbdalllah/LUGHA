@@ -116,6 +116,31 @@
   </section>
 </main>
 
+<dialog id="report">
+  <form method="dialog" id="report-form">
+    <h2>الإبلاغ عن ترجمة</h2>
+    <p class="muted">يصل بلاغك لفريق المراجعة. إن قُبل يُصحَّح السطر في التحديث القادم للحزمة.</p>
+    <div class="quote"><span class="sub" id="report-text"></span><span class="src" id="report-src"></span></div>
+    <label>السبب
+      <select id="report-reason">
+        <option value="wrong_meaning">معنى خاطئ</option>
+        <option value="typo">خطأ إملائي</option>
+        <option value="awkward">صياغة ركيكة</option>
+        <option value="wrong_speaker">المتحدث خاطئ</option>
+        <option value="offensive">محتوى مسيء</option>
+        <option value="other">سبب آخر</option>
+      </select>
+    </label>
+    <label>ملاحظة (اختياري)
+      <textarea id="report-note" rows="3" maxlength="500" placeholder="ما الخطأ؟ وما الصحيح برأيك؟"></textarea>
+    </label>
+    <div class="row end">
+      <button value="cancel" class="ghost" formnovalidate>إلغاء</button>
+      <button value="send" class="primary" id="report-send">إرسال البلاغ</button>
+    </div>
+  </form>
+</dialog>
+
 <div class="toast" id="toast" hidden></div>
 <script src="app.js"></script>
 </body>

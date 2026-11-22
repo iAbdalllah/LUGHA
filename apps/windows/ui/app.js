@@ -128,8 +128,30 @@ function renderSub(line) {
   const box = document.createElement('div');
   if (line.speaker) { const s = document.createElement('span'); s.className = 'spk'; s.textContent = line.speaker; box.append(s); }
   const t = document.createElement('span'); t.className = 'sub'; t.textContent = line.text; box.append(t);
+  const r = btn('الترجمة خاطئة؟ أبلغ عنها', () => openReport(line), 'link report');
+  box.append(document.createElement('br'), r);
   p.append(box);
 }
+
+// ---- report a line ----
+let reporting = null;
+function openReport(line) {
+  reporting = line;
+  $('report-text').textContent = (line.speaker ? line.speaker + ': ' : '') + line.text;
+  $('report-src').textContent = line.source;
+  $('report-reason').value = 'wrong_meaning';
+  $('report-note').value = '';
+  $('report').showModal();
+}
+$('report').onclose = async () => {
+  const line = reporting;
+  reporting = null;
+  if ($('report').returnValue !== 'send' || !line) return;
+  try {
+    await call('report_line', { package: line.package_id, entryId: line.entry_id, reason: $('report-reason').value, note: $('report-note').value || null });
+    toast('شكراً، وصل بلاغك لفريق المراجعة.');
+  } catch (_) { /* call() already showed the error */ }
+};
 
 async function loadHistory() {
   const items = await call('history');
@@ -138,9 +160,13 @@ async function loadHistory() {
   if (!items.length) ul.innerHTML = '<li class="muted">لم تُعرض أي ترجمة بعد.</li>';
   items.forEach((l) => {
     const li = document.createElement('li');
+    const txt = document.createElement('span'); txt.className = 'txt';
     const a = document.createElement('span'); a.textContent = (l.speaker ? l.speaker + ': ' : '') + l.text;
     const b = document.createElement('span'); b.className = 'src'; b.textContent = l.source;
-    li.append(a, b);
+    txt.append(a, b);
+    const acts = document.createElement('span'); acts.className = 'acts';
+    acts.append(btn('إبلاغ', () => openReport(l), 'link'));
+    li.append(txt, acts);
     ul.append(li);
   });
 }
@@ -233,7 +259,7 @@ function mockInvoke(cmd, args) {
     packages: [['sandline-sa-full', '1.1.0']], region: { x: 192, y: 810, w: 1536, h: 243 }, capturing: false,
     tv: '192.168.1.20:47800', tv_paired: true, tv_connected: true, ocr_language: 'en-US', windows: true, last_error: null,
   });
-  const lines = { 'water costs more than gold out here': { text: 'الماء هنا أغلى من الذهب.', speaker: 'سالم', source: 'Water costs more than gold out here' } };
+  const lines = { 'water costs more than gold out here': { text: 'الماء هنا أغلى من الذهب.', speaker: 'سالم', source: 'Water costs more than gold out here', entry_id: 6, package_id: 'sandline-sa-full' } };
   switch (cmd) {
     case 'status': return Promise.resolve({ ...m });
     case 'start_capture': m.capturing = true; renderSub(lines['water costs more than gold out here']); return Promise.resolve();
@@ -242,6 +268,7 @@ function mockInvoke(cmd, args) {
     case 'history': return Promise.resolve(Object.values(lines));
     case 'sync_now': return Promise.resolve({ installed: [], updated: [], removed: [], errors: [] });
     case 'tv_test': return Promise.resolve(18);
+    case 'report_line': mockInvoke.last = args; return Promise.resolve();
     case 'start_device_sign_in': return Promise.resolve({ device_code: 'x', user_code: '7K4-Q9P', url: 'http://127.0.0.1:8040/activate', interval: 5 });
     case 'poll_device_sign_in': return Promise.resolve(null);
     default: return Promise.resolve();

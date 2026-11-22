@@ -7,6 +7,17 @@ pub struct Subtitle {
     pub text: String,
     pub speaker: Option<String>,
     pub source: String,
+    /// The line's id in its package (= the server's translation id) — what a "report this line" sends.
+    pub entry_id: i64,
+    pub package_id: String,
+}
+
+/// What a lookup found for the stable OCR text.
+pub struct Found {
+    pub text: String,
+    pub speaker: Option<String>,
+    pub entry_id: i64,
+    pub package_id: String,
 }
 
 pub struct Pipeline {
@@ -27,8 +38,8 @@ impl Default for Pipeline {
 }
 
 impl Pipeline {
-    /// Feed one frame's OCR lines; `lookup` maps text → (target, speaker). Returns true when `current` changed.
-    pub fn ingest(&mut self, lines: &[String], now: Instant, mut lookup: impl FnMut(&str) -> Option<(String, Option<String>)>) -> bool {
+    /// Feed one frame's OCR lines; `lookup` maps text → the matched line. Returns true when `current` changed.
+    pub fn ingest(&mut self, lines: &[String], now: Instant, mut lookup: impl FnMut(&str) -> Option<Found>) -> bool {
         let text = lines.iter().map(|l| l.trim()).filter(|l| !l.is_empty()).collect::<Vec<_>>().join("\n");
         if text.is_empty() {
             self.candidate = None;
@@ -61,8 +72,8 @@ impl Pipeline {
                 self.current = None;
                 changed
             }
-            Some((target, speaker)) => {
-                let sub = Subtitle { text: target, speaker, source: text };
+            Some(f) => {
+                let sub = Subtitle { text: f.text, speaker: f.speaker, source: text, entry_id: f.entry_id, package_id: f.package_id };
                 if self.current.as_ref() == Some(&sub) {
                     return false;
                 }

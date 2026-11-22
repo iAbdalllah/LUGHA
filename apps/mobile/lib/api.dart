@@ -70,10 +70,32 @@ class ApiClient {
     final data = res.body.isEmpty ? null : jsonDecode(res.body);
     if (res.statusCode < 200 || res.statusCode >= 300) {
       final m = data is Map ? data : const {};
-      throw ApiException(res.statusCode, (m['code'] ?? 'http_${res.statusCode}') as String, m['detail'] as String?);
+      throw ApiException(res.statusCode, (m['code'] ?? 'http_${res.statusCode}') as String, _message(m));
     }
     return data;
   }
+
+  /// Problem detail, or the first validation message (`{"errors": {"field": ["…"]}}`).
+  static String? _message(Map m) {
+    final errors = m['errors'];
+    if (errors is Map) {
+      for (final v in errors.values) {
+        if (v is List && v.isNotEmpty) return '${v.first}';
+      }
+    }
+    return (m['detail'] ?? m['message']) as String?;
+  }
+
+  /// Report a wrong line to the reviewers. [entryId] is the line id from the package (`Hit.entryId`).
+  Future<void> reportLine({required String package, String? version, required int entryId, required String reason, String? note, required String source}) =>
+      _req('POST', 'translation-reports', body: {
+        'package': package,
+        if (version != null) 'version': version,
+        'entry_id': entryId,
+        'reason': reason,
+        if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
+        'source': source,
+      });
 
   Future<({String token, String name})> login(String email, String password, String deviceName) async {
     final j = await _req('POST', 'auth/login', body: {'email': email, 'password': password, 'device_name': deviceName});

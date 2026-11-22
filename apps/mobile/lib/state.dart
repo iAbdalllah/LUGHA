@@ -12,12 +12,19 @@ import 'sync.dart';
 import 'tv_link.dart';
 
 class Line {
-  Line(this.source, this.target, this.speaker, this.at);
+  Line(this.source, this.target, this.speaker, this.at, {this.entryId, this.packageId});
   final String source;
   final String? target;
   final String? speaker;
   final DateTime at;
+  /// Set when the line matched a package entry — what "report this line" sends.
+  final int? entryId;
+  final String? packageId;
+  bool get reportable => entryId != null && packageId != null;
 }
+
+/// Reasons the server accepts for a report (TranslationFeedback::REASONS).
+const reportReasons = ['wrong_meaning', 'typo', 'awkward', 'wrong_speaker', 'offensive', 'other'];
 
 /// App-wide state. Secrets (API token, device key, link key) are in the platform keystore.
 class AppState extends ChangeNotifier {
@@ -197,11 +204,23 @@ class AppState extends ChangeNotifier {
 
   Line tryLine(String text) {
     final hit = engine?.lookup(text);
-    final line = Line(text, hit?.target, hit?.speaker, DateTime.now());
+    final line = Line(text, hit?.target, hit?.speaker, DateTime.now(), entryId: hit?.entryId, packageId: hit?.packageId);
     history.insert(0, line);
     if (history.length > 50) history.removeLast();
     notifyListeners();
     return line;
+  }
+
+  /// Sends a report for [line]. Returns null on success, or the server's message.
+  Future<String?> report(Line line, String reason, String note) async {
+    if (!line.reportable) return null;
+    final version = loaded.where((p) => p.packageId == line.packageId).firstOrNull?.version;
+    try {
+      await api.reportLine(package: line.packageId!, version: version, entryId: line.entryId!, reason: reason, note: note, source: deviceKind);
+      return null;
+    } catch (e) {
+      return '$e';
+    }
   }
 
   // ── TV ──

@@ -5,6 +5,7 @@ struct MenuPanelView: View {
     @EnvironmentObject var app: AppModel
     @ObservedObject var settings: AppSettings
     @Environment(\.openWindow) private var openWindow
+    @State private var reporting: Int?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -45,8 +46,13 @@ struct MenuPanelView: View {
             if !app.history.isEmpty {
                 Divider()
                 Text(L.t("Recent lines")).font(.caption).foregroundColor(.secondary)
-                ForEach(Array(app.history.prefix(4).enumerated()), id: \.offset) { _, s in
-                    Text(s.text).font(.callout).frame(maxWidth: .infinity, alignment: .trailing).environment(\.layoutDirection, .rightToLeft)
+                ForEach(Array(app.history.prefix(4).enumerated()), id: \.offset) { i, s in
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Button { reporting = reporting == i ? nil : i } label: { Image(systemName: reporting == i ? "flag.fill" : "flag") }
+                            .buttonStyle(.borderless).foregroundColor(reporting == i ? .orange : .secondary).help(L.t("Report this line"))
+                        Text(s.text).font(.callout).frame(maxWidth: .infinity, alignment: .trailing).environment(\.layoutDirection, .rightToLeft)
+                    }
+                    if reporting == i { ReportForm(line: s) { reporting = nil }.environmentObject(app) }
                 }
             }
             if !app.status.isEmpty { Text(app.status).font(.caption).foregroundColor(.orange) }
@@ -184,5 +190,43 @@ struct TVSection: View {
         if let t = target { return (t.host, t.port, t.name) }
         let parts = manual.split(separator: ":")
         return (String(parts.first ?? ""), parts.count > 1 ? UInt16(parts[1]) ?? LinkFrame.defaultPort : LinkFrame.defaultPort, String(parts.first ?? "TV"))
+    }
+}
+
+/// Inline "report this line" form under a recent line. Reports go to the reviewers; accepted fixes ship in the next package update.
+struct ReportForm: View {
+    @EnvironmentObject var app: AppModel
+    let line: Subtitle
+    let done: () -> Void
+    @State private var reason: APIClient.ReportReason = .wrongMeaning
+    @State private var note = ""
+    @State private var sending = false
+    @State private var error: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(line.source).font(.caption).foregroundColor(.secondary).environment(\.layoutDirection, .leftToRight)
+                .frame(maxWidth: .infinity, alignment: .leading).lineLimit(2)
+            Picker(L.t("Reason"), selection: $reason) {
+                ForEach(APIClient.ReportReason.allCases, id: \.self) { Text(L.t("reason." + $0.rawValue)).tag($0) }
+            }
+            TextField(L.t("Note (optional)"), text: $note, axis: .vertical).lineLimit(1 ... 3).textFieldStyle(.roundedBorder)
+            if let error { Text(error).font(.caption).foregroundColor(.orange) }
+            HStack {
+                Spacer()
+                Button(L.t("Cancel"), action: done).controlSize(.small)
+                Button(L.t("Send report")) {
+                    sending = true
+                    Task {
+                        error = await app.report(line, reason: reason, note: note)
+                        sending = false
+                        if error == nil { app.status = L.t("Thanks — your report was sent to the reviewers."); done() }
+                    }
+                }
+                .controlSize(.small).keyboardShortcut(.defaultAction).disabled(sending || line.packageId.isEmpty)
+            }
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.06)))
     }
 }

@@ -105,6 +105,8 @@ class Hit {
   Hit(this.json);
   final Map<String, dynamic> json;
   String get target => json['target'] as String;
+  /// The line's id in its package (= the server's translation id).
+  int get entryId => (json['entry_id'] as num).toInt();
   String? get speaker => json['speaker'] as String?;
   String get packageId => json['package_id'] as String;
   double get score => (json['score'] as num).toDouble();

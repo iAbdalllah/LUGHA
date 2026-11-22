@@ -245,6 +245,17 @@ final class AppModel: ObservableObject {
         lastLatencyMs = Int(Date().timeIntervalSince(t0) * 1000)
     }
 
+    /// Returns nil on success, or the server's message.
+    func report(_ line: Subtitle, reason: APIClient.ReportReason, note: String) async -> String? {
+        let version = loaded.first(where: { $0.packageId == line.packageId })?.version
+        do {
+            try await api.reportLine(package: line.packageId, version: version, entryId: line.entryId, reason: reason, note: note)
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
     func pickRegion() {
         RegionPicker.pick { [weak self] rect, displayID in
             guard let self, let rect else { return }

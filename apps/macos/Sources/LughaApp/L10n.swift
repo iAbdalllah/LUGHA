@@ -35,11 +35,22 @@ enum L {
         "packages loaded": "باقات محمّلة",
         "Last sync": "آخر مزامنة",
         "Send to TV": "إرسال إلى التلفاز", "Disconnect": "قطع الاتصال", "Reconnect": "إعادة الاتصال", "TV": "التلفاز",
+        "Report this line": "الإبلاغ عن هذه الترجمة", "Reason": "السبب", "Note (optional)": "ملاحظة (اختياري)",
+        "Cancel": "إلغاء", "Send report": "إرسال البلاغ",
+        "Thanks — your report was sent to the reviewers.": "شكرًا، وصل بلاغك لفريق المراجعة.",
+        "reason.wrong_meaning": "معنى خاطئ", "reason.typo": "خطأ إملائي", "reason.awkward": "صياغة ركيكة",
+        "reason.wrong_speaker": "المتحدث خاطئ", "reason.offensive": "محتوى مسيء", "reason.other": "سبب آخر",
         "Choose a TV…": "اختر تلفازًا…", "or address (IP:port)": "أو العنوان (IP:المنفذ)", "Code": "الرمز", "Pair": "ربط",
     ]
 
+    /// English only where the key is not itself the English text.
+    private static let en: [String: String] = [
+        "reason.wrong_meaning": "Wrong meaning", "reason.typo": "Typo", "reason.awkward": "Awkward wording",
+        "reason.wrong_speaker": "Wrong speaker", "reason.offensive": "Offensive", "reason.other": "Other",
+    ]
+
     static func t(_ key: String, _ args: CVarArg...) -> String {
-        let s = language == "ar" ? (ar[key] ?? key) : key
+        let s = language == "ar" ? (ar[key] ?? key) : (en[key] ?? key)
         return args.isEmpty ? s : String(format: s, arguments: args)
     }
 }

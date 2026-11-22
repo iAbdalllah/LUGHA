@@ -149,4 +149,10 @@ impl Api {
         let v = self.call("POST", &format!("devices/{device}/licenses"), None)?;
         Ok(v["licenses"].as_object().map(|m| m.iter().map(|(k, l)| (k.clone(), l.to_string())).collect()).unwrap_or_default())
     }
+
+    /// POST translation-reports. `entry_id` is the line id from the package (`Hit.entry_id`).
+    pub fn report_line(&self, package: &str, version: Option<&str>, entry_id: i64, reason: &str, note: Option<&str>, source: &str) -> Result<(), ApiError> {
+        let body = json!({"package": package, "version": version, "entry_id": entry_id, "reason": reason, "note": note, "source": source});
+        self.call("POST", "translation-reports", Some(body)).map(|_| ())
+    }
 }

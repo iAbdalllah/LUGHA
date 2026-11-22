@@ -46,6 +46,7 @@ Each phase ships something usable and ends with explicit exit criteria. Phase 6 
 
 **Status (2026-11-22): built (backend + Store + admin).**
 - **Community feedback:** owners report lines (`POST /translation-reports`, by the package `entry_id` the apps already have). Approved contributors suggest wording on the Store (`/contribute`): players apply, and support staff approve them.
+  - **In the apps (2026-11-23):** Mac (flag on a recent line), Windows (on the live line and in History) and the phone (after *Try a line* and in History) send a report with a reason and an optional note. Reports carry the installed version and the app as `source`.
   - Reviewers resolve each item in *Community feedback*. Accepted wording moves the line through the normal workflow to Approved, then ships with the next publish. Nobody can resolve their own item, and the player gets an email.
 - **Public reviews:** verified owners only, one review per player per package, editable. Staff can hide a review (the reason is shown to its author) but can't edit it. Averages and the star distribution appear on the package page and in the API.
 - **QA score (0–100):** coverage 40%, lines approved by a second editor 30%, confirmed player reports in the last 90 days 30%.

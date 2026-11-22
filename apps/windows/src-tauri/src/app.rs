@@ -16,6 +16,8 @@ use crate::api::{Api, ApiError};
 #[cfg(windows)]
 use crate::pipeline::Pipeline;
 use crate::pipeline::Subtitle;
+#[cfg(windows)]
+use crate::pipeline::Found;
 use crate::store::PackageStore;
 use crate::sync;
 use crate::tv::TvSender;
@@ -259,11 +261,13 @@ pub struct Line {
     text: String,
     speaker: Option<String>,
     source: String,
+    entry_id: i64,
+    package_id: String,
 }
 
 impl From<&Subtitle> for Line {
     fn from(s: &Subtitle) -> Self {
-        Self { text: s.text.clone(), speaker: s.speaker.clone(), source: s.source.clone() }
+        Self { text: s.text.clone(), speaker: s.speaker.clone(), source: s.source.clone(), entry_id: s.entry_id, package_id: s.package_id.clone() }
     }
 }
 
@@ -371,7 +375,15 @@ fn sync_now(core: tauri::State<'_, Shared>) -> Cmd<SyncSummary> {
 fn lookup(core: tauri::State<'_, Shared>, text: String) -> Cmd<Option<Line>> {
     let mut c = lock(&core);
     let Some(m) = c.matcher.as_mut() else { return Ok(None) };
-    Ok(m.lookup(&Query::new(text.clone())).map(|h| Line { text: h.target, speaker: h.speaker, source: text }))
+    Ok(m.lookup(&Query::new(text.clone())).map(|h| Line { text: h.target, speaker: h.speaker, source: text, entry_id: h.entry_id, package_id: h.package_id }))
+}
+
+/// Report a wrong line to the reviewers (the server checks the account owns the package and the line is in it).
+#[tauri::command(async)]
+fn report_line(core: tauri::State<'_, Shared>, package: String, entry_id: i64, reason: String, note: Option<String>) -> Cmd<()> {
+    let c = lock(&core);
+    let version = c.packages.iter().find(|(p, _)| *p == package).map(|(_, v)| v.clone());
+    c.api.report_line(&package, version.as_deref(), entry_id, &reason, note.as_deref().map(str::trim).filter(|n| !n.is_empty()), "windows").map_err(|e| e.to_string())
 }
 
 #[tauri::command(async)]
@@ -518,7 +530,7 @@ fn capture_loop(app: tauri::AppHandle, shared: Shared, running: Arc<AtomicBool>)
         let mut c = shared.lock().unwrap_or_else(|p| p.into_inner());
         let core = &mut *c;
         let changed = pipeline.ingest(&lines, Instant::now(), |t| {
-            core.matcher.as_mut()?.lookup(&Query::new(t)).map(|h| (h.target, h.speaker))
+            core.matcher.as_mut()?.lookup(&Query::new(t)).map(|h| Found { text: h.target, speaker: h.speaker, entry_id: h.entry_id, package_id: h.package_id })
         });
         if changed {
             let line = pipeline.current.as_ref().map(Line::from);
@@ -595,6 +607,7 @@ pub fn run() {
             sync_now,
             lookup,
             history,
+            report_line,
             set_region,
             set_ocr_language,
             tv_pair,

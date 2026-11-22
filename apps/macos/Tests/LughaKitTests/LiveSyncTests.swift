@@ -33,6 +33,22 @@ final class LiveSyncTests: XCTestCase {
         let hit = await engine.lookup("Water costs more than gold out here")
         XCTAssertEqual(hit?.target, "الماء هنا أغلى من الذهب.")
 
+        // Report a line by the id the engine returned; a second open report for the same line is refused.
+        let found = await engine.lookup("Continue")
+        let line = try XCTUnwrap(found)
+        do {
+            try await api.reportLine(package: line.packageId, version: "1.0.0", entryId: line.entryId, reason: .awkward, note: "swift e2e")
+        } catch let e as APIError where e.status == 422 {
+            // Left open by an earlier run of this test — still proves the route, ownership and line checks.
+            XCTAssertNotNil(e.detail)
+        }
+        do {
+            try await api.reportLine(package: line.packageId, version: nil, entryId: line.entryId, reason: .typo, note: nil)
+            XCTFail("second open report for the same line must be refused")
+        } catch let e as APIError {
+            XCTAssertEqual(e.status, 422)
+        }
+
         // A second sync is a no-op: nothing to download.
         let again = await SyncService(api: api, engine: engine, store: store, appVersion: "0.1.0").sync(deviceId: registered.id)
         XCTAssertTrue(again.installed.isEmpty && again.updated.isEmpty)

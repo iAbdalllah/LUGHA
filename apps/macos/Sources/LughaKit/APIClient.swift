@@ -41,9 +41,15 @@ public final class APIClient: @unchecked Sendable {
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200 ..< 300).contains(status) else {
             let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-            throw APIError(status: status, code: obj?["code"] as? String ?? "http_\(status)", detail: obj?["detail"] as? String)
+            throw APIError(status: status, code: obj?["code"] as? String ?? "http_\(status)", detail: Self.message(obj))
         }
         return data
+    }
+
+    /// Problem detail, or the first validation message (`{"errors": {"field": ["…"]}}`).
+    static func message(_ obj: [String: Any]?) -> String? {
+        if let errors = obj?["errors"] as? [String: Any], let first = errors.values.compactMap({ ($0 as? [String])?.first }).first { return first }
+        return obj?["detail"] as? String ?? obj?["message"] as? String
     }
 
     // MARK: Trust & sign-in
@@ -160,6 +166,20 @@ public final class APIClient: @unchecked Sendable {
     public func heartbeat(device: String, appVersion: String, installed: [(package: String, version: String)]) async throws -> Heartbeat {
         let body: [String: Any] = ["app_version": appVersion, "installations": installed.map { ["package": $0.package, "version": $0.version] }]
         return try Self.decoder.decode(Heartbeat.self, from: try await request("POST", "devices/\(device)/heartbeat", body: body))
+    }
+
+    // MARK: Community
+
+    public enum ReportReason: String, CaseIterable, Sendable {
+        case wrongMeaning = "wrong_meaning", typo, awkward, wrongSpeaker = "wrong_speaker", offensive, other
+    }
+
+    /// Report a wrong line to the reviewers. `entryId` is the line id from the package (`Hit.entryId`).
+    public func reportLine(package: String, version: String?, entryId: Int64, reason: ReportReason, note: String?) async throws {
+        var body: [String: Any] = ["package": package, "entry_id": entryId, "reason": reason.rawValue, "source": "macos"]
+        if let version { body["version"] = version }
+        if let note = note?.trimmingCharacters(in: .whitespacesAndNewlines), !note.isEmpty { body["note"] = note }
+        _ = try await request("POST", "translation-reports", body: body)
     }
 
     /// package slug → license JSON

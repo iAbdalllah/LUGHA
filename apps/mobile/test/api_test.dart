@@ -41,4 +41,24 @@ void main() {
     expect(g.kind, 'delta');
     expect(jsonDecode(g.licenseJson)['sig'], 's');
   });
+
+  test('report sends the package line id and surfaces validation messages', () async {
+    late http.Request seen;
+    var calls = 0;
+    final api = ApiClient(baseUrl: Uri.parse('http://x/'), token: 't', client: MockClient((req) async {
+      seen = req;
+      calls++;
+      return calls == 1
+          ? http.Response(jsonEncode({'id': 1, 'status': 'open'}), 202)
+          : http.Response(jsonEncode({'message': 'x', 'errors': {'entry_id': ['لديك بلاغ مفتوح لهذا السطر بالفعل.']}}), 422,
+              headers: {'content-type': 'application/json; charset=utf-8'});
+    }));
+    await api.reportLine(package: 'sandline-sa-full', version: '1.0.0', entryId: 5, reason: 'typo', note: '  ', source: 'android');
+    expect(seen.url.toString(), 'http://x/api/v1/translation-reports');
+    expect(jsonDecode(seen.body), {'package': 'sandline-sa-full', 'version': '1.0.0', 'entry_id': 5, 'reason': 'typo', 'source': 'android'});
+    expect(
+      () => api.reportLine(package: 'sandline-sa-full', entryId: 5, reason: 'typo', source: 'android'),
+      throwsA(isA<ApiException>().having((e) => e.status, 'status', 422).having((e) => '$e', 'message', 'لديك بلاغ مفتوح لهذا السطر بالفعل.')),
+    );
+  });
 }
