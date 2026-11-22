@@ -28,6 +28,8 @@ Each phase ships something usable and ends with explicit exit criteria. Phase 6 
 
 ## Phase 3 — TV
 
+**Status (2026-11-22): built** in `apps/tv/` (Kotlin + Compose for TV receiver: pairing code + QR, encrypted sessions, RTL renderer, D-pad settings, history, optional overlay over other apps, mDNS) and the macOS app's *Send to TV*. Verified on an Android 14 emulator: pairing, wrong-code lockout, unpaired senders refused, Mac → TV p95 ≈ 45–49 ms incl. paint at 1080p, correct Arabic shaping (screenshots). Not yet: a run on real Android TV hardware, Play signing, and a TV system image test (no TV image was installed locally).
+
 - Android TV app (Compose for TV): mDNS, SPAKE2 pairing, Noise session, renderer, D-pad settings, history.
 - macOS sender mode.
 - **Exit**: pair in < 30 s; p95 latency ≤ 50 ms on LAN; correct Arabic shaping with mixed Latin names.

@@ -34,6 +34,8 @@ enum L {
         "Language": "اللغة",
         "packages loaded": "باقات محمّلة",
         "Last sync": "آخر مزامنة",
+        "Send to TV": "إرسال إلى التلفاز", "Disconnect": "قطع الاتصال", "Reconnect": "إعادة الاتصال", "TV": "التلفاز",
+        "Choose a TV…": "اختر تلفازًا…", "or address (IP:port)": "أو العنوان (IP:المنفذ)", "Code": "الرمز", "Pair": "ربط",
     ]
 
     static func t(_ key: String, _ args: CVarArg...) -> String {

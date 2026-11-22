@@ -29,12 +29,78 @@ final class AppModel: ObservableObject {
     @Published var lastSync: Date?
     @Published var lastLatencyMs: Int?
 
+    // Send to TV (LUGHA Link)
+    @Published var tvsFound: [TVBrowser.Found] = []
+    @Published var pairedTVs: [PairedTV] = []
+    @Published var tvConnected: String?
+    @Published var tvStatus = ""
+    private var tv: TVSender?
+    private let browser = TVBrowser()
+
     private var ocrBusy = false
 
     init() {
         settings.load()
         L.language = settings.interfaceLanguage
+        if let d = UserDefaults.standard.data(forKey: "pairedTVs"), let tvs = try? JSONDecoder().decode([PairedTV].self, from: d) { pairedTVs = tvs }
+        browser.onChange = { [weak self] found in Task { @MainActor in self?.tvsFound = found } }
+        browser.start()
         Task { await bootstrap() }
+        Task { await reconnectTV() }
+    }
+
+    // MARK: Send to TV
+
+    private var senderName: String { Host.current().localizedName ?? "Mac" }
+
+    func pairTV(host: String, port: UInt16, name: String, code: String) async {
+        tvStatus = "…"
+        do {
+            let id = try TVSender.identity(keychain)
+            let s = try await TVSender.pair(host: host, port: port, code: code.filter(\.isNumber), name: name, senderName: senderName, secretHex: id.secretHex)
+            pairedTVs = pairedTVs.filter { $0.publicKey != s.tv.publicKey } + [s.tv]
+            UserDefaults.standard.set(try? JSONEncoder().encode(pairedTVs), forKey: "pairedTVs")
+            tv = s
+            tvConnected = s.tv.name
+            tvStatus = ""
+            if let sub = subtitle { try? await s.show(sub.text, speaker: sub.speaker) }
+        } catch {
+            tvStatus = error.localizedDescription
+        }
+    }
+
+    func reconnectTV() async {
+        guard tv == nil, let last = pairedTVs.last, let id = try? TVSender.identity(keychain) else { return }
+        // The TV may have a new address: prefer what Bonjour currently reports under the same name.
+        var target = last
+        if let seen = tvsFound.first(where: { $0.name == last.name }) { target.host = seen.host; target.port = seen.port }
+        if let s = try? await TVSender.connect(target, senderName: senderName, secretHex: id.secretHex) {
+            tv = s
+            tvConnected = s.tv.name
+        }
+    }
+
+    func disconnectTV() async {
+        await tv?.close()
+        tv = nil
+        tvConnected = nil
+    }
+
+    func forgetTV(_ t: PairedTV) async {
+        if tv?.tv.publicKey == t.publicKey { await disconnectTV() }
+        pairedTVs.removeAll { $0.publicKey == t.publicKey }
+        UserDefaults.standard.set(try? JSONEncoder().encode(pairedTVs), forKey: "pairedTVs")
+    }
+
+    private func mirrorToTV(_ sub: Subtitle?) async {
+        guard let tv else { return }
+        do {
+            if let sub { try await tv.show(sub.text, speaker: sub.speaker) } else { try await tv.clear() }
+        } catch {
+            self.tv = nil
+            tvConnected = nil
+            await reconnectTV() // TV restarted or Wi-Fi blipped
+        }
     }
 
     var signedIn: Bool { api.token != nil }
@@ -174,6 +240,7 @@ final class AppModel: ObservableObject {
             subtitle = pipeline.current
             history = pipeline.history
             overlay.update(subtitle)
+            await mirrorToTV(subtitle)
         }
         lastLatencyMs = Int(Date().timeIntervalSince(t0) * 1000)
     }

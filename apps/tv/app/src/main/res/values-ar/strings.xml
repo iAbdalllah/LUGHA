@@ -1,0 +1,26 @@
+<resources>
+    <string name="app_name">لغة TV</string>
+    <string name="pair_title">اربط جهازك لعرض الترجمة هنا</string>
+    <string name="pair_body">افتح لغة على جهاز Mac، اختر «إرسال إلى التلفاز»، ثم أدخل الرمز أو امسح الرمز المربّع.</string>
+    <string name="tv_address">عنوان التلفاز: %1$s · الشبكة المحلية فقط</string>
+    <string name="connected">متصل · %1$s</string>
+    <string name="waiting">بانتظار جهاز…</string>
+    <string name="settings">الإعدادات</string>
+    <string name="font_size">حجم الخط</string>
+    <string name="position">الموضع</string>
+    <string name="background">شفافية الخلفية</string>
+    <string name="history">سجل الترجمات</string>
+    <string name="paired_devices">الأجهزة المرتبطة</string>
+    <string name="pair_new">ربط جهاز جديد</string>
+    <string name="remove">إزالة</string>
+    <string name="top">أعلى</string>
+    <string name="bottom">أسفل</string>
+    <string name="overlay_mode">العرض فوق التطبيقات الأخرى</string>
+    <string name="overlay_needs_permission">اسمح لـ«لغة TV» بالعرض فوق التطبيقات الأخرى من إعدادات التلفاز.</string>
+    <string name="service_running">يستقبل الترجمة</string>
+    <string name="back_hint">استخدم أزرار الاتجاه في جهاز التحكم للتنقل، و«موافق» للتغيير، و«رجوع» للإغلاق.</string>
+    <string name="none">لا شيء بعد</string>
+    <string name="preview">معاينة: هذا شكل الترجمة.</string>
+    <string name="latency">%1$d م.ث</string>
+    <string name="pairing_locked">رموز خاطئة كثيرة. حاول بعد دقيقة.</string>
+</resources>

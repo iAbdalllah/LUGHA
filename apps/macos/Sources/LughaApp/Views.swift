@@ -40,6 +40,8 @@ struct MenuPanelView: View {
                 Slider(value: $settings.verticalPosition, in: 0.05 ... 0.95)
             }
 
+            TVSection().environmentObject(app)
+
             if !app.history.isEmpty {
                 Divider()
                 Text(L.t("Recent lines")).font(.caption).foregroundColor(.secondary)
@@ -135,5 +137,52 @@ struct MainWindowView: View {
             .onChange(of: settings.interfaceLanguage) { _, v in L.language = v }
             .frame(width: 220)
         }
+    }
+}
+
+
+struct TVSection: View {
+    @EnvironmentObject var app: AppModel
+    @State private var code = ""
+    @State private var target: TVBrowser.Found?
+    @State private var manual = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Divider()
+            HStack {
+                Text(L.t("Send to TV")).font(.caption).foregroundColor(.secondary)
+                Spacer()
+                if let name = app.tvConnected {
+                    Text("● \(name)").font(.caption).foregroundColor(.green)
+                    Button(L.t("Disconnect")) { Task { await app.disconnectTV() } }.controlSize(.small)
+                } else if !app.pairedTVs.isEmpty {
+                    Button(L.t("Reconnect")) { Task { await app.reconnectTV() } }.controlSize(.small)
+                }
+            }
+            if app.tvConnected == nil {
+                Picker(L.t("TV"), selection: $target) {
+                    Text(L.t("Choose a TV…")).tag(TVBrowser.Found?.none)
+                    ForEach(app.tvsFound) { Text($0.name).tag(Optional($0)) }
+                }
+                .labelsHidden()
+                HStack {
+                    TextField(L.t("or address (IP:port)"), text: $manual).textFieldStyle(.roundedBorder).environment(\.layoutDirection, .leftToRight)
+                    TextField(L.t("Code"), text: $code).textFieldStyle(.roundedBorder).frame(width: 90).environment(\.layoutDirection, .leftToRight)
+                    Button(L.t("Pair")) {
+                        let (host, port, name) = resolveTarget()
+                        Task { await app.pairTV(host: host, port: port, name: name, code: code) }
+                    }
+                    .disabled(code.filter(\.isNumber).count != 6 || (target == nil && manual.isEmpty))
+                }
+            }
+            if !app.tvStatus.isEmpty { Text(app.tvStatus).font(.caption).foregroundColor(.orange) }
+        }
+    }
+
+    private func resolveTarget() -> (String, UInt16, String) {
+        if let t = target { return (t.host, t.port, t.name) }
+        let parts = manual.split(separator: ":")
+        return (String(parts.first ?? ""), parts.count > 1 ? UInt16(parts[1]) ?? LinkFrame.defaultPort : LinkFrame.defaultPort, String(parts.first ?? "TV"))
     }
 }

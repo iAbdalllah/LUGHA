@@ -1,0 +1,26 @@
+<resources>
+    <string name="app_name">LUGHA TV</string>
+    <string name="pair_title">Pair a device to show subtitles here</string>
+    <string name="pair_body">Open LUGHA on your Mac, choose “Send to TV”, then enter this code or scan the QR code.</string>
+    <string name="tv_address">TV address: %1$s · local network only</string>
+    <string name="connected">Connected · %1$s</string>
+    <string name="waiting">Waiting for a device…</string>
+    <string name="settings">Settings</string>
+    <string name="font_size">Font size</string>
+    <string name="position">Position</string>
+    <string name="background">Background opacity</string>
+    <string name="history">Subtitle history</string>
+    <string name="paired_devices">Paired devices</string>
+    <string name="pair_new">Pair a new device</string>
+    <string name="remove">Remove</string>
+    <string name="top">Top</string>
+    <string name="bottom">Bottom</string>
+    <string name="overlay_mode">Show over other apps</string>
+    <string name="overlay_needs_permission">Allow “Display over other apps” for LUGHA TV in the TV’s settings.</string>
+    <string name="service_running">Receiving subtitles</string>
+    <string name="back_hint">Use the arrow keys to move and OK to change. Back closes.</string>
+    <string name="none">None yet</string>
+    <string name="preview">Preview: this is how subtitles look.</string>
+    <string name="latency">%1$d ms</string>
+    <string name="pairing_locked">Too many wrong codes. Try again in a minute.</string>
+</resources>

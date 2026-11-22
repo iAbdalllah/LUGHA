@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["lugha-core", "lugha-pkg", "lugha-ffi"]
+members = ["lugha-core", "lugha-pkg", "lugha-ffi", "lugha-link", "lugha-link-jni"]
 
 [workspace.package]
 version = "0.1.0"
@@ -27,6 +27,10 @@ unicode-normalization = "0.1"
 strsim = "0.11"
 lru = "0.12"
 clap = { version = "4", features = ["derive"] }
+spake2 = "0.4"
+snow = "0.9"
+chacha20poly1305 = "0.10"
+jni = "0.21"
 
 [profile.release]
 lto = true

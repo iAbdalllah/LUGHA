@@ -142,6 +142,106 @@ pub extern "C" fn lugha_engine_version() -> *const c_char {
     concat!(env!("CARGO_PKG_VERSION"), "\0").as_ptr() as *const c_char
 }
 
+// ───────────────────────────── LUGHA Link (sender side, Mac) ─────────────────────────────
+// Binary values travel as base64 inside the JSON results.
+
+pub struct LughaLinkPairing(lugha_link::SenderPairing);
+pub struct LughaLinkSession(lugha_link::Session);
+
+fn link_keys(secret_hex: &str) -> Option<lugha_link::StaticKeys> {
+    let s: [u8; 32] = hex::decode(secret_hex).ok()?.try_into().ok()?;
+    Some(lugha_link::StaticKeys::from_secret(s))
+}
+
+#[no_mangle]
+pub extern "C" fn lugha_link_keys_generate() -> *mut c_char {
+    let k = lugha_link::StaticKeys::generate();
+    out(json!({"ok": true, "secret_hex": hex::encode(k.secret), "public": lugha_link::b64(&k.public), "fingerprint": k.fingerprint()}))
+}
+
+/// Start pairing with the code shown on the TV. Writes the handle to `out_pairing`; returns {"ok","msg"} (PAIR1).
+#[no_mangle]
+pub unsafe extern "C" fn lugha_link_pair_start(code: *const c_char, secret_hex: *const c_char, out_pairing: *mut *mut LughaLinkPairing) -> *mut c_char {
+    let (Some(code), Some(keys)) = (s(code), s(secret_hex).and_then(link_keys)) else { return err("bad arguments") };
+    let (p, msg) = lugha_link::SenderPairing::start(code, keys);
+    *out_pairing = Box::into_raw(Box::new(LughaLinkPairing(p)));
+    out(json!({"ok": true, "msg": lugha_link::b64(&msg)}))
+}
+
+/// Handle PAIR2 → {"ok","msg" (PAIR3),"peer" (TV public key)}. Frees the pairing.
+#[no_mangle]
+pub unsafe extern "C" fn lugha_link_pair_finish(pairing: *mut LughaLinkPairing, msg_b64: *const c_char) -> *mut c_char {
+    if pairing.is_null() {
+        return err("no pairing");
+    }
+    let mut p = Box::from_raw(pairing);
+    let Some(msg) = s(msg_b64).and_then(|m| lugha_link::unb64(m).ok()) else { return err("bad message") };
+    match p.0.finish(&msg) {
+        Ok((m3, peer)) => out(json!({"ok": true, "msg": lugha_link::b64(&m3), "peer": lugha_link::b64(&peer)})),
+        Err(e) => err(e),
+    }
+}
+
+/// Open a session with a paired TV. Writes the handle; returns {"ok","msg"} (HS1).
+#[no_mangle]
+pub unsafe extern "C" fn lugha_link_session_start(secret_hex: *const c_char, peer_b64: *const c_char, out_session: *mut *mut LughaLinkSession) -> *mut c_char {
+    let Some(keys) = s(secret_hex).and_then(link_keys) else { return err("bad key") };
+    let Some(peer): Option<[u8; 32]> = s(peer_b64).and_then(|p| lugha_link::unb64(p).ok()).and_then(|v| v.try_into().ok()) else { return err("bad peer key") };
+    match lugha_link::Session::initiate(&keys, &peer) {
+        Ok((sess, msg)) => {
+            *out_session = Box::into_raw(Box::new(LughaLinkSession(sess)));
+            out(json!({"ok": true, "msg": lugha_link::b64(&msg)}))
+        }
+        Err(e) => err(e),
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn lugha_link_session_complete(session: *mut LughaLinkSession, msg_b64: *const c_char) -> *mut c_char {
+    let Some(sess) = session.as_mut() else { return err("no session") };
+    let Some(msg) = s(msg_b64).and_then(|m| lugha_link::unb64(m).ok()) else { return err("bad message") };
+    match sess.0.complete(&msg) {
+        Ok(()) => out(json!({"ok": true})),
+        Err(e) => err(e),
+    }
+}
+
+/// Encrypt a UTF-8 JSON message → {"ok","msg"} (DATA payload).
+#[no_mangle]
+pub unsafe extern "C" fn lugha_link_encrypt(session: *mut LughaLinkSession, plaintext: *const c_char) -> *mut c_char {
+    let Some(sess) = session.as_mut() else { return err("no session") };
+    let Some(p) = s(plaintext) else { return err("bad plaintext") };
+    match sess.0.encrypt(p.as_bytes()) {
+        Ok(c) => out(json!({"ok": true, "msg": lugha_link::b64(&c)})),
+        Err(e) => err(e),
+    }
+}
+
+/// Decrypt a DATA payload → {"ok","text"}.
+#[no_mangle]
+pub unsafe extern "C" fn lugha_link_decrypt(session: *mut LughaLinkSession, msg_b64: *const c_char) -> *mut c_char {
+    let Some(sess) = session.as_mut() else { return err("no session") };
+    let Some(c) = s(msg_b64).and_then(|m| lugha_link::unb64(m).ok()) else { return err("bad message") };
+    match sess.0.decrypt(&c) {
+        Ok(p) => out(json!({"ok": true, "text": String::from_utf8_lossy(&p)})),
+        Err(e) => err(e),
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn lugha_link_session_free(session: *mut LughaLinkSession) {
+    if !session.is_null() {
+        drop(Box::from_raw(session));
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn lugha_link_pairing_free(pairing: *mut LughaLinkPairing) {
+    if !pairing.is_null() {
+        drop(Box::from_raw(pairing));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

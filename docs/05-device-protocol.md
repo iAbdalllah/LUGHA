@@ -1,5 +1,14 @@
 # 05 · Device Communication Protocol (LUGHA Link v1)
 
+> **Implemented** in `engine/lugha-link` (crypto, shared), `apps/tv` (receiver) and `apps/macos` (sender). As built:
+> - **Transport:** plain TCP, frames = `u32 BE length · u8 type · payload` (no WebSocket — there are no browser clients, and it is simpler and faster on a LAN). Default port 47800, falls back to any free port, advertised as `_lugha._tcp` with TXT `v`, `fp`.
+> - **Frame types:** `0x01 PAIR1` · `0x02 PAIR2` · `0x03 PAIR3` · `0x04 PAIR_OK` · `0x0F PAIR_FAIL` · `0x10 HS1` · `0x11 HS2` · `0x20 DATA`.
+> - **Pairing:** SPAKE2 (Ed25519 group) on the 6-digit code; PAIR2 carries the TV's static key sealed with ChaCha20-Poly1305 under an HKDF key from the SPAKE2 secret, PAIR3 the sender's; `PAIR_OK` confirms the TV stored the sender. 3 wrong codes → pairing locked 60 s; the code rotates after every failure.
+> - **Session:** `Noise_IK_25519_ChaChaPoly_BLAKE2s` (prologue `lugha-link/1`); the TV accepts only paired senders. Messages are JSON inside DATA frames (`hello`, `welcome`, `sub.show`, `sub.clear`, `style.set`, `ping`/`pong`, `ack`, `bye`).
+> - **One active sender:** a new connection from a paired sender replaces the current one (switching Macs needs no extra step).
+> - **Measured** (Android 14 emulator, software GPU): in-process loopback incl. paint p95 ≈ 21–25 ms; Mac → emulator over TCP incl. paint p95 ≈ 45–49 ms at 1920×1080 (transport alone ≈ 1 ms; the rest is the emulator's CPU rendering — real TVs draw on a GPU).
+
+
 Sender (desktop or mobile) → Receiver (TV). Local network only; no cloud in the path. Target latency sender-send → TV-paint ≤ 50 ms on the same Wi-Fi.
 
 ## 1. Discovery
