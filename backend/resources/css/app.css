@@ -1,0 +1,51 @@
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+@source '../views/**/*.blade.php';
+@source inline("lg:grid-cols-{1,2,3,4}");
+
+/* LUGHA brand tokens — dark charcoal ground, one amber accent (docs/design canvas). */
+@theme {
+    --font-sans: 'IBM Plex Sans Arabic', 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+    --font-display: 'Readex Pro', 'IBM Plex Sans Arabic', ui-sans-serif, sans-serif;
+    --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+    --color-ground: #0E0F12;
+    --color-surface: #16181D;
+    --color-surface-2: #1D2027;
+    --color-raised: #121418;
+    --color-line: #23262E;
+    --color-line-strong: #343944;
+    --color-ink: #F2F3F5;
+    --color-ink-2: #B9BEC8;
+    --color-muted: #A3A8B3;
+    --color-faint: #8E94A0;
+    --color-accent: #E9B44C;
+    --color-accent-hover: #F4CB78;
+    --color-accent-ink: #1A1405;
+    --color-success: #7FD1A8;
+    --color-danger: #F0A3A3;
+}
+
+@layer base {
+    html { background: var(--color-ground); color: var(--color-ink); color-scheme: dark; }
+    @media print { html { color-scheme: light; } }
+    body { font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
+    :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; border-radius: 6px; }
+    [dir='rtl'] .flip-rtl { transform: scaleX(-1); }
+}
+
+/* Tailwind v4: custom classes that other rules @apply must be declared with @utility. */
+@utility btn { @apply inline-flex h-11 items-center justify-center gap-2 rounded-xl px-5 font-semibold transition-colors disabled:opacity-50; }
+@utility btn-primary { @apply btn bg-accent text-accent-ink hover:bg-accent-hover; }
+@utility btn-light { @apply btn bg-ink text-ground hover:bg-white; }
+@utility btn-ghost { @apply btn border border-line-strong text-ink hover:bg-surface-2; }
+@utility btn-danger { @apply btn border border-[#5A3434] text-danger hover:bg-[#2a1717]; }
+@utility card { @apply rounded-2xl border border-line bg-surface; }
+@utility input { @apply h-11 w-full rounded-xl border border-[#2A2E37] bg-ground px-3.5 text-ink placeholder:text-faint focus:border-accent focus:outline-none; }
+@utility label { @apply mb-1.5 block text-sm text-muted; }
+@utility chip { @apply inline-flex items-center rounded-md bg-surface-2 px-2.5 py-0.5 text-xs text-ink-2; }
+@utility chip-accent { @apply inline-flex items-center rounded-md bg-accent/12 px-2.5 py-0.5 text-xs text-accent; }
+@utility h-display { font-family: var(--font-display); @apply font-bold tracking-tight; }
+@utility link { @apply text-accent hover:text-accent-hover; }

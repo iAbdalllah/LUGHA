@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>LUGHA Desktop — overlay and panel</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&amp;family=IBM+Plex+Sans:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#E9B44C}a:hover{color:#F4CB78}
+</style>
+</helmet>
+<div dir="rtl" style="width: 1440px; height: 900px; position: relative; overflow: hidden; font-family: 'IBM Plex Sans Arabic', system-ui, sans-serif; color: #F2F3F5; background: linear-gradient(170deg, #4A5B6B 0%, #7A5A3E 45%, #2A1C12 80%, #120C08 100%)">
+
+<div style="position: absolute; top: 0; inset-inline: 0; height: 28px; background: rgba(20,20,24,0.55); display: flex; align-items: center; justify-content: flex-start; padding: 0 14px; gap: 14px; font-size: 13px; direction: ltr">
+<span style="margin-left: auto; display: flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 5px; background: rgba(233,180,76,0.25); color: #F4CB78; font-weight: 600"><span style="width: 14px; height: 14px; border-radius: 4px; background: #E9B44C; color: #1A1405; font-size: 10px; display: flex; align-items: center; justify-content: center">ل</span>LUGHA</span>
+</div>
+
+<span style="position: absolute; top: 48px; left: 40px; font-size: 13px; background: rgba(14,15,18,0.55); padding: 4px 10px; border-radius: 6px; color: #D6D9DF">[نافذة اللعبة — لقطة توضيحية]</span>
+
+<div style="position: absolute; left: 260px; top: 690px; width: 700px; height: 74px; border: 2px dashed rgba(233,180,76,0.85); border-radius: 8px; display: flex; align-items: center; justify-content: center">
+<span style="position: absolute; top: -26px; left: 0; font-size: 12px; background: #E9B44C; color: #1A1405; padding: 2px 8px; border-radius: 5px; font-weight: 600">منطقة الالتقاط · الترجمة</span>
+<span dir="ltr" style="font-family: 'IBM Plex Sans', sans-serif; font-size: 22px; color: #FFFFFF; text-shadow: 0 1px 4px rgba(0,0,0,0.8)">RIM: We leave at dawn. Nobody talks about tonight.</span>
+</div>
+
+<div style="position: absolute; left: 210px; top: 780px; width: 800px; display: flex; justify-content: center">
+<p style="margin: 0; background: rgba(10,11,14,{{bgOpacity}}); padding: 12px 26px; border-radius: 12px; font-size: {{fontSize}}px; font-weight: 600; line-height: 1.5; text-align: center; box-shadow: 0 8px 32px rgba(0,0,0,0.35)"><span style="color: #E9B44C">ريم:</span> نطلع مع الفجر. وأحد ما يتكلم عن الليلة.</p>
+</div>
+
+<section aria-label="لوحة لغة" style="position: absolute; top: 40px; right: 24px; width: 380px; background: rgba(22,24,29,0.94); border: 1px solid #2A2E37; border-radius: 16px; box-shadow: 0 24px 64px rgba(0,0,0,0.5); padding: 18px; display: flex; flex-direction: column; gap: 16px; font-size: 14px">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 8px">
+<div style="display: flex; align-items: center; gap: 10px"><span style="width: 30px; height: 30px; border-radius: 8px; background: linear-gradient(135deg, #E9B44C, #B9852A); color: #1A1405; display: flex; align-items: center; justify-content: center; font-weight: 700">ل</span><div><div style="font-weight: 700">لغة</div><div style="font-size: 12px; color: #7FD1A8">● يعمل · بدون إنترنت</div></div></div>
+<button type="button" style="height: 36px; padding: 0 14px; border-radius: 9px; border: 1px solid #343944; background: transparent; color: #F2F3F5; font: inherit; cursor: pointer">إيقاف مؤقت</button>
+</div>
+
+<div style="padding: 12px; background: #0E0F12; border-radius: 12px; display: flex; gap: 12px; align-items: center">
+<span style="width: 40px; height: 52px; border-radius: 6px; background: linear-gradient(160deg,#C08A3E,#1E1410); flex: none"></span>
+<div style="flex: 1; min-width: 0"><div style="font-weight: 600">خط الرمال</div><div style="font-size: 12px; color: #A3A8B3">التعريب الكامل <span dir="ltr">v1.4.0</span> · ملف 1440p</div></div>
+<button type="button" style="height: 32px; padding: 0 10px; border-radius: 8px; border: 1px solid #343944; background: transparent; color: #F2F3F5; font: inherit; font-size: 13px; cursor: pointer">تغيير</button>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; text-align: center">
+<div style="padding: 10px 6px; background: #0E0F12; border-radius: 10px"><div style="font-size: 12px; color: #8E94A0">التطابق</div><div style="font-weight: 700" dir="ltr">98%</div></div>
+<div style="padding: 10px 6px; background: #0E0F12; border-radius: 10px"><div style="font-size: 12px; color: #8E94A0">زمن العرض</div><div style="font-weight: 700" dir="ltr">84 ms</div></div>
+<div style="padding: 10px 6px; background: #0E0F12; border-radius: 10px"><div style="font-size: 12px; color: #8E94A0">المناطق</div><div style="font-weight: 700">2</div></div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 12px">
+<label style="display: flex; flex-direction: column; gap: 4px; color: #A3A8B3">حجم الخط<input type="range" min="18" max="44" value="{{fontSize}}" style="accent-color: #E9B44C"></label>
+<label style="display: flex; flex-direction: column; gap: 4px; color: #A3A8B3">شفافية الخلفية<input type="range" min="0" max="100" value="78" style="accent-color: #E9B44C"></label>
+<div style="display: flex; gap: 6px"><button type="button" style="flex: 1; height: 36px; border-radius: 8px; border: 1px solid #343944; background: transparent; color: #A3A8B3; font: inherit; cursor: pointer">أعلى</button><button type="button" style="flex: 1; height: 36px; border-radius: 8px; border: 1px solid #E9B44C; background: rgba(233,180,76,0.1); color: #F2F3F5; font: inherit; cursor: pointer">أسفل</button><button type="button" style="flex: 1; height: 36px; border-radius: 8px; border: 1px solid #343944; background: transparent; color: #A3A8B3; font: inherit; cursor: pointer">مخصّص</button></div>
+<button type="button" style="height: 40px; border-radius: 9px; border: 1px dashed #E9B44C; background: transparent; color: #E9B44C; font: inherit; cursor: pointer">تحديد منطقة الالتقاط</button>
+<label style="display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; background: #0E0F12; border-radius: 10px"><span>إرسال إلى التلفاز · <span style="color: #A3A8B3">تلفاز الصالة</span></span><input type="checkbox" checked="checked" style="width: 20px; height: 20px; accent-color: #E9B44C"></label>
+</div>
+
+<div style="border-top: 1px solid #23262E; padding-top: 12px"><div style="font-size: 12px; color: #8E94A0; margin-bottom: 8px">آخر الترجمات</div>
+<ol style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px">
+<li style="color: #F2F3F5"><span style="color: #E9B44C">ريم:</span> نطلع مع الفجر. وأحد ما يتكلم عن الليلة.</li>
+<li style="color: #A3A8B3"><span style="color: #C9A15A">سالم:</span> والماء؟ يكفينا ليومين؟</li>
+<li style="color: #A3A8B3"><span style="color: #C9A15A">ريم:</span> يكفي إذا ما ضيّعنا الطريق.</li>
+</ol>
+<a href="#" style="display: inline-block; margin-top: 10px; font-size: 13px">الإبلاغ عن ترجمة خاطئة</a></div>
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"fontSize":{"editor":"range","min":18,"max":44,"step":1,"default":30,"section":"Subtitle"},"bgOpacity":{"editor":"range","min":0,"max":1,"step":0.05,"default":0.78,"section":"Subtitle"},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { fontSize: this.props.fontSize ?? 30, bgOpacity: this.props.bgOpacity ?? 0.78 };
+  }
+}
+</script>
+</body>
+</html>

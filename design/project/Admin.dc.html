@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>LUGHA Admin — Translation editor</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&amp;family=IBM+Plex+Sans:wght@400;500&amp;family=IBM+Plex+Mono:wght@400&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B0C0F}
+a{color:#E9B44C;text-decoration:none}a:hover{color:#F4CB78}
+</style>
+</helmet>
+<div dir="rtl" style="background: #0B0C0F; color: #F2F3F5; font-family: 'IBM Plex Sans Arabic', system-ui, sans-serif; font-size: 15px; line-height: 1.55; min-height: 100vh; display: flex; flex-wrap: wrap">
+
+<aside style="flex: 1 1 240px; max-width: 100%; background: #111317; border-inline-start: 1px solid #1F2229; padding: 20px 14px; display: flex; flex-direction: column; gap: 20px">
+<div style="display: flex; align-items: center; gap: 10px; padding: 0 8px"><span style="width: 32px; height: 32px; border-radius: 9px; background: linear-gradient(135deg, #E9B44C, #B9852A); color: #1A1405; display: flex; align-items: center; justify-content: center; font-weight: 700">ل</span><span style="font-weight: 700">لغة · الإدارة</span></div>
+<nav style="display: flex; flex-direction: column; gap: 2px; font-size: 14px">
+<span style="padding: 6px 10px; font-size: 12px; color: #7D838F">الكتالوج</span>
+<a href="#" style="padding: 8px 10px; border-radius: 8px; color: #C9CDD4">الألعاب</a>
+<a href="#" style="padding: 8px 10px; border-radius: 8px; color: #C9CDD4">الباقات والأسعار</a>
+<a href="#" style="padding: 8px 10px; border-radius: 8px; color: #C9CDD4">الإصدارات والبناء</a>
+<span style="padding: 12px 10px 6px; font-size: 12px; color: #7D838F">المحتوى</span>
+<a href="#" style="padding: 8px 10px; border-radius: 8px; background: #1C1F26; color: #F2F3F5; font-weight: 600">الترجمات</a>
+<a href="#" style="padding: 8px 10px; border-radius: 8px; color: #C9CDD4">قائمة المراجعة <span style="background: #2A2E37; border-radius: 999px; padding: 0 7px; font-size: 12px">128</span></a>
+<a href="#" style="padding: 8px 10px; border-radius: 8px; color: #C9CDD4">المسرد</a>
+<a href="#" style="padding: 8px 10px; border-radius: 8px; color: #C9CDD4">الاستيراد والتصدير</a>
+<span style="padding: 12px 10px 6px; font-size: 12px; color: #7D838F">التجارة</span>
+<a href="#" style="padding: 8px 10px; border-radius: 8px; color: #C9CDD4">الطلبات</a>
+<a href="#" style="padding: 8px 10px; border-radius: 8px; color: #C9CDD4">الاسترجاع</a>
+<a href="#" style="padding: 8px 10px; border-radius: 8px; color: #C9CDD4">القسائم وبطاقات الإهداء</a>
+<a href="#" style="padding: 8px 10px; border-radius: 8px; color: #C9CDD4">المستخدمون والأجهزة</a>
+<a href="#" style="padding: 8px 10px; border-radius: 8px; color: #C9CDD4">التحليلات</a>
+</nav>
+</aside>
+
+<main style="flex: 999 1 720px; min-width: 0; padding: 24px; display: flex; flex-direction: column; gap: 18px">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px">
+<div><p style="margin: 0; font-size: 13px; color: #7D838F">الترجمات / خط الرمال / ar-SA · لهجة سعودية بيضاء</p><h1 style="margin: 2px 0 0; font-size: 26px; font-weight: 700">محرّر الترجمة</h1></div>
+<div style="display: flex; gap: 8px; flex-wrap: wrap"><button type="button" style="height: 40px; padding: 0 14px; border-radius: 9px; background: transparent; border: 1px solid #2E323B; color: #F2F3F5; font: inherit; cursor: pointer">استيراد CSV / JSON / XLSX</button><button type="button" style="height: 40px; padding: 0 14px; border-radius: 9px; background: transparent; border: 1px solid #2E323B; color: #F2F3F5; font: inherit; cursor: pointer">تصدير</button><button type="button" style="height: 40px; padding: 0 14px; border-radius: 9px; background: #E9B44C; border: 0; color: #1A1405; font: inherit; font-weight: 600; cursor: pointer">بناء إصدار للباقة</button></div>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px">
+<sc-for list="{{stats}}" as="s" hint-placeholder-count="5">
+<div style="padding: 14px 16px; background: #111317; border: 1px solid #1F2229; border-radius: 12px"><div style="font-size: 13px; color: #8E94A0">{{s.label}}</div><div style="font-size: 22px; font-weight: 700; font-family: 'IBM Plex Sans', sans-serif">{{s.value}}</div></div>
+</sc-for>
+</div>
+
+<div role="tablist" aria-label="تصفية حسب الحالة" style="display: flex; gap: 6px; flex-wrap: wrap; border-bottom: 1px solid #1F2229; padding-bottom: 10px">
+<sc-for list="{{tabs}}" as="t" hint-placeholder-count="6">
+<button type="button" role="tab" aria-selected="{{t.sel}}" onClick="{{t.pick}}" style="height: 36px; padding: 0 14px; border-radius: 8px; font: inherit; font-size: 14px; cursor: pointer; background: {{t.bg}}; color: {{t.fg}}; border: 1px solid {{t.bd}}">{{t.label}}</button>
+</sc-for>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; gap: 18px; align-items: flex-start">
+<div style="flex: 999 1 480px; min-width: 0; overflow-x: auto; border: 1px solid #1F2229; border-radius: 12px">
+<table style="width: 100%; min-width: 600px; border-collapse: collapse; font-size: 14px">
+<thead><tr style="background: #111317; color: #A3A8B3"><th scope="col" style="padding: 10px 12px; text-align: start; font-weight: 500">المفتاح</th><th scope="col" style="padding: 10px 12px; text-align: start; font-weight: 500">النص الأصلي</th><th scope="col" style="padding: 10px 12px; text-align: start; font-weight: 500">الترجمة</th><th scope="col" style="padding: 10px 12px; text-align: start; font-weight: 500">الحالة</th></tr></thead>
+<tbody>
+<sc-for list="{{rows}}" as="r" hint-placeholder-count="7">
+<tr onClick="{{r.pick}}" style="border-top: 1px solid #1F2229; cursor: pointer; background: {{r.bg}}">
+<td style="padding: 10px 12px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #8E94A0" dir="ltr"><button type="button" onClick="{{r.pick}}" style="background: none; border: 0; color: inherit; font: inherit; cursor: pointer; padding: 0">{{r.key}}</button></td>
+<td style="padding: 10px 12px; font-family: 'IBM Plex Sans', sans-serif; color: #C9CDD4" dir="ltr">{{r.src}}</td>
+<td style="padding: 10px 12px">{{r.tgt}}</td>
+<td style="padding: 10px 12px"><span style="font-size: 12px; padding: 2px 8px; border-radius: 6px; white-space: nowrap; background: {{r.sbg}}; color: {{r.sfg}}">{{r.status}}</span></td>
+</tr>
+</sc-for>
+</tbody>
+</table>
+</div>
+
+<section aria-label="تحرير السطر" style="flex: 1 1 340px; min-width: 0; background: #111317; border: 1px solid #1F2229; border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 8px"><span dir="ltr" style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #8E94A0">{{cur.key}}</span><span style="font-size: 12px; padding: 2px 8px; border-radius: 6px; background: {{cur.sbg}}; color: {{cur.sfg}}">{{cur.status}}</span></div>
+<div><div style="font-size: 12px; color: #7D838F; margin-bottom: 4px">النص الأصلي · {{cur.cat}}</div><p dir="ltr" style="margin: 0; padding: 12px; background: #0B0C0F; border-radius: 8px; font-family: 'IBM Plex Sans', sans-serif; color: #D6D9DF">{{cur.src}}</p></div>
+<label style="display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #7D838F">الترجمة العربية<textarea rows="3" style="background: #0B0C0F; border: 1px solid #E9B44C; border-radius: 8px; color: #F2F3F5; padding: 12px; font: inherit; font-size: 16px; resize: vertical">{{cur.tgt}}</textarea></label>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; font-size: 13px">
+<div><div style="color: #7D838F">المتحدّث</div><div>{{cur.speaker}}</div></div>
+<div><div style="color: #7D838F">المشهد</div><div dir="ltr" style="text-align: right">{{cur.scene}}</div></div>
+<div><div style="color: #7D838F">المترجم</div><div>[مترجم]</div></div>
+<div><div style="color: #7D838F">المراجع</div><div>[مراجع]</div></div>
+</div>
+<div style="font-size: 13px; padding: 10px 12px; border-radius: 8px; background: rgba(233,180,76,0.08); color: #E9C98A">المسرد: «Caravan» ← «القافلة» · «Warden» لا يُترجم</div>
+<div style="display: flex; gap: 8px; flex-wrap: wrap"><button type="button" style="flex: 1; height: 40px; border-radius: 9px; background: #E9B44C; color: #1A1405; border: 0; font: inherit; font-weight: 600; cursor: pointer">اعتماد</button><button type="button" style="flex: 1; height: 40px; border-radius: 9px; background: transparent; color: #F2F3F5; border: 1px solid #2E323B; font: inherit; cursor: pointer">إرسال للمراجعة</button><button type="button" style="height: 40px; padding: 0 14px; border-radius: 9px; background: transparent; color: #F0A3A3; border: 1px solid #5A3434; font: inherit; cursor: pointer">رفض</button></div>
+<div style="border-top: 1px solid #1F2229; padding-top: 12px"><div style="font-size: 12px; color: #7D838F; margin-bottom: 6px">سجل المراجعات</div>
+<ol style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #A3A8B3"><li>المراجعة 3 · تعديل الصياغة · قبل ساعتين</li><li>المراجعة 2 · مرفوضة: «لا تطابق المسرد» · أمس</li><li>المراجعة 1 · مسودة أولى · 18 نوفمبر</li></ol></div>
+</section>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1400}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { tab: 'all', sel: 'M03_CUT_014' }; }
+  renderVals() {
+    const st = {
+      draft: ['مسودة', '#2A2E37', '#C9CDD4'], in_review: ['قيد المراجعة', 'rgba(122,162,247,0.15)', '#A9C1F9'],
+      approved: ['معتمدة', 'rgba(127,209,168,0.14)', '#7FD1A8'], published: ['منشورة', 'rgba(233,180,76,0.14)', '#E9B44C'],
+      rejected: ['مرفوضة', 'rgba(240,163,163,0.14)', '#F0A3A3']
+    };
+    const data = [
+      { key: 'M03_CUT_014', src: 'We leave at dawn. Nobody talks about tonight.', tgt: 'نطلع مع الفجر. وأحد ما يتكلم عن الليلة.', s: 'in_review', cat: 'مشهد سينمائي', speaker: 'ريم', scene: 'M03 · Oasis' },
+      { key: 'M03_CUT_015', src: 'And if the Warden asks?', tgt: 'وإذا سأل الـWarden؟', s: 'rejected', cat: 'مشهد سينمائي', speaker: 'سالم', scene: 'M03 · Oasis' },
+      { key: 'M03_OBJ_002', src: 'Catch up with the caravan before sunset', tgt: 'الحق بالقافلة قبل الغروب', s: 'approved', cat: 'أهداف المهام', speaker: '—', scene: 'M03' },
+      { key: 'SD_TRADER_07', src: 'Water costs more than gold out here.', tgt: 'الماء هنا أغلى من الذهب.', s: 'published', cat: 'حوار جانبي', speaker: 'تاجر', scene: 'Bazaar' },
+      { key: 'UI_MENU_CONT', src: 'Continue', tgt: 'متابعة', s: 'published', cat: 'القوائم', speaker: '—', scene: 'Main menu' },
+      { key: 'UI_SET_SUBS', src: 'Subtitle size', tgt: 'حجم الترجمة', s: 'draft', cat: 'الإعدادات', speaker: '—', scene: 'Settings' },
+      { key: 'TUT_SPRINT', src: 'Hold [Shift] to sprint', tgt: '', s: 'draft', cat: 'الدروس', speaker: '—', scene: 'Tutorial' }
+    ];
+    const tabs = [['all', 'الكل'], ['draft', 'مسودة'], ['in_review', 'قيد المراجعة'], ['approved', 'معتمدة'], ['published', 'منشورة'], ['rejected', 'مرفوضة']];
+    const shown = data.filter((d) => this.state.tab === 'all' || d.s === this.state.tab);
+    const dec = (d) => ({ ...d, status: st[d.s][0], sbg: st[d.s][1], sfg: st[d.s][2], tgt: d.tgt || '— بدون ترجمة —' });
+    const cur = dec(data.find((d) => d.key === this.state.sel) || data[0]);
+    return {
+      stats: [{ label: 'إجمالي الأسطر', value: '48,213' }, { label: 'منشورة', value: '44,906' }, { label: 'قيد المراجعة', value: '128' }, { label: 'مسودة', value: '3,061' }, { label: 'مرفوضة', value: '118' }],
+      tabs: tabs.map(([id, label]) => ({ label, sel: id === this.state.tab ? 'true' : 'false',
+        bg: id === this.state.tab ? '#1C1F26' : 'transparent', fg: id === this.state.tab ? '#F2F3F5' : '#A3A8B3',
+        bd: id === this.state.tab ? '#2E323B' : 'transparent', pick: () => this.setState({ tab: id }) })),
+      rows: shown.map((d) => ({ ...dec(d), bg: d.key === this.state.sel ? 'rgba(233,180,76,0.07)' : 'transparent',
+        pick: () => this.setState({ sel: d.key }) })),
+      cur
+    };
+  }
+}
+</script>
+</body>
+</html>

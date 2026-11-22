@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>LUGHA Store — Game page</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&amp;family=Readex+Pro:wght@500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0E0F12}
+a{color:#E9B44C;text-decoration:none}a:hover{color:#F4CB78}
+</style>
+</helmet>
+<div dir="rtl" style="background: #0E0F12; color: #F2F3F5; font-family: 'IBM Plex Sans Arabic', system-ui, sans-serif; font-size: 16px; line-height: 1.6; min-height: 100vh">
+
+<header style="border-bottom: 1px solid #23262E">
+<div style="max-width: 1280px; margin: 0 auto; padding: 16px 24px; display: flex; flex-wrap: wrap; align-items: center; gap: 24px">
+<a href="Main.dc.html" style="display: flex; align-items: center; gap: 10px; color: #F2F3F5">
+<span style="width: 36px; height: 36px; border-radius: 10px; background: linear-gradient(135deg, #E9B44C, #B9852A); color: #1A1405; display: flex; align-items: center; justify-content: center; font-family: 'Readex Pro', sans-serif; font-weight: 700; font-size: 18px">ل</span>
+<span style="font-family: 'Readex Pro', sans-serif; font-weight: 700; font-size: 22px">لغة</span>
+</a>
+<nav aria-label="مسار التنقل" style="font-size: 14px; color: #8E94A0; display: flex; gap: 8px"><a href="Main.dc.html" style="color: #A3A8B3">المتجر</a><span aria-hidden="true">/</span><span style="color: #F2F3F5">خط الرمال</span></nav>
+<div style="flex: 1; display: flex; justify-content: flex-end; gap: 10px">
+<a href="Checkout.dc.html" style="height: 44px; padding: 0 16px; display: flex; align-items: center; gap: 8px; border: 1px solid #2A2E37; border-radius: 10px; color: #F2F3F5; font-size: 14px">السلة <span style="background: #E9B44C; color: #1A1405; border-radius: 999px; padding: 0 8px; font-weight: 700">{{cartCount}}</span></a>
+</div>
+</div>
+</header>
+
+<section style="background: linear-gradient(180deg, rgba(192,138,62,0.22), rgba(14,15,18,0) 70%)">
+<div style="max-width: 1280px; margin: 0 auto; padding: 48px 24px 32px; display: flex; flex-wrap: wrap; gap: 40px">
+<div style="flex: 0 0 280px; aspect-ratio: 3 / 4; border-radius: 18px; background: linear-gradient(160deg,#C08A3E,#5A3A1E 60%,#1E1410); border: 1px solid #3A3328; display: flex; align-items: end; padding: 20px"><span style="font-family: 'Readex Pro', sans-serif; font-size: 30px; font-weight: 700">خط الرمال</span></div>
+<div style="flex: 999 1 480px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; gap: 8px; flex-wrap: wrap">
+<span style="font-size: 13px; padding: 3px 10px; border-radius: 6px; background: rgba(233,180,76,0.12); color: #E9B44C">محدَّث 2 نوفمبر 2026</span>
+<span style="font-size: 13px; padding: 3px 10px; border-radius: 6px; background: #1D2027; color: #D6D9DF">لهجة سعودية بيضاء</span>
+<span style="font-size: 13px; padding: 3px 10px; border-radius: 6px; background: #1D2027; color: #D6D9DF">مرخّص من الناشر</span>
+</div>
+<h1 style="margin: 0; font-family: 'Readex Pro', sans-serif; font-size: 48px; font-weight: 700; line-height: 1.15">خط الرمال <span dir="ltr" style="font-size: 22px; color: #8E94A0; font-weight: 500">Sandline</span></h1>
+<p style="margin: 0; color: #B9BEC8; max-width: 680px; font-size: 17px">[وصف اللعبة من الناشر — يُدار من لوحة التحكم]. مغامرة عالم مفتوح تدور في صحراء شاسعة، بحوارات كثيفة ومهام قصصية متشعبة.</p>
+<dl style="margin: 8px 0 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px">
+<div style="padding: 14px 16px; background: #16181D; border: 1px solid #23262E; border-radius: 12px"><dt style="font-size: 13px; color: #8E94A0">المطوّر</dt><dd style="margin: 2px 0 0; font-weight: 600">[Developer]</dd></div>
+<div style="padding: 14px 16px; background: #16181D; border: 1px solid #23262E; border-radius: 12px"><dt style="font-size: 13px; color: #8E94A0">الناشر</dt><dd style="margin: 2px 0 0; font-weight: 600">[Publisher]</dd></div>
+<div style="padding: 14px 16px; background: #16181D; border: 1px solid #23262E; border-radius: 12px"><dt style="font-size: 13px; color: #8E94A0">المنصات</dt><dd style="margin: 2px 0 0; font-weight: 600" dir="ltr">PC · PS5 · Xbox</dd></div>
+<div style="padding: 14px 16px; background: #16181D; border: 1px solid #23262E; border-radius: 12px"><dt style="font-size: 13px; color: #8E94A0">إصدارات اللعبة المدعومة</dt><dd style="margin: 2px 0 0; font-weight: 600" dir="ltr">1.00 – 1.06</dd></div>
+</dl>
+</div>
+</div>
+</section>
+
+<section style="max-width: 1280px; margin: 0 auto; padding: 24px 24px 48px">
+<div style="display: flex; justify-content: space-between; align-items: end; gap: 16px; flex-wrap: wrap; margin-bottom: 20px">
+<div><h2 style="margin: 0; font-family: 'Readex Pro', sans-serif; font-size: 30px; font-weight: 600">باقات التعريب</h2><p style="margin: 4px 0 0; color: #A3A8B3">كل باقة تُشترى مستقلة، ويمكنك الترقية لاحقًا بفرق السعر فقط.</p></div>
+<span style="font-size: 14px; color: #8E94A0">الأسعار بالريال السعودي شاملة ضريبة القيمة المضافة 15%</span>
+</div>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px">
+<sc-for list="{{packages}}" as="p" hint-placeholder-count="4">
+<article style="display: flex; flex-direction: column; gap: 16px; padding: 22px; border-radius: 18px; background: {{p.bg}}; border: {{p.border}}; position: relative">
+<sc-if value="{{p.recommended}}" hint-placeholder-val="{{ false }}"><span style="position: absolute; top: -12px; right: 20px; background: #E9B44C; color: #1A1405; font-size: 12px; font-weight: 700; padding: 3px 12px; border-radius: 999px">الأكثر اختيارًا</span></sc-if>
+<div><h3 style="margin: 0; font-family: 'Readex Pro', sans-serif; font-size: 21px; font-weight: 600">{{p.name}}</h3><p style="margin: 4px 0 0; font-size: 14px; color: #A3A8B3">{{p.summary}}</p></div>
+<div style="display: flex; align-items: baseline; gap: 8px"><span style="font-family: 'Readex Pro', sans-serif; font-size: 36px; font-weight: 700">{{p.price}}</span><span style="color: #A3A8B3">ر.س</span><sc-if value="{{p.was}}" hint-placeholder-val="{{ false }}"><s style="color: #8E94A0; font-size: 15px">{{p.was}}</s></sc-if></div>
+<ul style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 15px">
+<sc-for list="{{p.items}}" as="i" hint-placeholder-count="4">
+<li style="display: flex; gap: 10px; align-items: flex-start"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#E9B44C" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-top: 4px; flex: none"><path d="M5 12l5 5L20 7"></path></svg><span>{{i}}</span></li>
+</sc-for>
+</ul>
+<p style="margin: auto 0 0; font-size: 13px; color: #8E94A0">{{p.updates}}</p>
+<button type="button" onClick="{{p.add}}" style="height: 48px; border-radius: 12px; font: inherit; font-weight: 700; cursor: pointer; background: {{p.btnBg}}; color: {{p.btnFg}}; border: 1px solid {{p.btnBorder}}">{{p.btnLabel}}</button>
+</article>
+</sc-for>
+</div>
+</section>
+
+<section style="max-width: 1280px; margin: 0 auto; padding: 0 24px 48px">
+<h2 style="margin: 0 0 16px; font-family: 'Readex Pro', sans-serif; font-size: 24px; font-weight: 600">مقارنة المحتوى</h2>
+<div style="overflow-x: auto; border: 1px solid #23262E; border-radius: 16px">
+<table style="width: 100%; min-width: 760px; border-collapse: collapse; font-size: 15px">
+<thead><tr style="background: #16181D; text-align: start">
+<th scope="col" style="padding: 14px 18px; text-align: start; font-weight: 600">فئة المحتوى</th>
+<th scope="col" style="padding: 14px 18px; font-weight: 600">الحوارات</th>
+<th scope="col" style="padding: 14px 18px; font-weight: 600">القصة</th>
+<th scope="col" style="padding: 14px 18px; font-weight: 600">التعريب الكامل</th>
+<th scope="col" style="padding: 14px 18px; font-weight: 600">الحزمة الشاملة</th>
+<th scope="col" style="padding: 14px 18px; font-weight: 600">الاكتمال</th>
+</tr></thead>
+<tbody>
+<sc-for list="{{matrix}}" as="r" hint-placeholder-count="8">
+<tr style="border-top: 1px solid #23262E">
+<th scope="row" style="padding: 12px 18px; text-align: start; font-weight: 500">{{r.cat}}</th>
+<td style="padding: 12px 18px; text-align: center; color: {{r.c1}}">{{r.a}}</td>
+<td style="padding: 12px 18px; text-align: center; color: {{r.c2}}">{{r.b}}</td>
+<td style="padding: 12px 18px; text-align: center; color: {{r.c3}}">{{r.c}}</td>
+<td style="padding: 12px 18px; text-align: center; color: #E9B44C">✓</td>
+<td style="padding: 12px 18px; text-align: center; color: #D6D9DF" dir="ltr">{{r.cov}}</td>
+</tr>
+</sc-for>
+</tbody>
+</table>
+</div>
+</section>
+
+<section style="max-width: 1280px; margin: 0 auto; padding: 0 24px 72px">
+<h2 style="margin: 0 0 16px; font-family: 'Readex Pro', sans-serif; font-size: 24px; font-weight: 600">لقطات الترجمة داخل اللعبة</h2>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px">
+<figure style="margin: 0"><div style="aspect-ratio: 16 / 9; border-radius: 14px; background: linear-gradient(160deg,#5B4630,#1E1410); position: relative; border: 1px solid #2A2E37"><span style="position: absolute; bottom: 14px; inset-inline: 14px; text-align: center; background: rgba(10,11,14,0.8); padding: 6px 12px; border-radius: 8px; font-size: 15px">جيب السيارة من الكراج، ونتقابل عند البئر.</span></div><figcaption style="margin-top: 8px; font-size: 13px; color: #8E94A0">حوار — مشهد سينمائي</figcaption></figure>
+<figure style="margin: 0"><div style="aspect-ratio: 16 / 9; border-radius: 14px; background: linear-gradient(160deg,#3B4A5A,#11161C); position: relative; border: 1px solid #2A2E37"><span style="position: absolute; top: 14px; right: 14px; background: rgba(10,11,14,0.8); padding: 8px 12px; border-radius: 8px; font-size: 14px; max-width: 70%">الهدف: الحق بقافلة التجّار قبل الغروب</span></div><figcaption style="margin-top: 8px; font-size: 13px; color: #8E94A0">أهداف المهام</figcaption></figure>
+<figure style="margin: 0"><div style="aspect-ratio: 16 / 9; border-radius: 14px; background: linear-gradient(160deg,#2E2E36,#121216); position: relative; border: 1px solid #2A2E37; display: flex; flex-direction: column; justify-content: center; gap: 8px; padding: 0 40px"><span style="background: rgba(233,180,76,0.15); padding: 6px 12px; border-radius: 6px; font-size: 14px">متابعة</span><span style="padding: 6px 12px; font-size: 14px; color: #A3A8B3">لعبة جديدة</span><span style="padding: 6px 12px; font-size: 14px; color: #A3A8B3">الإعدادات</span></div><figcaption style="margin-top: 8px; font-size: 13px; color: #8E94A0">القوائم — التعريب الكامل فقط</figcaption></figure>
+</div>
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":2500}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { inCart: { story: true } }; }
+  renderVals() {
+    const base = [
+      { id: 'dialogue', name: 'باقة الحوارات', summary: 'افهم القصة من أفواه الشخصيات', price: '39', was: '', items: ['حوارات القصة الرئيسية', 'محادثات الشخصيات الجانبية', 'ترجمة المشاهد السينمائية'], updates: 'تحديثات الإصدار 1.x مشمولة' },
+      { id: 'story', name: 'باقة القصة', summary: 'الحوارات + كل ما يخص المهام', price: '69', was: '', recommended: true, items: ['كل ما في باقة الحوارات', 'أهداف المهام ووصفها', 'إشعارات ورسائل القصة'], updates: 'تحديثات الإصدار 1.x مشمولة' },
+      { id: 'full', name: 'التعريب الكامل', summary: 'كل نص تراه في اللعبة', price: '119', was: '', items: ['القصة والمهام الجانبية', 'القوائم والإعدادات والواجهة', 'وصف الأدوات والدروس التعليمية'], updates: 'تحديثات الإصدار 1.x مشمولة' },
+      { id: 'ultimate', name: 'الحزمة الشاملة', summary: 'كل شيء، وكل تحديث قادم', price: '149', was: '179', items: ['كل محتوى التعريب الكامل', 'محتوى التوسعات عند صدورها', 'التحديثات المستقبلية وفق الشروط'], updates: 'تحديثات مدى الحياة حسب شروط الباقة' }
+    ];
+    const packages = base.map((p) => {
+      const added = !!this.state.inCart[p.id];
+      return {
+        ...p,
+        recommended: !!p.recommended,
+        was: p.was || false,
+        bg: p.recommended ? 'linear-gradient(180deg,#1E1B14,#16181D)' : '#16181D',
+        border: p.recommended ? '1px solid rgba(233,180,76,0.55)' : '1px solid #23262E',
+        btnLabel: added ? 'في السلة ✓' : 'أضف إلى السلة',
+        btnBg: added ? 'transparent' : (p.recommended ? '#E9B44C' : '#F2F3F5'),
+        btnFg: added ? '#E9B44C' : '#1A1405',
+        btnBorder: added ? 'rgba(233,180,76,0.55)' : 'transparent',
+        add: () => this.setState({ inCart: { ...this.state.inCart, [p.id]: !added } })
+      };
+    });
+    const y = '✓', n = '—', on = '#E9B44C', off = '#5A606B';
+    const row = (cat, a, b, c, cov) => ({ cat, a: a ? y : n, b: b ? y : n, c: c ? y : n, c1: a ? on : off, c2: b ? on : off, c3: c ? on : off, cov });
+    return {
+      packages,
+      cartCount: Object.values(this.state.inCart).filter(Boolean).length,
+      matrix: [
+        row('حوارات القصة الرئيسية', 1, 1, 1, '100%'),
+        row('الشخصيات الجانبية', 1, 1, 1, '96%'),
+        row('المشاهد السينمائية', 1, 1, 1, '100%'),
+        row('أهداف المهام ووصفها', 0, 1, 1, '98%'),
+        row('إشعارات القصة', 0, 1, 1, '100%'),
+        row('القوائم والإعدادات', 0, 0, 1, '100%'),
+        row('واجهة اللعب ورسائل النظام', 0, 0, 1, '91%'),
+        row('وصف الأدوات والدروس', 0, 0, 1, '84%')
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

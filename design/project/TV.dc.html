@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>LUGHA TV — receiver</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&amp;family=Readex+Pro:wght@600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#E9B44C}a:hover{color:#F4CB78}
+</style>
+</helmet>
+<div dir="rtl" style="width: 1920px; height: 1080px; position: relative; overflow: hidden; background: #08090B; font-family: 'IBM Plex Sans Arabic', system-ui, sans-serif; color: #F2F3F5">
+
+<sc-if value="{{showPair}}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 120px; background: radial-gradient(900px 500px at 70% 30%, rgba(233,180,76,0.12), transparent 60%), #0B0C0F">
+<div style="display: flex; flex-direction: column; gap: 28px; max-width: 760px">
+<div style="display: flex; align-items: center; gap: 16px"><span style="width: 64px; height: 64px; border-radius: 18px; background: linear-gradient(135deg, #E9B44C, #B9852A); color: #1A1405; display: flex; align-items: center; justify-content: center; font-family: 'Readex Pro', sans-serif; font-weight: 700; font-size: 34px">ل</span><span style="font-family: 'Readex Pro', sans-serif; font-size: 40px; font-weight: 700">لغة TV</span></div>
+<h1 style="margin: 0; font-family: 'Readex Pro', sans-serif; font-size: 64px; font-weight: 700; line-height: 1.2">اربط جهازك لعرض الترجمة هنا</h1>
+<p style="margin: 0; font-size: 30px; color: #B9BEC8">افتح لغة على جهاز Mac أو الكمبيوتر، اختر «إرسال إلى التلفاز»، ثم أدخل الرمز أو امسح الرمز المربّع.</p>
+<div style="display: flex; gap: 16px; direction: ltr; justify-content: flex-end"><sc-for list="{{code}}" as="d" hint-placeholder-count="6"><span style="width: 96px; height: 120px; border-radius: 18px; background: #16181D; border: 2px solid #2A2E37; display: flex; align-items: center; justify-content: center; font-family: 'Readex Pro', sans-serif; font-size: 64px; font-weight: 700">{{d}}</span></sc-for></div>
+<p style="margin: 0; font-size: 24px; color: #8E94A0">اسم التلفاز: تلفاز الصالة · الشبكة المحلية فقط</p>
+</div>
+<div style="width: 380px; height: 380px; border-radius: 28px; background: #F2F3F5; display: flex; align-items: center; justify-content: center; color: #0E0F12; font-size: 24px; font-weight: 600" role="img" aria-label="رمز QR للربط">[رمز QR]</div>
+</div>
+</sc-if>
+
+<sc-if value="{{showLive}}" hint-placeholder-val="{{ true }}">
+<div style="position: absolute; inset: 0; background: linear-gradient(170deg, #1E2630 0%, #2A2018 55%, #0B0906 100%)">
+<span style="position: absolute; top: 40px; left: 48px; font-size: 22px; background: rgba(14,15,18,0.6); padding: 6px 14px; border-radius: 8px; color: #D6D9DF">[صورة اللعبة على التلفاز عبر الجهاز أو المنصة]</span>
+<div style="position: absolute; top: 40px; right: 48px; display: flex; align-items: center; gap: 12px; background: rgba(14,15,18,0.7); padding: 10px 18px; border-radius: 999px; font-size: 22px"><span style="width: 12px; height: 12px; border-radius: 999px; background: #7FD1A8"></span>متصل · MacBook Pro · <span dir="ltr">22 ms</span></div>
+<div style="position: absolute; inset-inline: 0; bottom: {{bottom}}px; display: flex; justify-content: center; padding: 0 160px">
+<p style="margin: 0; background: rgba(8,9,11,{{bgOpacity}}); padding: 22px 48px; border-radius: 20px; font-size: {{fontSize}}px; font-weight: 600; line-height: 1.5; text-align: center"><span style="color: #E9B44C">ريم:</span> نطلع مع الفجر. وأحد ما يتكلم عن الليلة.</p>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{showSettings}}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; inset: 0; background: linear-gradient(170deg, #1E2630 0%, #2A2018 55%, #0B0906 100%)">
+<div style="position: absolute; inset-inline-start: 0; top: 0; bottom: 0; width: 640px; background: rgba(14,15,18,0.96); padding: 64px 48px; display: flex; flex-direction: column; gap: 20px">
+<h2 style="margin: 0 0 12px; font-family: 'Readex Pro', sans-serif; font-size: 44px">الإعدادات</h2>
+<button type="button" style="height: 96px; border-radius: 20px; border: 3px solid #E9B44C; background: #1C1F26; color: #F2F3F5; font: inherit; font-size: 30px; display: flex; align-items: center; justify-content: space-between; padding: 0 28px"><span>حجم الخط</span><span style="color: #E9B44C">‹ كبير ›</span></button>
+<button type="button" style="height: 96px; border-radius: 20px; border: 2px solid transparent; background: #16181D; color: #F2F3F5; font: inherit; font-size: 30px; display: flex; align-items: center; justify-content: space-between; padding: 0 28px"><span>الموضع</span><span style="color: #A3A8B3">أسفل</span></button>
+<button type="button" style="height: 96px; border-radius: 20px; border: 2px solid transparent; background: #16181D; color: #F2F3F5; font: inherit; font-size: 30px; display: flex; align-items: center; justify-content: space-between; padding: 0 28px"><span>شفافية الخلفية</span><span style="color: #A3A8B3">75%</span></button>
+<button type="button" style="height: 96px; border-radius: 20px; border: 2px solid transparent; background: #16181D; color: #F2F3F5; font: inherit; font-size: 30px; display: flex; align-items: center; justify-content: space-between; padding: 0 28px"><span>سجل الترجمات</span><span style="color: #A3A8B3">›</span></button>
+<button type="button" style="height: 96px; border-radius: 20px; border: 2px solid transparent; background: #16181D; color: #F2F3F5; font: inherit; font-size: 30px; display: flex; align-items: center; justify-content: space-between; padding: 0 28px"><span>الأجهزة المرتبطة</span><span style="color: #A3A8B3">1</span></button>
+<p style="margin: auto 0 0; font-size: 22px; color: #8E94A0">استخدم أزرار الاتجاه في جهاز التحكم للتنقل، و«رجوع» للإغلاق.</p>
+</div>
+<div style="position: absolute; inset-inline: 640px 0; bottom: 120px; display: flex; justify-content: center; padding: 0 60px"><p style="margin: 0; background: rgba(8,9,11,0.75); padding: 22px 40px; border-radius: 20px; font-size: 48px; font-weight: 600; text-align: center">معاينة: هذا شكل الترجمة.</p></div>
+</div>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"screen":{"editor":"enum","options":["live","pair","settings"],"default":"live"},"fontSize":{"editor":"range","min":32,"max":80,"step":2,"default":52,"section":"Subtitle"},"bgOpacity":{"editor":"range","min":0,"max":1,"step":0.05,"default":0.75,"section":"Subtitle"},"bottom":{"editor":"range","min":40,"max":400,"step":10,"default":110,"unit":"px","section":"Subtitle"},"$preview":{"width":1920,"height":1080}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const s = this.props.screen ?? 'live';
+    return {
+      showLive: s === 'live', showPair: s === 'pair', showSettings: s === 'settings',
+      code: ['4', '8', '2', '9', '1', '6'],
+      fontSize: this.props.fontSize ?? 52,
+      bgOpacity: this.props.bgOpacity ?? 0.75,
+      bottom: this.props.bottom ?? 110
+    };
+  }
+}
+</script>
+</body>
+</html>
