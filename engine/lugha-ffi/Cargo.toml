@@ -1,0 +1,20 @@
+[package]
+name = "lugha-ffi"
+description = "C ABI over lugha-core for the Swift (macOS/iOS) apps"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["staticlib", "rlib"]
+
+[dependencies]
+lugha-core = { path = "../lugha-core" }
+serde.workspace = true
+serde_json.workspace = true
+hex.workspace = true
+base64.workspace = true
+
+[dev-dependencies]
+lugha-core = { path = "../lugha-core", features = ["issuer"] }

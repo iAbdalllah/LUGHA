@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["lugha-core", "lugha-pkg"]
+members = ["lugha-core", "lugha-pkg", "lugha-ffi"]
 
 [workspace.package]
 version = "0.1.0"

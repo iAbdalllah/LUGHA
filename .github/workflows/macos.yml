@@ -1,0 +1,23 @@
+name: macos-app
+
+on:
+  push:
+    paths: ["apps/macos/**", "engine/**", ".github/workflows/macos.yml"]
+  pull_request:
+    paths: ["apps/macos/**", "engine/**", ".github/workflows/macos.yml"]
+
+jobs:
+  test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine
+      - run: cargo build --release -p lugha-ffi -p lugha-pkg
+        working-directory: engine
+      - run: swift test
+        working-directory: apps/macos
+      - run: ./scripts/make-app.sh
+        working-directory: apps/macos

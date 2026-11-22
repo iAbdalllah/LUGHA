@@ -1,0 +1,3 @@
+# The macOS app supports macOS 14+; bundled C code (SQLite, zstd) must be compiled for the same floor.
+[env]
+MACOSX_DEPLOYMENT_TARGET = "14.0"

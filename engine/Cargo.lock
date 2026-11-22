@@ -612,6 +612,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "lugha-ffi"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "hex",
+ "lugha-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "lugha-pkg"
 version = "0.1.0"
 dependencies = [

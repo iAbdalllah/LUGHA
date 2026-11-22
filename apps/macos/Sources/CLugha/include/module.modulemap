@@ -1,0 +1,4 @@
+module CLugha {
+    header "lugha.h"
+    export *
+}

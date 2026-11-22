@@ -18,6 +18,8 @@ Each phase ships something usable and ends with explicit exit criteria. Phase 6 
 
 ## Phase 2 — Package engine + macOS MVP
 
+**Status (2026-11-22): built** in `engine/` (lugha-core, lugha-pkg, lugha-ffi), `backend/` (devices, device-code sign-in, builder, licenses, downloads, updates) and `apps/macos/` (menu-bar app: sign-in, sync, ScreenCaptureKit capture, Vision OCR, RTL overlay). Verified: engine tests + 50k benchmark, PHP↔Rust license interop, Swift OCR→engine test, live app↔backend sync. Not yet: Developer ID signing/notarization, KMS-backed signing, CDN delivery, real-game accuracy trials (exit criterion ≥95% on a licensed title).
+
 - `lugha-core` (normalize, match, verify, decrypt, delta) with benchmark suite; `lugha-pkg` build/validate/sign/diff.
 - Builder job in backend, build reports in Filament, KMS signing, licenses, download authorization, CDN.
 - Devices API, device-code sign-in, limits.

@@ -1,5 +1,14 @@
 # 04 · Localization Package Specification (`.lpk` v1)
 
+> **Implemented** in `engine/lugha-core` (reader, matcher, deltas) and `engine/lugha-pkg` (builder). Decisions made while implementing, which override older text below:
+> - `content_sha256` is a **logical** hash of the rows in a fixed order (meta, entries, aliases, glossary), not of the SQLite file — a delta-patched database and a fresh build have different page layouts but the same content.
+> - Manifests carry **no floats**: coverage is `coverage_bp` (basis points, 9700 = 97.00%). The manifest is signed as raw bytes, so no JSON canonicalization is needed.
+> - Licenses are bound to one **package version** (each version has its own content key) and carry their payload as base64 of the exact JSON bytes that were signed (see 03-api). Timestamps are unix seconds.
+> - The content DB adds `fold_hash` (OCR-folded hash) to entries and aliases, a `grams_entry` index and a `gram_df` table (trigram document frequency); the fuzzy matcher probes only the query's rarest trigrams and ignores trigrams present in >5% of lines.
+> - Installed layout (per package directory): `manifest.json` + `manifest.sig` (as signed by LUGHA), `content.nonce` + `content.enc` (zstd content, AES-256-GCM with the version key), `license.json`, optional `profile.json`. Opening re-verifies signature, license and content hash.
+> - Measured on 50,000 synthetic lines (Apple Silicon, release): exact lookup ~10 µs, OCR-noisy lookup p50 ~2.9 ms / p95 ~5.6 ms, 100% correct; package ~14.6 MB; build ~18 s.
+
+
 ## 1. Container
 
 ```

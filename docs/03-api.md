@@ -92,7 +92,14 @@ Webhooks (server ← gateway): `POST /webhooks/moyasar`, `POST /webhooks/hyperpa
 | POST | `/licenses/refresh` | `{device, packages:[…]}` → `{licenses:[…]}` (extends offline window) |
 | POST | `/translation-reports` | `{package_version, entry_id, note?}` |
 
-`license` (verified offline by lugha-core):
+`license` (verified offline by lugha-core). **As implemented**, the payload travels as base64 of the exact signed JSON bytes, is bound to one package *version*, and uses unix timestamps:
+```json
+{"v": 1, "payload": "base64({\"v\":1,\"license_id\",\"user\",\"device_fp\",\"package_id\",\"version\",\"content_key_wrapped\",\"issued_at\",\"expires_at\"})",
+ "key_id": "pk-2026-11", "sig": "base64(ed25519(payload bytes))"}
+```
+Implemented device/delivery endpoints: `GET /trust`, `POST /auth/device-code`, `POST /auth/device-token`, `GET|POST /devices`, `DELETE /devices/{id}`, `POST /devices/{id}/heartbeat`, `POST /devices/{id}/licenses`, `POST /downloads`, `GET /downloads/{id}/file` (signed URL), `POST /downloads/{id}/complete`.
+
+Original sketch:
 ```json
 {
   "payload": {

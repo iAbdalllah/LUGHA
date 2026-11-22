@@ -92,6 +92,21 @@ enum Cmd {
         license: PathBuf,
         text: Vec<String>,
     },
+    /// Issue a device license locally (development/testing; the backend issues them in production).
+    /// Content key: $LUGHA_CONTENT_KEY.
+    IssueLicense {
+        #[arg(long)]
+        key: PathBuf,
+        #[arg(long)]
+        package_id: String,
+        #[arg(long)]
+        version: String,
+        /// Device public key, base64 (from device-keygen or the app)
+        #[arg(long)]
+        device_public: String,
+        #[arg(long, default_value_t = 86_400)]
+        valid_seconds: i64,
+    },
     /// Benchmark matching on a synthetic package of N lines.
     Bench {
         #[arg(long, default_value_t = 50_000)]
@@ -220,6 +235,20 @@ fn run(cli: Cli) -> Result<(serde_json::Value, u8), String> {
             let count = pkg.entry_count().map_err(|e| e.to_string())?;
             let hit = if text.is_empty() { None } else { Matcher::new(vec![pkg]).lookup(&Query::new(text.join(" "))) };
             Ok((json!({"opened": true, "package_id": manifest.package_id, "version": manifest.version, "entries": count, "hit": hit}), 0))
+        }
+        Cmd::IssueLicense { key, package_id, version, device_public, valid_seconds } => {
+            use base64::Engine;
+            let b64 = base64::engine::general_purpose::STANDARD;
+            let kf: KeyFile = read_json(&key)?;
+            let public: [u8; 32] = b64.decode(device_public.trim()).ok().and_then(|b| b.try_into().ok()).ok_or("device public key must be 32 bytes base64")?;
+            let ck = env_key("LUGHA_CONTENT_KEY")?;
+            let payload = lugha_core::license::LicensePayload {
+                v: 1, license_id: format!("dev-{}", now()), user: "dev".into(), device_fp: lugha_core::crypto::fingerprint(&public),
+                package_id, version, content_key_wrapped: b64.encode(lugha_core::crypto::wrap_key(&ck, &public)),
+                issued_at: now(), expires_at: now() + valid_seconds,
+            };
+            let lic = lugha_core::License::issue(&kf.signing_key().map_err(|e| e.to_string())?, &kf.key_id, &payload);
+            Ok((serde_json::to_value(lic).unwrap(), 0))
         }
         Cmd::Bench { lines } => bench(lines).map(|v| (v, 0)),
     }

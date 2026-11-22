@@ -2,7 +2,7 @@
 
 The Arabic game localization ecosystem: a store that sells reviewed Arabic localization packages for games, and a family of apps (macOS, Windows, Android/iOS companion, Android TV) that show those translations as subtitles while you play.
 
-Design documents are in `docs/`. **Phase 1 is built** in [`backend/`](backend/README.md): Laravel 13 Store (ar/en), Filament admin, Moyasar checkout, ZATCA invoices and REST API v1. `docker-compose.yml` runs PostgreSQL, Redis and Mailpit; `.github/workflows/backend.yml` runs the tests on SQLite and PostgreSQL.
+Design documents are in `docs/`. **Phase 1 is built** in [`backend/`](backend/README.md): Laravel 13 Store (ar/en), Filament admin, Moyasar checkout, ZATCA invoices and REST API v1. **Phase 2 is built**: the Rust package engine in [`engine/`](engine) and the macOS app in [`apps/macos/`](apps/macos/README.md). `docker-compose.yml` runs PostgreSQL, Redis and Mailpit; `.github/workflows/backend.yml` runs the tests on SQLite and PostgreSQL.
 
 | # | Document | Covers |
 |---|----------|--------|
