@@ -1,0 +1,55 @@
+name: mobile-app
+
+on:
+  push:
+    paths: ["apps/mobile/**", "engine/**", ".github/workflows/mobile.yml"]
+  pull_request:
+    paths: ["apps/mobile/**", "engine/**", ".github/workflows/mobile.yml"]
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "17" }
+      - uses: subosito/flutter-action@v2
+        with: { channel: stable, cache: true }
+      - name: Engine for host tests + Android ABIs
+        run: |
+          cargo build --release -p lugha-ffi
+          ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME" SKIP_IOS=1 ./scripts/build-mobile.sh
+        working-directory: engine
+      - run: flutter pub get && flutter analyze && flutter test
+        working-directory: apps/mobile
+      - run: flutter test
+        working-directory: apps/mobile/packages/lugha_engine
+      - run: flutter build apk --release
+        working-directory: apps/mobile
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lugha-android
+          path: apps/mobile/build/app/outputs/flutter-apk/app-release.apk
+
+  ios:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine
+      - uses: subosito/flutter-action@v2
+        with: { channel: stable, cache: true }
+      - run: SKIP_ANDROID=1 ./scripts/build-mobile.sh
+        working-directory: engine
+      - run: flutter pub get && flutter build ios --no-codesign
+        working-directory: apps/mobile

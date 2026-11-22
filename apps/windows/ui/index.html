@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>لغة</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<aside class="side">
+  <div class="brand"><span class="mark">ل</span><div><b>لغة</b><small>LUGHA</small></div></div>
+  <nav>
+    <button data-tab="play" class="on">التشغيل</button>
+    <button data-tab="library">المكتبة</button>
+    <button data-tab="tv">التلفاز</button>
+    <button data-tab="history">السجل</button>
+    <button data-tab="account">الحساب</button>
+  </nav>
+  <div class="who" id="who"></div>
+</aside>
+
+<main>
+  <!-- Sign in -->
+  <section id="signin" hidden>
+    <h1>سجّل الدخول</h1>
+    <p class="muted">استخدم حساب لغة لتنزيل حزم التعريب التي اشتريتها على هذا الجهاز.</p>
+    <div class="card">
+      <h2>من المتصفح <span class="pill">موصى به</span></h2>
+      <p class="muted">نعرض لك رمزاً تؤكده من صفحة التفعيل في حسابك.</p>
+      <button class="primary" id="dc-start">احصل على رمز</button>
+      <div id="dc-box" hidden>
+        <div class="code" id="dc-code" dir="ltr"></div>
+        <p class="muted">افتح <a id="dc-url" dir="ltr" href="#"></a> وأدخل الرمز. ننتظر التأكيد…</p>
+      </div>
+    </div>
+    <div class="card">
+      <h2>بالبريد وكلمة المرور</h2>
+      <form id="pw">
+        <label>البريد الإلكتروني<input id="email" type="email" dir="ltr" autocomplete="username" required></label>
+        <label>كلمة المرور<input id="password" type="password" dir="ltr" autocomplete="current-password" required></label>
+        <button class="primary" type="submit">دخول</button>
+      </form>
+    </div>
+    <details class="card"><summary>الخادم</summary>
+      <label>عنوان الخادم<input id="server" dir="ltr"></label>
+      <button id="server-save">حفظ</button>
+    </details>
+  </section>
+
+  <!-- Play -->
+  <section id="tab-play" class="tab">
+    <h1>التشغيل</h1>
+    <div class="card hero">
+      <div>
+        <h2 id="cap-title">الترجمة متوقفة</h2>
+        <p class="muted" id="cap-sub">شغّل اللعبة في وضع نافذة أو ملء الشاشة بلا حدود، ثم ابدأ.</p>
+      </div>
+      <button class="primary big" id="cap-toggle">ابدأ الترجمة</button>
+    </div>
+    <div class="preview" id="preview"><span class="muted">ستظهر الترجمة هنا وفوق اللعبة.</span></div>
+    <div class="card">
+      <h2>منطقة الالتقاط</h2>
+      <p class="muted">المنطقة التي تظهر فيها ترجمة اللعبة الإنجليزية (بالبكسل على الشاشة الرئيسية).</p>
+      <div class="grid4" dir="ltr">
+        <label>X<input id="rx" type="number"></label><label>Y<input id="ry" type="number"></label>
+        <label>W<input id="rw" type="number"></label><label>H<input id="rh" type="number"></label>
+      </div>
+      <div class="row"><button id="region-save">حفظ</button><button id="region-reset" class="ghost">الافتراضي (الربع السفلي)</button></div>
+    </div>
+    <div class="card">
+      <h2>جرّب سطراً</h2>
+      <div class="row"><input id="try" dir="ltr" placeholder="Water costs more than gold out here"><button id="try-go">ترجم</button></div>
+      <p id="try-out" class="answer"></p>
+    </div>
+  </section>
+
+  <!-- Library -->
+  <section id="tab-library" class="tab" hidden>
+    <div class="head"><h1>المكتبة</h1><button id="sync">مزامنة</button></div>
+    <p class="muted" id="sync-note"></p>
+    <ul class="list" id="packages"></ul>
+  </section>
+
+  <!-- TV -->
+  <section id="tab-tv" class="tab" hidden>
+    <h1>التلفاز</h1>
+    <p class="muted">اعرض الترجمة على تطبيق لغة في Android TV. الاتصال محلي ومشفّر بالكامل — لا يمر عبر الإنترنت.</p>
+    <div class="card" id="tv-state"></div>
+    <div class="card">
+      <h2>اقتران جديد</h2>
+      <p class="muted">افتح «الاقتران» في التلفاز، ثم أدخل العنوان والرمز الظاهرين.</p>
+      <div class="row">
+        <label>العنوان<input id="tv-addr" dir="ltr" placeholder="192.168.1.20:47800"></label>
+        <label>الرمز<input id="tv-code" dir="ltr" inputmode="numeric" maxlength="6" placeholder="000000"></label>
+      </div>
+      <button class="primary" id="tv-pair">اقتران</button>
+    </div>
+  </section>
+
+  <!-- History -->
+  <section id="tab-history" class="tab" hidden>
+    <h1>السجل</h1>
+    <ul class="list" id="history"></ul>
+  </section>
+
+  <!-- Account -->
+  <section id="tab-account" class="tab" hidden>
+    <h1>الحساب</h1>
+    <div class="card" id="account"></div>
+    <div class="card">
+      <h2>لغة النص في اللعبة</h2>
+      <p class="muted">لغة التعرف على النص في Windows (يجب أن تكون حزمة اللغة مثبتة).</p>
+      <select id="ocr-lang" dir="ltr"><option value="en-US">English (US)</option><option value="en-GB">English (UK)</option></select>
+    </div>
+    <button class="danger" id="sign-out">تسجيل الخروج من هذا الجهاز</button>
+  </section>
+</main>
+
+<div class="toast" id="toast" hidden></div>
+<script src="app.js"></script>
+</body>
+</html>

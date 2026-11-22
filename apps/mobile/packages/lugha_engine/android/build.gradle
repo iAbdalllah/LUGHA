@@ -1,0 +1,19 @@
+// Prebuilt Rust library (engine/scripts/build-mobile.sh) packaged as jniLibs.
+group 'app.lugha.lugha_engine'
+version '0.1.0'
+
+buildscript {
+    repositories { google(); mavenCentral() }
+    dependencies { classpath 'com.android.tools.build:gradle:8.7.3' }
+}
+
+rootProject.allprojects { repositories { google(); mavenCentral() } }
+
+apply plugin: 'com.android.library'
+
+android {
+    namespace 'app.lugha.lugha_engine'
+    compileSdk 35
+    defaultConfig { minSdk 26 }
+    sourceSets { main { jniLibs.srcDirs = ['src/main/jniLibs'] } }
+}

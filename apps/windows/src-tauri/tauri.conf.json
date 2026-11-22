@@ -1,0 +1,54 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "LUGHA",
+  "version": "0.1.0",
+  "identifier": "app.lugha.windows",
+  "build": {
+    "frontendDist": "../ui"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "لغة — LUGHA",
+        "url": "index.html",
+        "width": 980,
+        "height": 680,
+        "minWidth": 760,
+        "minHeight": 540,
+        "center": true
+      },
+      {
+        "label": "overlay",
+        "title": "LUGHA overlay",
+        "url": "overlay.html",
+        "transparent": true,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "shadow": false,
+        "focus": false,
+        "visible": false,
+        "width": 1280,
+        "height": 220
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "msi"],
+    "publisher": "LUGHA",
+    "category": "Game",
+    "shortDescription": "Reviewed Arabic subtitles for games",
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico", "icons/icon.png"],
+    "windows": {
+      "webviewInstallMode": { "type": "downloadBootstrapper" },
+      "nsis": { "languages": ["Arabic", "English"], "displayLanguageSelector": true }
+    }
+  }
+}

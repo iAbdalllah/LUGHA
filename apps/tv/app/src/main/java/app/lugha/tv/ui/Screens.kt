@@ -158,7 +158,7 @@ fun SubtitleBubble(text: String, speaker: String?, fontScale: Float, bgOpacity: 
 @Composable
 private fun LiveScreen(state: HubState, onSettings: () -> Unit) {
     val focus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { focus.requestFocus() }
+    LaunchedEffect(Unit) { focus.requestFocusSafely() }
     BoxWithConstraints(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF1E2630), Color(0xFF2A2018), Color(0xFF0B0906))))) {
         Row(Modifier.align(Alignment.TopEnd).padding(36.dp).background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(50)).padding(horizontal = 18.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically) {
@@ -195,7 +195,7 @@ private fun SettingRow(label: String, value: String, onClick: () -> Unit, focus:
 private fun SettingsScreen(state: HubState, onPair: () -> Unit, onHistory: () -> Unit) {
     val ctx = LocalContext.current
     val focus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { focus.requestFocus() }
+    LaunchedEffect(Unit) { focus.requestFocusSafely() }
     val st = state.style
     var overlay by remember { mutableStateOf(LinkHub.store.overlayMode) }
     Row(Modifier.fillMaxSize()) {
@@ -247,5 +247,16 @@ private fun HistoryScreen(state: HubState) {
                 color = Color.White, fontSize = 30.sp, style = MaterialTheme.typography.bodyLarge.copy(textDirection = TextDirection.Rtl),
                 modifier = Modifier.fillMaxWidth().background(Surface2, RoundedCornerShape(16.dp)).padding(20.dp))
         }
+    }
+}
+
+/**
+ * Initial D-pad focus. The target may not be attached yet (e.g. the screen changed while LUGHA TV was in the
+ * background after a pairing), so retry briefly instead of crashing.
+ */
+suspend fun FocusRequester.requestFocusSafely() {
+    repeat(20) {
+        if (runCatching { requestFocus() }.isSuccess) return
+        kotlinx.coroutines.delay(50)
     }
 }

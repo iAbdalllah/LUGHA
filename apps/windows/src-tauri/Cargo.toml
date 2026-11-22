@@ -1,0 +1,49 @@
+[package]
+name = "lugha-windows"
+description = "LUGHA for Windows: capture → OCR → reviewed Arabic subtitles (Tauri 2)"
+version = "0.1.0"
+edition = "2021"
+license = "UNLICENSED"
+publish = false
+
+[lib]
+name = "lugha_windows"
+path = "src/lib.rs"
+
+[[bin]]
+name = "lugha"
+path = "src/main.rs"
+required-features = ["app"]
+
+[features]
+# The Tauri shell. Off for headless tests of the core (API, sync, pipeline, TV link) on any OS.
+default = ["app"]
+app = ["dep:tauri", "dep:tauri-build"]
+
+[dependencies]
+lugha-core = { path = "../../../engine/lugha-core" }
+lugha-link = { path = "../../../engine/lugha-link" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ureq = { version = "2", features = ["json"] }
+sha2 = "0.10"
+hex = "0.4"
+base64 = "0.22"
+thiserror = "1"
+dirs = "5"
+tauri = { version = "2", features = [], optional = true }
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = [
+    "Win32_Foundation", "Win32_Graphics_Gdi", "Win32_UI_WindowsAndMessaging", "Win32_Security_Credentials",
+    "Media_Ocr", "Graphics_Imaging", "Globalization", "Foundation", "Foundation_Collections",
+    "Security_Cryptography", "Storage_Streams", "Win32_System_WinRT",
+] }
+
+[build-dependencies]
+tauri-build = { version = "2", features = [], optional = true }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

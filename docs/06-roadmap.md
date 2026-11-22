@@ -36,6 +36,8 @@ Each phase ships something usable and ends with explicit exit criteria. Phase 6 
 
 ## Phase 4 — Windows, Android, iOS
 
+**Status (2026-11-22): built, partly verified.** Flutter app in `apps/mobile/` (account, library with delta installs and license refresh through the Rust engine via `dart:ffi`, devices with device-limit handling, TV discovery/pairing/sender/style remote, history) — integration tests pass on an Android 14 emulator and the iPhone 17 Pro simulator; phone → TV p95 ≈ 20 ms incl. paint. Windows app in `apps/windows/` (Tauri 2, GDI capture with the overlay excluded, Windows.Media.Ocr, Credential Manager, TV sender) — core and live-API tests pass on macOS and the Windows code type-checks for MSVC, but it has **not run on Windows yet** (first `windows-latest` CI run pending). Not done: Android MediaProjection capture (optional), Windows.Graphics.Capture for exclusive fullscreen, mDNS discovery on Windows, physical devices, store review.
+
 - Windows (Tauri 2 + WGC + Windows OCR).
 - Flutter mobile: account, library, downloads, devices, TV remote/sender, appearance. Android optional MediaProjection capture behind consent.
 - **Exit**: feature parity of package manager across platforms; store-review approvals.

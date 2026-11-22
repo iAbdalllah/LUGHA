@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>LUGHA overlay</title>
+<style>
+  html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+  body { display: flex; align-items: flex-end; justify-content: center; padding-bottom: 6%;
+         font: 600 30px/1.45 "Segoe UI", Tahoma, sans-serif; color: #fff; }
+  #box { max-width: 92%; text-align: center; background: rgba(0,0,0,.72); border-radius: 12px; padding: 8px 20px;
+         text-shadow: 0 2px 4px #000; transition: opacity .12s; }
+  #box[hidden] { display: block; opacity: 0; }
+  #spk { display: block; color: #e9b44c; font-size: 18px; }
+</style>
+</head>
+<body>
+<div id="box" hidden><span id="spk"></span><span id="txt"></span></div>
+<script src="overlay.js"></script>
+</body>
+</html>

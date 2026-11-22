@@ -1,0 +1,609 @@
+//! Tauri shell: app state, commands for the UI (ui/index.html), the capture → OCR → match loop and the overlay.
+
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+#[cfg(windows)]
+use std::time::{Duration, Instant};
+
+use lugha_core::crypto::DeviceKeys;
+use lugha_core::{Matcher, Query, TrustStore};
+use lugha_link::StaticKeys;
+use serde::{Deserialize, Serialize};
+use tauri::{Emitter, Manager};
+
+use crate::api::{Api, ApiError};
+#[cfg(windows)]
+use crate::pipeline::Pipeline;
+use crate::pipeline::Subtitle;
+use crate::store::PackageStore;
+use crate::sync;
+use crate::tv::TvSender;
+
+const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+// ---------- secrets: Credential Manager on Windows, a private file elsewhere (dev builds only) ----------
+
+mod vault {
+    #[cfg(windows)]
+    pub use crate::secrets::{delete, get, set};
+
+    #[cfg(not(windows))]
+    fn path(key: &str) -> std::path::PathBuf {
+        super::data_dir().join(format!(".secret-{key}"))
+    }
+    #[cfg(not(windows))]
+    pub fn get(key: &str) -> Option<String> {
+        std::fs::read_to_string(path(key)).ok()
+    }
+    #[cfg(not(windows))]
+    pub fn set(key: &str, value: &str) -> std::io::Result<()> {
+        std::fs::write(path(key), value)
+    }
+    #[cfg(not(windows))]
+    pub fn delete(key: &str) {
+        let _ = std::fs::remove_file(path(key));
+    }
+}
+
+fn data_dir() -> PathBuf {
+    let d = dirs::data_dir().unwrap_or_else(std::env::temp_dir).join("LUGHA");
+    let _ = std::fs::create_dir_all(&d);
+    d
+}
+
+// ---------- settings (non-secret, JSON next to the packages) ----------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Settings {
+    pub server: String,
+    pub ocr_language: String,
+    pub region: Option<Region>,
+    pub tv_addr: Option<String>,
+    pub tv_public: Option<String>,
+    pub interval_ms: u64,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            server: std::env::var("LUGHA_API").unwrap_or_else(|_| "http://127.0.0.1:8040".into()),
+            ocr_language: "en-US".into(),
+            region: None,
+            tv_addr: None,
+            tv_public: None,
+            interval_ms: 200,
+        }
+    }
+}
+
+impl Settings {
+    fn load() -> Self {
+        std::fs::read(data_dir().join("settings.json")).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+    }
+    fn save(&self) {
+        let _ = std::fs::write(data_dir().join("settings.json"), serde_json::to_vec_pretty(self).unwrap_or_default());
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Region {
+    pub x: i32,
+    pub y: i32,
+    pub w: i32,
+    pub h: i32,
+}
+
+#[cfg(windows)]
+impl From<Region> for crate::capture::Region {
+    fn from(r: Region) -> Self {
+        Self { x: r.x, y: r.y, w: r.w, h: r.h }
+    }
+}
+
+fn default_region() -> Region {
+    #[cfg(windows)]
+    {
+        let r = crate::capture::Region::default_subtitles();
+        Region { x: r.x, y: r.y, w: r.w, h: r.h }
+    }
+    #[cfg(not(windows))]
+    {
+        Region { x: 192, y: 810, w: 1536, h: 243 }
+    }
+}
+
+// ---------- state ----------
+
+pub struct Core {
+    settings: Settings,
+    api: Api,
+    user: Option<String>,
+    device: DeviceKeys,
+    link: StaticKeys,
+    device_id: Option<String>,
+    trust: Option<TrustStore>,
+    store: PackageStore,
+    matcher: Option<Matcher>,
+    packages: Vec<(String, String)>,
+    tv: Option<TvSender>,
+    history: Vec<Subtitle>,
+    last_error: Option<String>,
+}
+
+type Shared = Arc<Mutex<Core>>;
+
+#[derive(Default)]
+struct Capture {
+    running: Arc<AtomicBool>,
+}
+
+fn secret_key(name: &str) -> [u8; 32] {
+    if let Some(bytes) = vault::get(name).and_then(|h| hex::decode(h.trim()).ok()).filter(|b| b.len() == 32) {
+        return bytes.try_into().unwrap();
+    }
+    let fresh = DeviceKeys::generate().secret;
+    let _ = vault::set(name, &hex::encode(fresh));
+    fresh
+}
+
+impl Core {
+    fn new() -> Self {
+        let settings = Settings::load();
+        let api = Api::new(&settings.server, vault::get("api_token"));
+        let store = PackageStore::new(Some(data_dir().join("packages"))).expect("packages folder");
+        let trust = std::fs::read_to_string(data_dir().join("trust.json")).ok().and_then(|t| sync::trust_from_json(&t));
+        let mut core = Self {
+            device: DeviceKeys::from_secret(secret_key("device_secret")),
+            link: StaticKeys::from_secret(secret_key("link_secret")),
+            device_id: vault::get("device_id"),
+            settings,
+            api,
+            user: None,
+            trust,
+            store,
+            matcher: None,
+            packages: vec![],
+            tv: None,
+            history: vec![],
+            last_error: None,
+        };
+        core.reload(); // works offline with the cached trust list + licenses
+        core
+    }
+
+    fn reload(&mut self) {
+        let Some(trust) = &self.trust else { return };
+        let (pkgs, errs) = sync::load(&self.store, trust, &self.device);
+        self.packages = pkgs.iter().map(|p| (p.manifest.package_id.clone(), p.manifest.version.clone())).collect();
+        self.matcher = Some(Matcher::new(pkgs));
+        if !errs.is_empty() {
+            self.last_error = Some(errs.join("\n"));
+        }
+    }
+
+    fn refresh_trust(&mut self) -> Result<(), String> {
+        let raw = self.api.trust_json().map_err(msg)?;
+        self.trust = Some(sync::trust_from_json(&raw).ok_or("invalid trust document")?);
+        let _ = std::fs::write(data_dir().join("trust.json"), raw);
+        Ok(())
+    }
+
+    /// After a token is obtained: remember it, register this PC once, sync.
+    fn finish_sign_in(&mut self, token: String, name: String) -> Result<SyncSummary, String> {
+        self.api.token = Some(token.clone());
+        let _ = vault::set("api_token", &token);
+        self.user = Some(name);
+        self.refresh_trust()?;
+        if self.device_id.is_none() {
+            let host = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "Windows PC".into());
+            let id = self.api.register_device(&host, &lugha_link::b64(&self.device.public), APP_VERSION).map_err(msg)?;
+            let _ = vault::set("device_id", &id);
+            self.device_id = Some(id);
+        }
+        self.sync_now()
+    }
+
+    fn sync_now(&mut self) -> Result<SyncSummary, String> {
+        if self.trust.is_none() {
+            self.refresh_trust()?;
+        }
+        let device_id = self.device_id.clone().ok_or("not signed in")?;
+        let r = sync::sync(&self.api, &self.store, self.trust.as_ref().unwrap(), &self.device, &device_id, APP_VERSION);
+        self.reload();
+        Ok(SyncSummary { installed: r.installed, updated: r.updated, removed: r.removed, errors: r.errors })
+    }
+}
+
+fn msg(e: ApiError) -> String {
+    match e {
+        ApiError::Http { code, .. } if code == "device_limit_reached" => {
+            "وصلت إلى الحد الأقصى للأجهزة. احذف جهازاً من حسابك على الموقع ثم حاول مجدداً.".into()
+        }
+        ApiError::Http { status: 401, .. } => "انتهت الجلسة — سجّل الدخول مرة أخرى.".into(),
+        ApiError::Network(_) => "تعذّر الاتصال بالخادم.".into(),
+        e => e.to_string(),
+    }
+}
+
+// ---------- commands ----------
+
+#[derive(Serialize)]
+pub struct Status {
+    server: String,
+    user: Option<String>,
+    signed_in: bool,
+    device_id: Option<String>,
+    packages: Vec<(String, String)>,
+    region: Region,
+    capturing: bool,
+    tv: Option<String>,
+    tv_paired: bool,
+    tv_connected: bool,
+    ocr_language: String,
+    windows: bool,
+    last_error: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct SyncSummary {
+    installed: Vec<String>,
+    updated: Vec<String>,
+    removed: Vec<String>,
+    errors: Vec<String>,
+}
+
+#[derive(Serialize, Clone)]
+pub struct Line {
+    text: String,
+    speaker: Option<String>,
+    source: String,
+}
+
+impl From<&Subtitle> for Line {
+    fn from(s: &Subtitle) -> Self {
+        Self { text: s.text.clone(), speaker: s.speaker.clone(), source: s.source.clone() }
+    }
+}
+
+type Cmd<T> = Result<T, String>;
+
+fn lock<'a>(s: &'a tauri::State<'_, Shared>) -> std::sync::MutexGuard<'a, Core> {
+    s.lock().unwrap_or_else(|p| p.into_inner())
+}
+
+#[tauri::command(async)]
+fn status(core: tauri::State<'_, Shared>, cap: tauri::State<'_, Capture>) -> Cmd<Status> {
+    let mut c = lock(&core);
+    if c.user.is_none() && c.api.token.is_some() {
+        c.user = c.api.me().ok();
+    }
+    Ok(Status {
+        server: c.settings.server.clone(),
+        user: c.user.clone(),
+        signed_in: c.api.token.is_some(),
+        device_id: c.device_id.clone(),
+        packages: c.packages.clone(),
+        region: c.settings.region.unwrap_or_else(default_region),
+        capturing: cap.running.load(Ordering::SeqCst),
+        tv: c.settings.tv_addr.clone(),
+        tv_paired: c.settings.tv_public.is_some(),
+        tv_connected: c.tv.is_some(),
+        ocr_language: c.settings.ocr_language.clone(),
+        windows: cfg!(windows),
+        last_error: c.last_error.take(),
+    })
+}
+
+#[tauri::command(async)]
+fn set_server(core: tauri::State<'_, Shared>, url: String) -> Cmd<()> {
+    let mut c = lock(&core);
+    c.settings.server = url.trim().trim_end_matches('/').to_string();
+    c.settings.save();
+    c.api.base = c.settings.server.clone();
+    Ok(())
+}
+
+#[tauri::command(async)]
+fn sign_in(core: tauri::State<'_, Shared>, email: String, password: String) -> Cmd<SyncSummary> {
+    let mut c = lock(&core);
+    let host = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "Windows PC".into());
+    let (token, name) = c.api.login(email.trim(), &password, &host).map_err(msg)?;
+    c.finish_sign_in(token, name)
+}
+
+#[derive(Serialize)]
+pub struct DeviceCode {
+    device_code: String,
+    user_code: String,
+    url: String,
+    interval: u64,
+}
+
+#[tauri::command(async)]
+fn start_device_sign_in(core: tauri::State<'_, Shared>) -> Cmd<DeviceCode> {
+    let c = lock(&core);
+    let host = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "Windows PC".into());
+    let d = c.api.start_device_code(&host).map_err(msg)?;
+    Ok(DeviceCode { device_code: d.device_code, user_code: d.user_code, url: d.verification_url_complete, interval: d.interval.max(2) })
+}
+
+/// One poll; Ok(None) while the user hasn't approved yet.
+#[tauri::command(async)]
+fn poll_device_sign_in(core: tauri::State<'_, Shared>, device_code: String) -> Cmd<Option<SyncSummary>> {
+    let mut c = lock(&core);
+    match c.api.poll_device_code(&device_code).map_err(msg)? {
+        None => Ok(None),
+        Some((token, name)) => c.finish_sign_in(token, name).map(Some),
+    }
+}
+
+#[tauri::command(async)]
+fn sign_out(core: tauri::State<'_, Shared>, cap: tauri::State<'_, Capture>) -> Cmd<()> {
+    cap.running.store(false, Ordering::SeqCst);
+    let mut c = lock(&core);
+    if let Some(id) = c.device_id.take() {
+        // Frees the device slot; ignore failures (offline sign-out still clears local data).
+        let _ = ureq::delete(&format!("{}/api/v1/devices/{id}", c.api.base))
+            .set("Accept", "application/json")
+            .set("Authorization", &format!("Bearer {}", c.api.token.clone().unwrap_or_default()))
+            .call();
+    }
+    for (p, _) in c.store.installed() {
+        c.store.remove(&p);
+    }
+    vault::delete("api_token");
+    vault::delete("device_id");
+    c.api.token = None;
+    c.user = None;
+    c.matcher = None;
+    c.packages.clear();
+    Ok(())
+}
+
+#[tauri::command(async)]
+fn sync_now(core: tauri::State<'_, Shared>) -> Cmd<SyncSummary> {
+    lock(&core).sync_now()
+}
+
+#[tauri::command(async)]
+fn lookup(core: tauri::State<'_, Shared>, text: String) -> Cmd<Option<Line>> {
+    let mut c = lock(&core);
+    let Some(m) = c.matcher.as_mut() else { return Ok(None) };
+    Ok(m.lookup(&Query::new(text.clone())).map(|h| Line { text: h.target, speaker: h.speaker, source: text }))
+}
+
+#[tauri::command(async)]
+fn history(core: tauri::State<'_, Shared>) -> Cmd<Vec<Line>> {
+    Ok(lock(&core).history.iter().map(Line::from).collect())
+}
+
+#[tauri::command(async)]
+fn set_region(app: tauri::AppHandle, core: tauri::State<'_, Shared>, region: Option<Region>) -> Cmd<Region> {
+    let mut c = lock(&core);
+    c.settings.region = region.filter(|r| r.w >= 40 && r.h >= 20);
+    c.settings.save();
+    let r = c.settings.region.unwrap_or_else(default_region);
+    place_overlay(&app, r);
+    Ok(r)
+}
+
+#[tauri::command(async)]
+fn set_ocr_language(core: tauri::State<'_, Shared>, lang: String) -> Cmd<()> {
+    let mut c = lock(&core);
+    c.settings.ocr_language = lang;
+    c.settings.save();
+    Ok(())
+}
+
+#[tauri::command(async)]
+fn tv_pair(core: tauri::State<'_, Shared>, addr: String, code: String) -> Cmd<()> {
+    let mut c = lock(&core);
+    let addr = normalize_addr(&addr);
+    let host = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "Windows PC".into());
+    let tv = TvSender::pair(&addr, code.trim(), &c.link, &host).map_err(|e| tv_msg(&e))?;
+    c.settings.tv_addr = Some(addr);
+    c.settings.tv_public = Some(lugha_link::b64(&tv.tv_public));
+    c.settings.save();
+    c.tv = Some(tv);
+    Ok(())
+}
+
+#[tauri::command(async)]
+fn tv_connect(core: tauri::State<'_, Shared>, addr: Option<String>) -> Cmd<()> {
+    let mut c = lock(&core);
+    if let Some(a) = addr {
+        c.settings.tv_addr = Some(normalize_addr(&a));
+        c.settings.save();
+    }
+    let addr = c.settings.tv_addr.clone().ok_or("لا يوجد تلفاز مقترن")?;
+    let public: [u8; 32] = c
+        .settings
+        .tv_public
+        .as_deref()
+        .and_then(|k| lugha_link::unb64(k).ok())
+        .and_then(|b| b.try_into().ok())
+        .ok_or("لا يوجد تلفاز مقترن")?;
+    let host = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "Windows PC".into());
+    c.tv = Some(TvSender::connect(&addr, &c.link, public, &host).map_err(|e| tv_msg(&e))?);
+    Ok(())
+}
+
+#[tauri::command(async)]
+fn tv_test(core: tauri::State<'_, Shared>) -> Cmd<u64> {
+    let mut c = lock(&core);
+    let tv = c.tv.as_mut().ok_or("التلفاز غير متصل")?;
+    let rtt = tv.show("مرحباً من لغة على ويندوز", None, true).map_err(|e| tv_msg(&e))?;
+    Ok(rtt.map(|d| d.as_millis() as u64).unwrap_or(0))
+}
+
+#[tauri::command(async)]
+fn tv_forget(core: tauri::State<'_, Shared>) -> Cmd<()> {
+    let mut c = lock(&core);
+    c.tv = None;
+    c.settings.tv_addr = None;
+    c.settings.tv_public = None;
+    c.settings.save();
+    Ok(())
+}
+
+fn normalize_addr(a: &str) -> String {
+    let a = a.trim();
+    if a.contains(':') { a.to_string() } else { format!("{a}:{}", lugha_link::DEFAULT_PORT) }
+}
+
+fn tv_msg(e: &crate::tv::TvError) -> String {
+    match e {
+        crate::tv::TvError::WrongCode => "الرمز غير صحيح — استخدم الرمز الظاهر على التلفاز.".into(),
+        crate::tv::TvError::Locked => "الاقتران مقفل مؤقتاً — حاول بعد دقيقة.".into(),
+        crate::tv::TvError::Io(_) => "تعذّر الوصول إلى التلفاز. تأكد أنه على نفس الشبكة.".into(),
+        e => e.to_string(),
+    }
+}
+
+// ---------- capture loop ----------
+
+#[tauri::command(async)]
+fn start_capture(app: tauri::AppHandle, core: tauri::State<'_, Shared>, cap: tauri::State<'_, Capture>) -> Cmd<()> {
+    if !cfg!(windows) {
+        return Err("الالتقاط متاح على ويندوز فقط.".into());
+    }
+    if lock(&core).matcher.as_ref().is_none() {
+        return Err("لا توجد حزم مثبتة — زامن مكتبتك أولاً.".into());
+    }
+    if cap.running.swap(true, Ordering::SeqCst) {
+        return Ok(());
+    }
+    let region = lock(&core).settings.region.unwrap_or_else(default_region);
+    place_overlay(&app, region);
+    if let Some(w) = app.get_webview_window("overlay") {
+        let _ = w.show();
+    }
+    let running = cap.running.clone();
+    let shared: Shared = core.inner().clone();
+    std::thread::spawn(move || capture_loop(app, shared, running));
+    Ok(())
+}
+
+#[tauri::command(async)]
+fn stop_capture(app: tauri::AppHandle, cap: tauri::State<'_, Capture>) -> Cmd<()> {
+    cap.running.store(false, Ordering::SeqCst);
+    if let Some(w) = app.get_webview_window("overlay") {
+        let _ = w.hide();
+    }
+    let _ = app.emit("subtitle", Option::<Line>::None);
+    Ok(())
+}
+
+#[cfg(windows)]
+fn capture_loop(app: tauri::AppHandle, shared: Shared, running: Arc<AtomicBool>) {
+    let lang = shared.lock().map(|c| c.settings.ocr_language.clone()).unwrap_or_else(|_| "en-US".into());
+    let ocr = match crate::ocr::Ocr::new(&lang) {
+        Ok(o) => o,
+        Err(e) => {
+            running.store(false, Ordering::SeqCst);
+            let _ = app.emit("capture-error", format!("تعذّر تشغيل التعرف على النص: {e}"));
+            return;
+        }
+    };
+    let mut pipeline = Pipeline::default();
+    while running.load(Ordering::SeqCst) {
+        let t0 = Instant::now();
+        let (region, interval) = {
+            let c = shared.lock().unwrap_or_else(|p| p.into_inner());
+            (c.settings.region.unwrap_or_else(default_region), c.settings.interval_ms)
+        };
+        let lines = crate::capture::capture(region.into()).ok().and_then(|f| ocr.recognize(&f).ok()).unwrap_or_default();
+        let mut c = shared.lock().unwrap_or_else(|p| p.into_inner());
+        let core = &mut *c;
+        let changed = pipeline.ingest(&lines, Instant::now(), |t| {
+            core.matcher.as_mut()?.lookup(&Query::new(t)).map(|h| (h.target, h.speaker))
+        });
+        if changed {
+            let line = pipeline.current.as_ref().map(Line::from);
+            let _ = app.emit("subtitle", line.clone());
+            if let Some(sub) = &pipeline.current {
+                core.history.insert(0, sub.clone());
+                core.history.truncate(100);
+            }
+            if let Some(tv) = core.tv.as_mut() {
+                let sent = match &line {
+                    Some(l) => tv.show(&l.text, l.speaker.as_deref(), false).map(|_| ()),
+                    None => tv.clear(),
+                };
+                if sent.is_err() {
+                    core.tv = None;
+                    let _ = app.emit("tv-lost", ());
+                }
+            }
+        }
+        drop(c);
+        let spent = t0.elapsed();
+        std::thread::sleep(Duration::from_millis(interval).saturating_sub(spent));
+    }
+}
+
+#[cfg(not(windows))]
+fn capture_loop(_app: tauri::AppHandle, _shared: Shared, running: Arc<AtomicBool>) {
+    running.store(false, Ordering::SeqCst);
+}
+
+fn place_overlay(app: &tauri::AppHandle, r: Region) {
+    if let Some(w) = app.get_webview_window("overlay") {
+        let _ = w.set_position(tauri::PhysicalPosition::new(r.x, r.y));
+        let _ = w.set_size(tauri::PhysicalSize::new(r.w.max(1) as u32, r.h.max(1) as u32));
+    }
+}
+
+pub fn run() {
+    tauri::Builder::default()
+        .manage::<Shared>(Arc::new(Mutex::new(Core::new())))
+        .manage(Capture::default())
+        .setup(|app| {
+            if let Some(overlay) = app.get_webview_window("overlay") {
+                let _ = overlay.set_ignore_cursor_events(true);
+                #[cfg(windows)]
+                if let Ok(hwnd) = overlay.hwnd() {
+                    // The overlay sits on top of the game's subtitles; keep it out of our own capture.
+                    let _ = crate::capture::exclude_from_capture(hwnd.0 as *mut core::ffi::c_void);
+                }
+            }
+            // Reconnect to the paired TV in the background; failures just leave it disconnected.
+            let shared: Shared = app.state::<Shared>().inner().clone();
+            std::thread::spawn(move || {
+                let (addr, public, link) = {
+                    let c = shared.lock().unwrap_or_else(|p| p.into_inner());
+                    (c.settings.tv_addr.clone(), c.settings.tv_public.clone(), c.link.clone())
+                };
+                let (Some(addr), Some(public)) = (addr, public) else { return };
+                let Some(public) = lugha_link::unb64(&public).ok().and_then(|b| <[u8; 32]>::try_from(b).ok()) else { return };
+                let host = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "Windows PC".into());
+                if let Ok(tv) = TvSender::connect(&addr, &link, public, &host) {
+                    shared.lock().unwrap_or_else(|p| p.into_inner()).tv = Some(tv);
+                }
+            });
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            status,
+            set_server,
+            sign_in,
+            start_device_sign_in,
+            poll_device_sign_in,
+            sign_out,
+            sync_now,
+            lookup,
+            history,
+            set_region,
+            set_ocr_language,
+            tv_pair,
+            tv_connect,
+            tv_test,
+            tv_forget,
+            start_capture,
+            stop_capture
+        ])
+        .run(tauri::generate_context!())
+        .expect("LUGHA failed to start");
+}
