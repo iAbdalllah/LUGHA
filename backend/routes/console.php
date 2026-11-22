@@ -10,3 +10,7 @@ Artisan::command('inspire', function () {
 
 // Phase 5: QA scores age out confirmed reports after 90 days, so recompute daily.
 Schedule::command('lugha:qa-scores')->dailyAt('03:30');
+
+// Shared hosting has no supervisor: the one cron entry (schedule:run, every minute) also drains the queue
+// (order and feedback emails). A worker that finds the queue empty exits at once.
+Schedule::command('queue:work --stop-when-empty --max-time=50 --tries=3')->everyMinute()->withoutOverlapping()->runInBackground();

@@ -8,7 +8,14 @@ public final class AppSettings: ObservableObject, @unchecked Sendable {
 
     public init(defaults: UserDefaults = .standard) { d = defaults }
 
-    @Published public var apiBaseURL: URL = URL(string: "http://127.0.0.1:8040")! { didSet { d.set(apiBaseURL.absoluteString, forKey: "apiBaseURL") } }
+    /// Release builds talk to the live server; debug builds to a local backend (`php artisan serve --port=8040`).
+    #if DEBUG
+    public static let defaultServer = URL(string: "http://127.0.0.1:8040")!
+    #else
+    public static let defaultServer = URL(string: "https://lugha.iabdallah.com")!
+    #endif
+
+    @Published public var apiBaseURL: URL = AppSettings.defaultServer { didSet { d.set(apiBaseURL.absoluteString, forKey: "apiBaseURL") } }
     @Published public var fontSize: Double = 30 { didSet { d.set(fontSize, forKey: "fontSize") } }
     @Published public var backgroundOpacity: Double = 0.78 { didSet { d.set(backgroundOpacity, forKey: "backgroundOpacity") } }
     /// 0 = top of screen, 1 = bottom

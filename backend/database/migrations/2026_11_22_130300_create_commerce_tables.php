@@ -138,8 +138,17 @@ return new class extends Migration
             $table->timestamp('revoked_at')->nullable();
             $table->index(['user_id', 'status']);
         });
-        // One active grant per user+package. Partial indexes work on both PostgreSQL and SQLite.
-        DB::statement("CREATE UNIQUE INDEX entitlements_one_active_idx ON entitlements (user_id, package_id) WHERE status = 'active'");
+        // One active grant per user+package. PostgreSQL and SQLite have partial indexes; MySQL/MariaDB don't, so there a
+        // generated column is 1 while active and NULL otherwise, and a unique index over it allows any number of
+        // revoked rows (NULLs never collide) but only one active one.
+        if (in_array(DB::getDriverName(), ['mysql', 'mariadb'], true)) {
+            Schema::table('entitlements', function (Blueprint $table) {
+                $table->unsignedTinyInteger('active_key')->nullable()->storedAs("CASE WHEN status = 'active' THEN 1 END");
+                $table->unique(['user_id', 'package_id', 'active_key'], 'entitlements_one_active_idx');
+            });
+        } else {
+            DB::statement("CREATE UNIQUE INDEX entitlements_one_active_idx ON entitlements (user_id, package_id) WHERE status = 'active'");
+        }
 
         Schema::create('gift_codes', function (Blueprint $table) {
             $table->id();
