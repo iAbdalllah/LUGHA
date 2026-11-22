@@ -11,8 +11,11 @@ class AdminMfaTest extends TestCase
 {
     use BuildsCatalog, RefreshDatabase;
 
+    private string|false $previous = false;
+
     protected function setUp(): void
     {
+        $this->previous = getenv('ADMIN_MFA_REQUIRED');
         putenv('ADMIN_MFA_REQUIRED=true');
         $_ENV['ADMIN_MFA_REQUIRED'] = $_SERVER['ADMIN_MFA_REQUIRED'] = 'true';
         parent::setUp();
@@ -22,8 +25,10 @@ class AdminMfaTest extends TestCase
     protected function tearDown(): void
     {
         parent::tearDown();
-        putenv('ADMIN_MFA_REQUIRED');
-        unset($_ENV['ADMIN_MFA_REQUIRED'], $_SERVER['ADMIN_MFA_REQUIRED']);
+        // Restore, don't unset: unsetting would let later tests fall back to .env.
+        $value = $this->previous === false ? 'false' : $this->previous;
+        putenv("ADMIN_MFA_REQUIRED=$value");
+        $_ENV['ADMIN_MFA_REQUIRED'] = $_SERVER['ADMIN_MFA_REQUIRED'] = $value;
     }
 
     public function test_staff_must_enrol_an_authenticator_before_using_the_admin(): void
