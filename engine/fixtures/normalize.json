@@ -1,0 +1,13 @@
+[
+  ["We leave at dawn.", "we leave at dawn"],
+  ["  We   leave\nat dawn!!  ", "we leave at dawn"],
+  ["“Quoted” — text…", "\"quoted\" - text"],
+  ["It’s FINE?", "it's fine"],
+  ["ﬁnal", "final"],
+  ["Tab\tand\u000bvertical\fform\rfeed", "tab and vertical form feed"],
+  ["NBSP space", "nbsp space"],
+  ["Hold [Shift] to sprint", "hold [shift] to sprint"],
+  ["ÉCOLE", "école"],
+  ["...", ""],
+  ["Wait... what?!", "wait... what"]
+]

@@ -1,0 +1,35 @@
+[package]
+name = "lugha-core"
+description = "LUGHA package engine: .lpk read/verify/decrypt, normalization, matching, delta updates"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[features]
+default = []
+# Package building, signing and license issuing. Off in client apps; on for lugha-pkg and tests.
+issuer = []
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+base64.workspace = true
+hex.workspace = true
+rand.workspace = true
+sha2.workspace = true
+hkdf.workspace = true
+aes-gcm.workspace = true
+ed25519-dalek.workspace = true
+x25519-dalek.workspace = true
+zstd.workspace = true
+zip.workspace = true
+rusqlite.workspace = true
+unicode-normalization.workspace = true
+strsim.workspace = true
+lru.workspace = true
+
+[dev-dependencies]
+strsim.workspace = true
+lugha-core = { path = ".", features = ["issuer"] }

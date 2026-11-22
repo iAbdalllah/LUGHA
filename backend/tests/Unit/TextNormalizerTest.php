@@ -9,15 +9,10 @@ use PHPUnit\Framework\TestCase;
 /** Shared fixtures: lugha-core (Rust) must produce identical output for these. */
 class TextNormalizerTest extends TestCase
 {
+    /** The same fixture file the Rust engine tests against (engine/fixtures/normalize.json). */
     public static function cases(): array
     {
-        return [
-            ['We leave at dawn.', 'we leave at dawn'],
-            ["  We   leave\nat dawn!!  ", 'we leave at dawn'],
-            ['“Quoted” — text…', '"quoted" - text'],
-            ['It’s FINE?', "it's fine"],
-            ['ﬁnal', 'final'],                 // NFKC ligature
-        ];
+        return json_decode(file_get_contents(__DIR__.'/../../../engine/fixtures/normalize.json'), true, flags: JSON_THROW_ON_ERROR);
     }
 
     #[DataProvider('cases')]
