@@ -22,6 +22,7 @@ class LocalizationPackage extends Model
     protected $fillable = [
         'game_id', 'slug', 'name', 'summary', 'tier_rank', 'locale', 'style_id', 'update_policy', 'update_months',
         'current_major', 'status', 'is_bundle', 'sort_order', 'published_at',
+        'rating_avg', 'rating_count', 'qa_score', 'qa_breakdown', 'qa_computed_at',
     ];
 
     public array $translatable = ['name', 'summary'];
@@ -36,6 +37,9 @@ class LocalizationPackage extends Model
             'update_policy' => UpdatePolicy::class,
             'is_bundle' => 'boolean',
             'published_at' => 'datetime',
+            'rating_avg' => 'float',
+            'qa_breakdown' => 'array',
+            'qa_computed_at' => 'datetime',
         ];
     }
 
@@ -111,6 +115,11 @@ class LocalizationPackage extends Model
     public function versions(): HasMany
     {
         return $this->hasMany(PackageVersion::class, 'package_id')->orderByDesc('id');
+    }
+
+    public function reviews(): HasMany
+    {
+        return $this->hasMany(PackageReview::class, 'package_id');
     }
 
     public function latestRelease(): ?PackageVersion

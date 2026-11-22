@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Packages\RelationManagers;
 
+use App\Domain\Quality\QaScorer;
 use App\Filament\Support\Translatable;
 use App\Jobs\BuildPackageVersionJob;
 use Filament\Actions\Action;
@@ -81,7 +82,10 @@ class VersionsRelationManager extends RelationManager
                 Action::make('release')->label(__('Mark released'))->icon(Heroicon::OutlinedRocketLaunch)->requiresConfirmation()
                     ->modalDescription(__('A version can be released only after a successful build.'))
                     ->visible(fn ($record) => $record->build_status === 'validated')
-                    ->action(fn ($record) => $record->update(['build_status' => 'released', 'released_at' => now()])),
+                    ->action(function ($record) {
+                        $record->update(['build_status' => 'released', 'released_at' => now()]);
+                        app(QaScorer::class)->refresh($record->package);
+                    }),
             ])
             ->defaultSort('id', 'desc');
     }

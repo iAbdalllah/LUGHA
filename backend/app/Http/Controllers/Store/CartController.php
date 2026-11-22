@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Store;
 
+use App\Domain\Analytics\Tracker;
 use App\Domain\Commerce\CartPricer;
 use App\Http\Controllers\Controller;
 use App\Models\CartItem;
@@ -38,6 +39,7 @@ class CartController extends Controller
         }
 
         CartItem::firstOrCreate(['user_id' => $request->user()->id, 'package_id' => $package->id, 'as_gift' => $gift]);
+        app(Tracker::class)->record('cart_add', $request, $package);
 
         return $request->boolean('buy_now') ? redirect()->route('checkout.show') : back()->with('status', __('Added to cart'));
     }

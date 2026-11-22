@@ -69,3 +69,15 @@ Changing a package's policy later never changes existing entitlements (terms at 
 ## Seed data (configuration, not catalog)
 
 `platforms`, `translation_categories` (dialogues, cutscenes, side_dialogues, missions, mission_descriptions, story_notifications, menus, settings, notifications, ui, system_messages, items, tutorials, codex), `localization_styles` (msa, saudi_white_dialect, gulf), roles/permissions. Games and packages are **never** seeded in production — they're created in Filament.
+
+## Phase 5 additions (growth)
+
+Migration `2026_11_24_100000_create_growth_tables`:
+
+| Table / columns | Purpose |
+|---|---|
+| `users.contributor_status`, `contributor_applied_at`, `contributor_display_name` | contributor program: `applied` → `approved` / `suspended` (set by support staff) |
+| `translation_feedback` | `kind` report \| suggestion, `reason`, `suggested_text`, `source` (store/app), `status` open \| accepted \| rejected \| duplicate, resolver, `applied_text`; one open item per user per line (enforced in `FeedbackService`) |
+| `package_reviews` | one per (package, user); `rating` 1–5, optional title/body, `status` published \| hidden + `hidden_reason` |
+| `localization_packages.rating_avg`, `rating_count`, `qa_score`, `qa_breakdown`, `qa_computed_at` | denormalized aggregates for listing pages |
+| `analytics_events` | `package_view` / `cart_add` with package, optional user, a 16-hex daily-rotating visitor hash and locale — no IP, no user agent |

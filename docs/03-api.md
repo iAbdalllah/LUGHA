@@ -90,7 +90,10 @@ Webhooks (server ← gateway): `POST /webhooks/moyasar`, `POST /webhooks/hyperpa
 | POST | `/downloads` | `{package, version?, device, from_version?}` → `{download_id, url (CDN signed, 5 min), sha256, size, kind, license}` |
 | POST | `/downloads/{id}/complete` | `{sha256}` → `204` |
 | POST | `/licenses/refresh` | `{device, packages:[…]}` → `{licenses:[…]}` (extends offline window) |
-| POST | `/translation-reports` | `{package_version, entry_id, note?}` |
+| POST | `/translation-reports` | `{package, version?, entry_id, reason, kind?: report\|suggestion, suggested_text?, note?, source?}` → `202 {id, status}` — owners only; `suggestion` needs an approved contributor; one open item per person per line |
+| GET | `/me/feedback` | the caller's reports and suggestions with their status |
+| GET | `/packages/{slug}/reviews` | public: `{summary: {average, count, distribution, qa_score, qa}, data, next_cursor}` |
+| POST / DELETE | `/packages/{slug}/reviews` | owners: `{rating 1–5, title?, body?}` creates or edits the caller's review |
 
 `license` (verified offline by lugha-core). **As implemented**, the payload travels as base64 of the exact signed JSON bytes, is bound to one package *version*, and uses unix timestamps:
 ```json

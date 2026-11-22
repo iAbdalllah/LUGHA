@@ -44,6 +44,23 @@ Each phase ships something usable and ends with explicit exit criteria. Phase 6 
 
 ## Phase 5 — Growth
 
+**Status (2026-11-22): built (backend + Store + admin).**
+- **Community feedback:** owners report lines (`POST /translation-reports`, by the package `entry_id` the apps already have). Approved contributors suggest wording on the Store (`/contribute`): players apply, and support staff approve them.
+  - Reviewers resolve each item in *Community feedback*. Accepted wording moves the line through the normal workflow to Approved, then ships with the next publish. Nobody can resolve their own item, and the player gets an email.
+- **Public reviews:** verified owners only, one review per player per package, editable. Staff can hide a review (the reason is shown to its author) but can't edit it. Averages and the star distribution appear on the package page and in the API.
+- **QA score (0–100):** coverage 40%, lines approved by a second editor 30%, confirmed player reports in the last 90 days 30%.
+  - Shown on the package page with its breakdown. Packages with fewer than 20 lines get no score.
+  - Recomputed on release, when feedback is resolved, and daily (`lugha:qa-scores`). Ratings never feed it, so the score can't be review-bombed.
+- **Analytics page (admin):**
+  - revenue, refunds, average order, revenue per buyer, visitor→buyer conversion, repeat buyers;
+  - daily revenue chart, purchase funnel, per-package performance, active devices by platform, community health.
+  - Funnel events are first-party and cookie-less, with no IP or user agent; the visitor id is a daily-rotating hash. DNT and GPC are honored, and bots and staff are skipped.
+
+**Not in this phase:**
+- **Subscriptions:** deferred. The analytics page now tracks repeat-buyer rate and revenue per buyer so the owner can decide with real numbers.
+- **"Report a line" in the desktop and phone apps:** the API is ready; the apps don't have the button yet.
+- **Phone-camera mode for consoles:** not evaluated yet.
+
 Advanced analytics, community translation contributions (contributor role → existing review workflow), public reviews & QA scores, subscriptions if the numbers support it.
 
 ## Phase 6 — Optional AI providers (not now)

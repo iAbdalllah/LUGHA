@@ -17,6 +17,7 @@ Route::prefix('v1')->middleware(['throttle:api', ApiLocale::class])->name('api.'
     Route::get('games/{game:slug}/packages', [V1\CatalogController::class, 'gamePackages']);
     Route::get('packages/{package:slug}', [V1\CatalogController::class, 'package']);
     Route::get('reference', [V1\CatalogController::class, 'reference']);
+    Route::get('packages/{package:slug}/reviews', [V1\CommunityController::class, 'reviews']);
     Route::get('trust', [V1\DeviceController::class, 'trust']);
     Route::middleware('throttle:auth')->group(function () {
         Route::post('auth/device-code', [V1\DeviceController::class, 'startDeviceCode']);
@@ -39,6 +40,11 @@ Route::prefix('v1')->middleware(['throttle:api', ApiLocale::class])->name('api.'
         Route::post('devices/{device:public_id}/licenses', [V1\DeviceController::class, 'refreshLicenses'])->middleware('throttle:30,1');
         Route::post('downloads', [V1\DeviceController::class, 'authorizeDownload'])->middleware('throttle:30,60');
         Route::post('downloads/{download}/complete', [V1\DeviceController::class, 'completeDownload']);
+
+        Route::post('translation-reports', [V1\CommunityController::class, 'report'])->middleware('throttle:30,1');
+        Route::get('me/feedback', [V1\CommunityController::class, 'myFeedback']);
+        Route::post('packages/{package:slug}/reviews', [V1\CommunityController::class, 'saveReview'])->middleware('throttle:10,1');
+        Route::delete('packages/{package:slug}/reviews', [V1\CommunityController::class, 'deleteReview']);
 
         Route::middleware(['ability:commerce', 'verified'])->group(function () {
             Route::get('cart', [V1\CommerceController::class, 'cart']);

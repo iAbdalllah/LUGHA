@@ -32,6 +32,13 @@ Route::prefix('{locale}')->whereIn('locale', ['ar', 'en'])->group(function () {
         Route::post('/orders/{order:public_id}/pay', [Store\OrderController::class, 'pay'])->middleware('throttle:10,1')->name('orders.pay');
         Route::post('/orders/{order:public_id}/refund-request', [Store\OrderController::class, 'requestRefund'])->middleware('throttle:5,1')->name('orders.refund-request');
 
+        Route::post('/packages/{package:slug}/review', [Store\ReviewController::class, 'store'])->middleware('throttle:10,1')->name('reviews.store');
+        Route::delete('/packages/{package:slug}/review', [Store\ReviewController::class, 'destroy'])->name('reviews.destroy');
+        Route::get('/contribute', [Store\ContributeController::class, 'index'])->name('contribute.index');
+        Route::post('/contribute/apply', [Store\ContributeController::class, 'apply'])->middleware('throttle:5,1')->name('contribute.apply');
+        Route::get('/contribute/{package:slug}', [Store\ContributeController::class, 'lines'])->name('contribute.lines');
+        Route::post('/contribute/{package:slug}', [Store\ContributeController::class, 'suggest'])->middleware('throttle:30,1')->name('contribute.suggest');
+
         Route::get('/library', [Store\LibraryController::class, 'index'])->name('library');
         Route::get('/downloads', [Store\LibraryController::class, 'downloads'])->name('downloads');
         Route::get('/gift', [Store\GiftController::class, 'show'])->name('gift.show');

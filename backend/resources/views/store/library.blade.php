@@ -18,7 +18,11 @@
                         </p>
                         <p class="mt-1 text-xs text-faint">{{ $e->update_major ? __('Updates for version :major.x', ['major' => $e->update_major]) : ($e->updates_until ? __('Updates until :date', ['date' => $e->updates_until->translatedFormat('j M Y')]) : __('All future updates')) }}</p>
                     </div>
-                    <a href="{{ route('downloads') }}" class="btn-ghost">{{ __('How to install') }}</a>
+                    <div class="flex flex-wrap gap-2">
+                        <a href="{{ route('packages.show', $e->package) }}#reviews" class="btn-ghost">{{ __('Review') }}</a>
+                        @if (auth()->user()->isContributor())<a href="{{ route('contribute.lines', $e->package) }}" class="btn-ghost">{{ __('Suggest wording') }}</a>@endif
+                        <a href="{{ route('downloads') }}" class="btn-ghost">{{ __('How to install') }}</a>
+                    </div>
                 </article>
             @empty
                 <div class="card p-10 text-center"><p class="text-muted">{{ __('Packages you buy appear here.') }}</p><a href="{{ route('games.index') }}" class="btn-primary mt-4">{{ __('Browse games') }}</a></div>

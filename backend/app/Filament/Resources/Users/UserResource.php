@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Users;
 use App\Filament\Support\RestrictedToRoles;
 use App\Models\User;
 use BackedEnum;
+use Filament\Actions\Action;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -82,14 +83,37 @@ class UserResource extends Resource
                 TextColumn::make('status')->label(__('Status'))->badge()->color(fn ($state) => $state === 'active' ? 'success' : 'danger'),
                 IconColumn::make('email_verified_at')->label(__('Verified'))->boolean()->getStateUsing(fn ($record) => (bool) $record->email_verified_at),
                 IconColumn::make('is_staff')->label(__('Staff'))->boolean(),
+                TextColumn::make('contributor_status')->label(__('Contributor'))->badge()->placeholder('—')
+                    ->formatStateUsing(fn ($state) => __('community.contributor_status.'.$state))
+                    ->color(fn ($state) => match ($state) {
+                        'approved' => 'success', 'applied' => 'warning', default => 'gray'
+                    }),
                 TextColumn::make('created_at')->label(__('Joined'))->date()->sortable(),
             ])
             ->filters([
                 SelectFilter::make('status')->options(['active' => __('Active'), 'suspended' => __('Suspended'), 'closed' => __('Closed')]),
                 TernaryFilter::make('is_staff')->label(__('Staff')),
+                SelectFilter::make('contributor_status')->label(__('Contributor'))
+                    ->options(['applied' => __('community.contributor_status.applied'), 'approved' => __('community.contributor_status.approved'), 'suspended' => __('community.contributor_status.suspended')]),
             ])
-            ->recordActions([EditAction::make()])
+            ->recordActions([
+                Action::make('approve_contributor')->label(__('Approve contributor'))->icon(Heroicon::OutlinedUserPlus)->color('success')
+                    ->visible(fn ($record) => self::canManageContributors() && in_array($record->contributor_status, ['applied', 'suspended'], true))
+                    ->requiresConfirmation()
+                    ->action(fn ($record) => $record->forceFill(['contributor_status' => 'approved'])->save()),
+                Action::make('suspend_contributor')->label(__('Suspend contributor'))->icon(Heroicon::OutlinedNoSymbol)->color('danger')
+                    ->visible(fn ($record) => self::canManageContributors() && $record->contributor_status === 'approved')
+                    ->requiresConfirmation()
+                    ->action(fn ($record) => $record->forceFill(['contributor_status' => 'suspended'])->save()),
+                EditAction::make(),
+            ])
             ->defaultSort('created_at', 'desc');
+    }
+
+    /** Contributor applications are handled by the same staff who manage customer accounts. */
+    public static function canManageContributors(): bool
+    {
+        return auth()->user()?->hasAnyRole(['super_admin', 'support']) ?? false;
     }
 
     public static function canDelete(Model $record): bool

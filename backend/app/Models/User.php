@@ -38,6 +38,7 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
             'password' => 'hashed',
             'is_staff' => 'boolean',
             'marketing_opt_in' => 'boolean',
+            'contributor_applied_at' => 'datetime',
         ];
     }
 
@@ -90,6 +91,28 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
     public function supportTickets(): HasMany
     {
         return $this->hasMany(SupportTicket::class);
+    }
+
+    public function feedback(): HasMany
+    {
+        return $this->hasMany(TranslationFeedback::class);
+    }
+
+    public function reviews(): HasMany
+    {
+        return $this->hasMany(PackageReview::class);
+    }
+
+    /** Approved members of the contributor program may suggest wording for packages they own. */
+    public function isContributor(): bool
+    {
+        return $this->contributor_status === 'approved';
+    }
+
+    /** Name shown on public credits: the chosen display name, else the first name. */
+    public function publicName(): string
+    {
+        return $this->contributor_display_name ?: (explode(' ', trim((string) $this->name))[0] ?: __('Player'));
     }
 
     public function owns(LocalizationPackage|int $package): bool

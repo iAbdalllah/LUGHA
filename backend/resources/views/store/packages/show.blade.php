@@ -5,7 +5,9 @@
                 <nav aria-label="{{ __('Breadcrumb') }}" class="text-sm text-faint"><a class="hover:text-ink" href="{{ route('games.index') }}">{{ __('Store') }}</a> / <a class="hover:text-ink" href="{{ route('games.show', $package->game) }}">{{ $package->game->title }}</a></nav>
                 <h1 class="h-display mt-2 text-4xl">{{ $package->name }}</h1>
                 @if ($package->summary)<p class="mt-2 text-lg text-ink-2">{{ $package->summary }}</p>@endif
-                <div class="mt-3 flex flex-wrap gap-2"><span class="chip">{{ $package->style->name }}</span><span class="chip" dir="ltr">{{ $package->locale }}</span>@foreach ($package->platforms as $pl)<span class="chip" dir="ltr">{{ $pl->name }}</span>@endforeach</div>
+                <div class="mt-3 flex flex-wrap gap-2"><span class="chip">{{ $package->style->name }}</span><span class="chip" dir="ltr">{{ $package->locale }}</span>@foreach ($package->platforms as $pl)<span class="chip" dir="ltr">{{ $pl->name }}</span>@endforeach
+                    @if ($package->rating_count)<a href="#reviews" class="chip text-accent">★ {{ number_format($package->rating_avg, 1) }} ({{ $package->rating_count }})</a>@endif
+                    @if ($package->qa_score !== null)<a href="#quality" class="chip border-accent/50 text-accent">{{ __('QA score :n/100', ['n' => $package->qa_score]) }}</a>@endif</div>
             </div>
             <section>
                 <h2 class="mb-3 text-xl font-semibold">{{ __('What\'s included') }}</h2>
@@ -28,6 +30,22 @@
                     <p class="text-muted">{{ __('The first release of this package is in preparation.') }}</p>
                 @endforelse
             </section>
+            @if ($package->qa_score !== null)
+                <section id="quality" class="scroll-mt-24">
+                    <h2 class="mb-3 text-xl font-semibold">{{ __('Quality') }}</h2>
+                    <div class="card p-5">
+                        <div class="flex items-baseline gap-3"><span class="text-4xl font-bold text-accent">{{ $package->qa_score }}</span><span class="text-muted">/ 100</span></div>
+                        @php($parts = $package->qa_breakdown['parts'] ?? [])
+                        <dl class="mt-4 grid gap-3 sm:grid-cols-3">
+                            <div><dt class="text-sm text-muted">{{ __('Coverage') }}</dt><dd class="text-lg font-semibold">{{ round($parts['coverage'] ?? 0) }}%</dd></div>
+                            <div><dt class="text-sm text-muted">{{ __('Checked by a second editor') }}</dt><dd class="text-lg font-semibold">{{ round($parts['review'] ?? 0) }}%</dd></div>
+                            <div><dt class="text-sm text-muted">{{ __('Player-reported problems') }}</dt><dd class="text-lg font-semibold">{{ __(':n confirmed (90 days)', ['n' => $package->qa_breakdown['confirmed_reports_90d'] ?? 0]) }}</dd></div>
+                        </dl>
+                        <p class="mt-3 text-xs text-faint">{{ __('The score combines coverage (40%), lines approved by a second editor (30%) and confirmed player reports (30%). Ratings are shown separately and do not affect it.') }}</p>
+                    </div>
+                </section>
+            @endif
+            @include('store.packages._reviews')
         </div>
         <aside class="card h-fit flex-[1_1_320px] space-y-4 p-6">
             <x-store.price :package="$package" :upgrade-amount="$owned ? null : $upgrade?->amount" />

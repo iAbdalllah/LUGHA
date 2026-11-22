@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Domain\Analytics\Tracker;
 use App\Domain\Commerce\CartPricer;
 use App\Domain\Commerce\CheckoutException;
 use App\Domain\Commerce\CreateOrderFromCart;
@@ -46,6 +47,7 @@ class CommerceController extends Controller
             throw new CheckoutException(__('cart.already_owned', ['name' => $package->name]));
         }
         CartItem::firstOrCreate(['user_id' => $request->user()->id, 'package_id' => $package->id, 'as_gift' => $gift]);
+        app(Tracker::class)->record('cart_add', $request, $package);
 
         return response()->json(QuoteResource::make($pricer->quoteCart($request->user())), 201);
     }
