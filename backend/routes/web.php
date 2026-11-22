@@ -42,7 +42,13 @@ Route::prefix('{locale}')->whereIn('locale', ['ar', 'en'])->group(function () {
         Route::post('/support/tickets/{ticket:public_id}/messages', [Store\SupportController::class, 'reply'])->name('support.reply');
     });
 
-    Route::middleware('auth')->get('/profile', [Store\ProfileController::class, 'show'])->name('profile');
+    Route::middleware('auth')->group(function () {
+        Route::get('/profile', [Store\ProfileController::class, 'show'])->name('profile');
+        Route::get('/devices', [Store\DeviceController::class, 'index'])->name('devices');
+        Route::delete('/devices/{device:public_id}', [Store\DeviceController::class, 'destroy'])->name('devices.destroy');
+        Route::get('/activate', [Store\DeviceController::class, 'activate'])->name('activate');
+        Route::post('/activate', [Store\DeviceController::class, 'decide'])->middleware('throttle:10,1')->name('activate.decide');
+    });
 });
 
 // The gateway sends the buyer back here; we ask the gateway server-to-server before showing anything as paid.

@@ -17,6 +17,13 @@ Route::prefix('v1')->middleware(['throttle:api', ApiLocale::class])->name('api.'
     Route::get('games/{game:slug}/packages', [V1\CatalogController::class, 'gamePackages']);
     Route::get('packages/{package:slug}', [V1\CatalogController::class, 'package']);
     Route::get('reference', [V1\CatalogController::class, 'reference']);
+    Route::get('trust', [V1\DeviceController::class, 'trust']);
+    Route::middleware('throttle:auth')->group(function () {
+        Route::post('auth/device-code', [V1\DeviceController::class, 'startDeviceCode']);
+    });
+    Route::post('auth/device-token', [V1\DeviceController::class, 'pollDeviceCode'])->middleware('throttle:30,1');
+    // Signed, short-lived; no bearer token so download managers and CDNs can fetch it.
+    Route::get('downloads/{download}/file', [V1\DeviceController::class, 'file'])->middleware('signed')->name('downloads.file');
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('auth/logout', [V1\AuthController::class, 'logout']);
@@ -24,6 +31,14 @@ Route::prefix('v1')->middleware(['throttle:api', ApiLocale::class])->name('api.'
         Route::get('me', [V1\AuthController::class, 'me']);
         Route::patch('me', [V1\AuthController::class, 'update']);
         Route::get('library', [V1\CommerceController::class, 'library'])->middleware('ability:library:read');
+
+        Route::get('devices', [V1\DeviceController::class, 'index']);
+        Route::post('devices', [V1\DeviceController::class, 'store'])->middleware('throttle:10,1');
+        Route::delete('devices/{device:public_id}', [V1\DeviceController::class, 'destroy']);
+        Route::post('devices/{device:public_id}/heartbeat', [V1\DeviceController::class, 'heartbeat'])->middleware('throttle:60,1');
+        Route::post('devices/{device:public_id}/licenses', [V1\DeviceController::class, 'refreshLicenses'])->middleware('throttle:30,1');
+        Route::post('downloads', [V1\DeviceController::class, 'authorizeDownload'])->middleware('throttle:30,60');
+        Route::post('downloads/{download}/complete', [V1\DeviceController::class, 'completeDownload']);
 
         Route::middleware(['ability:commerce', 'verified'])->group(function () {
             Route::get('cart', [V1\CommerceController::class, 'cart']);

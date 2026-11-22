@@ -78,6 +78,20 @@ enum Cmd {
         key: PathBuf,
         text: Vec<String>,
     },
+    /// Generate a device key pair (development/testing; apps generate theirs on-device).
+    DeviceKeygen,
+    /// Open a package the way an app does — with a license and device secret ($LUGHA_DEVICE_SECRET, hex) — and
+    /// optionally look a line up. Verifies signature, file hashes, license binding/expiry and content hash.
+    Open {
+        #[arg(long)]
+        lpk: PathBuf,
+        /// Trust: a key file (only its public key is used)
+        #[arg(long)]
+        key: PathBuf,
+        #[arg(long)]
+        license: PathBuf,
+        text: Vec<String>,
+    },
     /// Benchmark matching on a synthetic package of N lines.
     Bench {
         #[arg(long, default_value_t = 50_000)]
@@ -191,6 +205,21 @@ fn run(cli: Cli) -> Result<(serde_json::Value, u8), String> {
             let started = Instant::now();
             let hit = m.lookup(&Query::new(text.join(" ")));
             Ok((json!({"hit": hit, "micros": started.elapsed().as_micros()}), 0))
+        }
+        Cmd::DeviceKeygen => {
+            use base64::Engine;
+            let d = lugha_core::crypto::DeviceKeys::generate();
+            Ok((json!({"secret_hex": hex::encode(d.secret), "public": base64::engine::general_purpose::STANDARD.encode(d.public), "fingerprint": d.fingerprint()}), 0))
+        }
+        Cmd::Open { lpk, key, license, text } => {
+            let kf: KeyFile = read_json(&key)?;
+            let device = lugha_core::crypto::DeviceKeys::from_secret(env_key("LUGHA_DEVICE_SECRET")?);
+            let lic = lugha_core::License::parse(&std::fs::read_to_string(&license).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+            let pkg = Package::from_lpk(&std::fs::read(&lpk).map_err(|e| e.to_string())?, &lic, &trust_from(&kf)?, &device, now()).map_err(|e| e.to_string())?;
+            let manifest = pkg.manifest.clone();
+            let count = pkg.entry_count().map_err(|e| e.to_string())?;
+            let hit = if text.is_empty() { None } else { Matcher::new(vec![pkg]).lookup(&Query::new(text.join(" "))) };
+            Ok((json!({"opened": true, "package_id": manifest.package_id, "version": manifest.version, "entries": count, "hit": hit}), 0))
         }
         Cmd::Bench { lines } => bench(lines).map(|v| (v, 0)),
     }

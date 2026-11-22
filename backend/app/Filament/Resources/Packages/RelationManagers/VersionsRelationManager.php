@@ -3,11 +3,13 @@
 namespace App\Filament\Resources\Packages\RelationManagers;
 
 use App\Filament\Support\Translatable;
+use App\Jobs\BuildPackageVersionJob;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
@@ -45,7 +47,12 @@ class VersionsRelationManager extends RelationManager
         return $table
             ->columns([
                 TextColumn::make('version')->label(__('Version'))->fontFamily('mono'),
-                TextColumn::make('build_status')->label(__('Build'))->badge(),
+                TextColumn::make('build_status')->label(__('Build'))->badge()
+                    ->color(fn ($state) => match ($state) {
+                        'validated', 'released' => 'success', 'failed' => 'danger', 'building' => 'warning', default => 'gray'
+                    })
+                    ->tooltip(fn ($record) => $record->build_log),
+                TextColumn::make('entry_count')->label(__('Entries'))->placeholder('—'),
                 TextColumn::make('minGameVersion.version')->label(__('Game from')),
                 TextColumn::make('maxGameVersion.version')->label(__('Game to')),
                 TextColumn::make('released_at')->label(__('Released'))->dateTime(),
@@ -53,8 +60,27 @@ class VersionsRelationManager extends RelationManager
             ->headerActions([CreateAction::make()->mutateDataUsing(fn (array $data) => [...$data, 'created_by' => auth()->id()])])
             ->recordActions([
                 EditAction::make()->mutateRecordDataUsing(fn (array $data, $record) => [...$data, 'release_notes' => $record->getTranslations('release_notes')]),
+                Action::make('build')->label(__('Build package'))->icon(Heroicon::OutlinedCog6Tooth)
+                    ->visible(fn ($record) => in_array($record->build_status, ['pending', 'failed', 'validated'], true))
+                    ->requiresConfirmation()
+                    ->action(function ($record) {
+                        try {
+                            BuildPackageVersionJob::dispatchSync($record);
+                        } catch (\Throwable $e) {
+                            Notification::make()->title($e->getMessage())->danger()->persistent()->send();
+
+                            return;
+                        }
+                        $record->refresh();
+                        $report = $record->build_report ?? [];
+                        Notification::make()->title(__('Build finished: :status', ['status' => $record->build_status]))
+                            ->body(collect([$record->build_log, ...collect($report['errors'] ?? [])->take(8)->map(fn ($i) => '✗ '.($i['entry_id'] ? '#'.$i['entry_id'].' ' : '').$i['message']),
+                                ...collect($report['warnings'] ?? [])->take(5)->map(fn ($i) => '⚠ '.($i['entry_id'] ? '#'.$i['entry_id'].' ' : '').$i['message'])])->filter()->implode("\n"))
+                            ->{$record->build_status === 'validated' ? 'success' : 'danger'}()->persistent()->send();
+                    }),
                 Action::make('release')->label(__('Mark released'))->icon(Heroicon::OutlinedRocketLaunch)->requiresConfirmation()
-                    ->visible(fn ($record) => $record->build_status !== 'released')
+                    ->modalDescription(__('A version can be released only after a successful build.'))
+                    ->visible(fn ($record) => $record->build_status === 'validated')
                     ->action(fn ($record) => $record->update(['build_status' => 'released', 'released_at' => now()])),
             ])
             ->defaultSort('id', 'desc');

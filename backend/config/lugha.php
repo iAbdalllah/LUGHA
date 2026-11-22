@@ -4,6 +4,13 @@ return [
     'locales' => ['ar', 'en'],
     'default_locale' => 'ar',
     'currency' => 'SAR',
+    // Active devices per account: desktop/mobile apps together, TVs separately.
+    'device_limits' => ['app' => (int) env('LUGHA_DEVICE_LIMIT_APPS', 3), 'tv' => (int) env('LUGHA_DEVICE_LIMIT_TVS', 2)],
+    // Offline license window, in days; refreshed whenever the app syncs.
+    'license_days' => (int) env('LUGHA_LICENSE_DAYS', 60),
+    // Package signing (docs/04 §3). Production: keep the key in a KMS/HSM and sign there.
+    'signing_key_path' => env('LUGHA_SIGNING_KEY_PATH', storage_path('app/private/keys/signing-key.json')),
+    'pkg_binary' => env('LUGHA_PKG_BINARY', base_path('../engine/target/release/lugha-pkg')),
     // Staff must enrol an authenticator app before using the admin. Only turn off on a developer machine.
     'admin_mfa_required' => (bool) env('ADMIN_MFA_REQUIRED', true),
     // Saudi VAT in basis points (1500 = 15%). Store prices are VAT-inclusive.

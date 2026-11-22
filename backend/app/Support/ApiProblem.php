@@ -3,7 +3,10 @@
 namespace App\Support;
 
 use App\Domain\Commerce\CheckoutException;
+use App\Domain\Delivery\DeliveryException;
+use App\Domain\Devices\DeviceException;
 use App\Domain\Payments\PaymentException;
+use App\Http\Controllers\Api\V1\DeviceController;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -24,6 +27,9 @@ final class ApiProblem
             $e instanceof MissingAbilityException, $e instanceof AuthorizationException => [403, 'forbidden', 'This action is not allowed.', null, [], []],
             $e instanceof ModelNotFoundException => [404, 'not_found', 'Not found.', null, [], []],
             $e instanceof CheckoutException => [422, 'checkout_rejected', 'The request could not be completed.', $e->getMessage(), [], []],
+            $e instanceof DeviceException => [$e->errorCode === 'device_limit_reached' || $e->errorCode === 'key_in_use' ? 409 : 422, $e->errorCode, 'Device request rejected.', $e->getMessage(),
+                array_key_exists('devices', $e->context) ? ['devices' => collect($e->context['devices'])->map(fn ($d) => DeviceController::devicePayload($d))->all()] : [], []],
+            $e instanceof DeliveryException => [$e->errorCode === 'not_owned' || $e->errorCode === 'device_inactive' ? 403 : 404, $e->errorCode, 'Download rejected.', $e->getMessage(), [], []],
             $e instanceof PaymentException => [409, 'payment_unavailable', 'Payment could not be started.', $e->getMessage(), [], []],
             $e instanceof ThrottleRequestsException => [429, 'rate_limited', 'Too many requests.', null, [], $e->getHeaders()],
             $e instanceof HttpExceptionInterface => [$e->getStatusCode(), self::codeFor($e->getStatusCode()), $e->getMessage() ?: 'Error', null, [], $e->getHeaders()],

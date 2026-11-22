@@ -77,6 +77,11 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
         return $this->entitlements()->where('status', 'active');
     }
 
+    public function devices(): HasMany
+    {
+        return $this->hasMany(Device::class);
+    }
+
     public function cartItems(): HasMany
     {
         return $this->hasMany(CartItem::class);

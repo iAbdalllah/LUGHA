@@ -2,9 +2,9 @@ name: backend
 
 on:
   push:
-    paths: ["backend/**", ".github/workflows/backend.yml"]
+    paths: ["backend/**", "engine/**", ".github/workflows/backend.yml"]
   pull_request:
-    paths: ["backend/**", ".github/workflows/backend.yml"]
+    paths: ["backend/**", "engine/**", ".github/workflows/backend.yml"]
 
 jobs:
   test:
@@ -35,6 +35,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      # The delivery tests build real packages with the Rust engine's CLI.
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine
+      - run: cargo build --release -p lugha-pkg
+        working-directory: engine
       - run: composer install --no-interaction --prefer-dist
       - run: npm ci && npm run build
       - run: cp .env.example .env && php artisan key:generate
