@@ -34,6 +34,8 @@ public final class AppSettings: ObservableObject, @unchecked Sendable {
 
     /// Where most games put dialogue: the lower band, centred.
     public static let defaultWindowArea = CGRect(x: 0.08, y: 0.70, width: 0.84, height: 0.26)
+    /// Everything except the title bar: menus, HUD and subtitles.
+    public static let wholeWindowArea = CGRect(x: 0, y: 0.04, width: 1, height: 0.96)
 
     public func load() {
         if let s = d.string(forKey: "apiBaseURL"), let u = URL(string: s) { apiBaseURL = u }

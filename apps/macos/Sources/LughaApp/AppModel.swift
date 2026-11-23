@@ -275,6 +275,15 @@ final class AppModel: ObservableObject {
         running = false
     }
 
+    /// What OCR read in the capture area on the last frame (shown in the panel so the player can see what LUGHA sees).
+    @Published var lastRead = ""
+
+    /// Window mode: bottom band (subtitles) or the whole window (menus too).
+    func setWindowArea(_ area: CGRect) async {
+        settings.windowArea = area
+        if running { await stop(); await start() }
+    }
+
     /// The subtitle area as fractions of the game picture — sent to the TV so it draws the Arabic in the same place.
     private var pictureArea: CGRect?
     private var heartbeat: Timer?
@@ -306,6 +315,7 @@ final class AppModel: ObservableObject {
         defer { ocrBusy = false }
         let t0 = Date()
         let lines = (try? await ocr.recognize(image)) ?? []
+        lastRead = lines.joined(separator: " · ")
         if await pipeline.ingest(lines: lines) {
             subtitle = pipeline.current
             history = pipeline.history

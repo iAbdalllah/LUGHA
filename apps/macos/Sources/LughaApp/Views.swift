@@ -29,6 +29,17 @@ struct MenuPanelView: View {
             if let ms = app.lastLatencyMs, app.running {
                 Text("OCR + lookup: \(ms) ms").font(.caption2).foregroundColor(.secondary)
             }
+            if app.running {
+                // What LUGHA sees right now — the quickest way to tell a wrong capture area from a missing line.
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(L.t("Reading:")).font(.caption2).foregroundColor(.secondary)
+                    Text(app.lastRead.isEmpty ? L.t("(no text in the area)") : app.lastRead)
+                        .font(.caption.monospaced()).lineLimit(3)
+                        .environment(\.layoutDirection, .leftToRight)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(8).background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.06)))
+            }
 
             SourcePicker(settings: settings).environmentObject(app)
             Button(settings.captureAppBundleID == nil ? L.t("Select capture region") : L.t("Select subtitle area in the window")) { app.pickRegion() }
@@ -252,6 +263,16 @@ struct SourcePicker: View {
                 }
             }
             if settings.captureAppBundleID != nil {
+                Picker(L.t("Area"), selection: Binding(
+                    get: { settings.windowArea == AppSettings.wholeWindowArea ? 1 : settings.windowArea == AppSettings.defaultWindowArea ? 0 : 2 },
+                    set: { v in Task { await app.setWindowArea(v == 1 ? AppSettings.wholeWindowArea : AppSettings.defaultWindowArea) } })) {
+                    Text(L.t("Subtitles (bottom)")).tag(0)
+                    Text(L.t("Whole window (menus)")).tag(1)
+                    if settings.windowArea != AppSettings.wholeWindowArea && settings.windowArea != AppSettings.defaultWindowArea {
+                        Text(L.t("Custom area")).tag(2)
+                    }
+                }
+                .pickerStyle(.segmented)
                 Text(L.t("Keeps reading while the window is behind others. Don't minimise it.")).font(.caption2).foregroundColor(.secondary)
                 Toggle(L.t("Show subtitles on this Mac too"), isOn: Binding(get: { settings.showOnMac }, set: { app.setShowOnMac($0) }))
                     .font(.caption)
