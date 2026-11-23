@@ -66,6 +66,11 @@ public struct Subtitle: Equatable, Sendable {
 public final class SubtitlePipeline: @unchecked Sendable {
     public var stableFrames: Int
     public var hideAfter: TimeInterval
+    /// Removing a translation (nothing known any more, or a menu read with fewer items) must hold this long: OCR
+    /// misses a frame now and then on animated menus, and the Arabic must not blink.
+    public var removeAfter: TimeInterval = 0.8
+    /// When the current frames started disagreeing by losing items (nil while they don't).
+    private var shrinkSince: Date?
     public private(set) var current: Subtitle?
     public private(set) var history: [Subtitle] = []
     public var historyLimit = 50
@@ -119,9 +124,22 @@ public final class SubtitlePipeline: @unchecked Sendable {
         if let r = result, let c = current, r.text == c.text {
             candidateKey = nil
             candidateCount = 0
+            shrinkSince = nil
             if moved(r.items, c.items) { current = r; return true }
             return false
         }
+        // Losing pieces (nothing known, or only some of the menu read): wait `removeAfter` before believing it.
+        if let c = current, isShrink(result, of: c) {
+            candidateKey = nil
+            candidateCount = 0
+            if shrinkSince == nil { shrinkSince = now }
+            guard now.timeIntervalSince(shrinkSince!) >= removeAfter else { return false }
+            shrinkSince = nil
+            current = result
+            if let r = result { history.insert(r, at: 0); if history.count > historyLimit { history.removeLast() } }
+            return true
+        }
+        shrinkSince = nil
         let key = result?.text ?? "\u{2205}" // ∅ = text we have no translation for
         if key == candidateKey { candidateCount += 1 } else { candidateKey = key; candidateCount = 1 }
         guard candidateCount >= stableFrames else { return false }
@@ -155,6 +173,7 @@ public final class SubtitlePipeline: @unchecked Sendable {
         candidateKey = nil
         candidateCount = 0
         emptySince = nil
+        shrinkSince = nil
         lastText = nil
         lastResult = nil
     }
@@ -179,6 +198,14 @@ public final class SubtitlePipeline: @unchecked Sendable {
                         source: hits.map(\.0.text).joined(separator: "\n"), score: hits.map(\.1.score).min() ?? first.1.score,
                         entryId: first.1.entryId, packageId: first.1.packageId,
                         items: hits.map { SubtitleItem(text: $0.1.target, speaker: $0.1.speaker, box: $0.0.box, lines: 1) })
+    }
+
+    /// Nothing known any more, or only a subset of what is shown (a frame where OCR missed some menu items).
+    private func isShrink(_ r: Subtitle?, of c: Subtitle) -> Bool {
+        guard let r else { return true }
+        let shown = Set(c.items.map(\.text))
+        let now = Set(r.items.map(\.text))
+        return now.isSubset(of: shown) && now.count < shown.count
     }
 
     /// True when the English moved enough to re-place the Arabic (more than ~1.5% of the area).
