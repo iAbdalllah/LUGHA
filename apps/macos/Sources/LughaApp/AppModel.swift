@@ -15,7 +15,15 @@ final class AppModel: ObservableObject {
     let capture = CaptureService()
     let ocr = OCRService()
     lazy var api = APIClient(baseURL: settings.apiBaseURL, token: keychain.get("api_token"), language: settings.interfaceLanguage)
-    lazy var pipeline = SubtitlePipeline { [engine] text in await engine.lookup(text) }
+    // Shown on the first frame a line matches (matching already rejects noise: short text needs an exact hit), gone
+    // 0.4 s after its English leaves the screen.
+    lazy var pipeline = SubtitlePipeline(stableFrames: 1, hideAfter: 0.6) { [engine] text in
+        let t = Date()
+        let hit = await engine.lookup(text)
+        DiagnosticsLog.shared.write("lookup", ["q": text, "ms": Int(Date().timeIntervalSince(t) * 1000),
+                                              "hit": hit.map { ["id": $0.entryId, "target": $0.target, "score": $0.score, "method": $0.method] } as Any])
+        return hit
+    }
     lazy var overlay = OverlayController(settings: settings)
 
     @Published var userName: String?
@@ -126,7 +134,9 @@ final class AppModel: ObservableObject {
     private func mirrorToTV(_ sub: Subtitle?) async {
         guard let tv else { return }
         do {
+            let t = Date()
             if let sub { try await tv.show(sub.text, speaker: sub.speaker, items: tvItems(sub)) } else { try await tv.clear() }
+            DiagnosticsLog.shared.write("tv", ["ms": Int(Date().timeIntervalSince(t) * 1000), "items": sub?.items.count ?? 0])
         } catch {
             self.tv = nil
             tvConnected = nil
@@ -329,9 +339,22 @@ final class AppModel: ObservableObject {
         heartbeat = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 guard let self, self.running, self.pipeline.tick() else { return }
-                self.subtitle = nil
-                self.overlay.update(nil)
-                await self.mirrorToTV(nil)
+                // Only the pieces whose English went away are dropped; the rest stay where they are (keeping the
+                // colours they were drawn with).
+                let keep = self.pipeline.current.map { cur -> Subtitle in
+                    var s = cur
+                    let colors = Dictionary((self.subtitle?.items ?? []).map { ($0.text, $0) }, uniquingKeysWith: { a, _ in a })
+                    s.items = cur.items.map { i in
+                        var i = i
+                        if let old = colors[i.text] { i.background = old.background; i.foreground = old.foreground }
+                        return i
+                    }
+                    return s
+                }
+                DiagnosticsLog.shared.write("tick", ["left": keep?.items.count ?? 0])
+                self.subtitle = keep
+                self.overlay.update(keep)
+                await self.mirrorToTV(keep)
             }
         }
     }
@@ -378,13 +401,21 @@ final class AppModel: ObservableObject {
         defer { ocrBusy = false }
         let t0 = Date()
         let lines = (try? await ocr.recognizeLines(image)) ?? []
+        let ocrMs = Int(Date().timeIntervalSince(t0) * 1000)
         lastRead = lines.map(\.text).joined(separator: " · ")
         // Where the game picture is inside the window (black bars, title bar), re-checked every few seconds.
         if settings.captureAppBundleID != nil, settings.windowArea == AppSettings.wholeWindowArea, Date().timeIntervalSince(contentCheckedAt) > 3 {
             contentCheckedAt = Date()
             gameRect = FrameSampler(image, maxWidth: 640)?.gameRect()
         }
-        if await pipeline.ingest(ocr: lines) {
+        let t1 = Date()
+        let changed = await pipeline.ingest(ocr: lines)
+        DiagnosticsLog.shared.write("frame", [
+            "ocr_ms": ocrMs, "match_ms": Int(Date().timeIntervalSince(t1) * 1000), "size": [image.width, image.height],
+            "ocr": lines.map { ["text": $0.text, "box": DiagnosticsLog.box($0.box)] },
+            "shown": (pipeline.current?.items ?? []).map { ["text": $0.text, "box": DiagnosticsLog.box($0.box)] }, "changed": changed,
+        ])
+        if changed {
             // Native style: each piece in the game's own colours, read from this frame.
             subtitle = pipeline.current.map { s in FrameSampler(image).map { s.colored(by: $0) } ?? s }
             history = pipeline.history

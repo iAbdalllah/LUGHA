@@ -2,6 +2,8 @@
 
 namespace App\Domain\Delivery;
 
+use App\Domain\Localization\GameMarkup;
+use App\Domain\Localization\TextNormalizer;
 use App\Enums\TranslationStatus;
 use App\Models\PackageFile;
 use App\Models\PackageVersion;
@@ -134,11 +136,25 @@ final class BuildPackageVersion
         $count = 0;
         $rows = $base()->toBase()->where('status', TranslationStatus::Published->value)
             ->select(['id', 'source_text', 'target_text', 'category_id', 'speaker', 'scene_ref', 'sequence_no'])->lazyById(2000);
+        $seen = [];
         foreach ($rows as $t) {
-            fwrite($out, ($count++ ? "\n" : '').json_encode(array_filter([
-                'id' => (int) $t->id, 'source' => $t->source_text, 'target' => $t->target_text, 'category' => $slugs[$t->category_id],
-                'speaker' => $t->speaker, 'scene' => $t->scene_ref, 'seq' => $t->sequence_no === null ? null : (int) $t->sequence_no,
-            ], fn ($v) => $v !== null), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+            // As seen on screen: control codes out of the English, drawable Arabic, and a line the game shows as several
+            // timed subtitles split into one entry each.
+            foreach (GameMarkup::segments($t->source_text, (string) $t->target_text) as $n => [$source, $target]) {
+                if ($source === '' || $target === '') {
+                    continue;
+                }
+                // Lines that only differed by a code are one line on screen: keep the first.
+                $key = TextNormalizer::hash($source).'|'.$t->category_id.'|'.$t->scene_ref;
+                if (isset($seen[$key])) {
+                    continue;
+                }
+                $seen[$key] = true;
+                fwrite($out, ($count++ ? "\n" : '').json_encode(array_filter([
+                    'id' => GameMarkup::segmentId((int) $t->id, $n), 'source' => $source, 'target' => $target, 'category' => $slugs[$t->category_id],
+                    'speaker' => $t->speaker, 'scene' => $t->scene_ref, 'seq' => $t->sequence_no === null ? null : (int) $t->sequence_no,
+                ], fn ($v) => $v !== null), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+            }
         }
         fclose($out);
 

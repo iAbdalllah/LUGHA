@@ -131,4 +131,65 @@ final class PipelineTests: XCTestCase {
         XCTAssertEqual(changes, 0, "no label may blink while the menu is up")
         XCTAssertEqual(p.current?.text, steady)
     }
+
+    // MARK: recorded frames (GTA VI through PS Remote Play)
+
+    private func box(_ v: [Double]) -> CGRect { CGRect(x: v[0], y: v[1], width: v[2], height: v[3]) }
+
+    private func lookupTable(_ table: [String: String]) -> (String) async -> Hit? {
+        { q in
+            let key = q.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: " .!?"))
+            guard let (n, t) = table.enumerated().first(where: { $0.element.key.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: " .!?")) == key }).map({ ($0.offset, $0.element.value) }) else { return nil }
+            return Hit(entryId: Int64(n + 1), packageId: "gta", target: t, speaker: nil, category: "dialogues", score: 1, method: "exact", providerId: "p", machineGenerated: false)
+        }
+    }
+
+    func testAWrappedSubtitleWithSpeakerAndHudPromptsIsOneLine() async {
+        var asked: [String] = []
+        let table = lookupTable(["Alright. Gimme Brian's rent or I kick your ass and turn this place upside down.": "طيب. عطني إيجار برايان", "DEFUSE": "فكك"])
+        let p = SubtitlePipeline(stableFrames: 1) { q in asked.append(q); return await table(q) }
+        let frame = [
+            OCRLine(text: "DEFUSE", box: box([0.946, 0.548, 0.042, 0.078])),
+            OCRLine(text: "Jason: Alright. Gimme Brian's rent or I kick your ass and turn this", box: box([0.213, 0.533, 0.574, 0.143])),
+            OCRLine(text: "THREATEN (", box: box([0.931, 0.724, 0.068, 0.085])),
+            OCRLine(text: "place upside down.", box: box([0.415, 0.72, 0.173, 0.113])),
+            OCRLine(text: "airnи(™", box: box([0.952, 0.933, 0.047, 0.063])),
+        ]
+        await p.ingest(ocr: frame)
+        let texts = Set(p.current?.items.map(\.text) ?? [])
+        XCTAssertEqual(texts, ["طيب. عطني إيجار برايان", "فكك"])
+        XCTAssertEqual(p.current?.items.first(where: { $0.text.hasPrefix("طيب") })?.speaker, "Jason")
+        XCTAssertFalse(asked.contains { $0.contains("airn") }, "OCR noise from the picture is not looked up")
+        // The next frame with the same text costs no lookups.
+        let before = asked.count
+        await p.ingest(ocr: frame.reversed())
+        XCTAssertEqual(asked.count, before)
+    }
+
+    func testPiecesOfOneRowAreJoined() async {
+        let p = SubtitlePipeline(stableFrames: 1, lookup: lookupTable(["Pfft! I'll turn you upside down!": "هيه! بقلب عاليكم سافلكم!"]))
+        await p.ingest(ocr: [
+            OCRLine(text: "GRAB", box: box([0.467, 0.1, 0.031, 0.075])),
+            OCRLine(text: "Clerk: Pfft! I'll", box: box([0.339, 0.708, 0.125, 0.117])),
+            OCRLine(text: "turn you upside down!", box: box([0.461, 0.713, 0.202, 0.121])),
+        ])
+        XCTAssertEqual(p.current?.items.map(\.text), ["هيه! بقلب عاليكم سافلكم!"])
+    }
+
+    func testShortTextNeedsAnExactMatchAndSingleLettersAreIgnored() async {
+        var asked: [String] = []
+        let p = SubtitlePipeline(stableFrames: 1) { q in
+            asked.append(q)
+            return q == "COLLECTION" ? Hit(entryId: 9, packageId: "gta", target: "المجموعات", speaker: nil, category: "ui", score: 0.8, method: "fuzzy", providerId: "p", machineGenerated: false) : nil
+        }
+        await p.ingest(ocr: [OCRLine(text: "COLLECTION", box: box([0.6, 0.9, 0.2, 0.05])), OCRLine(text: "N", box: box([0.1, 0.1, 0.01, 0.03]))])
+        XCTAssertNil(p.current, "a fuzzy hit on a sign word is not shown")
+        XCTAssertFalse(asked.contains("N"))
+    }
+
+    func testSpeakerNames() {
+        XCTAssertEqual(SubtitlePipeline.splitSpeaker("Clerk: Rent's just a construct.").speaker, "Clerk")
+        XCTAssertEqual(SubtitlePipeline.splitSpeaker("Officer Diaz: Hands up!").text, "Hands up!")
+        XCTAssertNil(SubtitlePipeline.splitSpeaker("Now for the second part: fuck off.").speaker)
+    }
 }

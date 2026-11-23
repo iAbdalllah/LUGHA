@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Domain\Community\FeedbackService;
+use App\Domain\Localization\GameMarkup;
 use App\Domain\Reviews\ReviewService;
 use App\Http\Controllers\Controller;
 use App\Models\LocalizationPackage;
@@ -30,7 +31,7 @@ class CommunityController extends Controller
         ]);
         // Apps know the package by its id in the manifest (= slug).
         $package = LocalizationPackage::where('slug', $data['package'])->orWhere('public_id', $data['package'])->firstOrFail();
-        $line = Translation::findOrFail($data['entry_id']);
+        $line = Translation::findOrFail(GameMarkup::lineId((int) $data['entry_id'])); // a timed segment reports its line
         $fb = $feedback->submit($request->user(), $package, $line, $data['kind'] ?? 'report', $data);
 
         return response()->json(['id' => $fb->id, 'status' => $fb->status], 202);

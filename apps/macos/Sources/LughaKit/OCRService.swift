@@ -15,9 +15,24 @@ public struct OCRService: Sendable {
     public var languages: [String]
     public var fast: Bool
 
-    public init(languages: [String] = ["en-US"], fast: Bool = false) {
+    /// Wider frames are scaled down first: a Retina capture of a whole window is 4000+ px wide, and recognition time
+    /// grows with pixels while game text stays readable at this size.
+    public var maxWidth: Int
+
+    public init(languages: [String] = ["en-US"], fast: Bool = false, maxWidth: Int = 2200) {
         self.languages = languages
         self.fast = fast
+        self.maxWidth = maxWidth
+    }
+
+    static func downscaled(_ image: CGImage, maxWidth: Int) -> CGImage {
+        guard image.width > maxWidth else { return image }
+        let w = maxWidth, h = max(1, Int(Double(image.height) * Double(maxWidth) / Double(image.width)))
+        guard let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
+                                  space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return image }
+        ctx.interpolationQuality = .high
+        ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+        return ctx.makeImage() ?? image
     }
 
     /// Recognized lines, top to bottom.
@@ -27,7 +42,8 @@ public struct OCRService: Sendable {
 
     /// Recognized lines with where they are: `box` is a fraction of the image, origin top-left.
     public func recognizeLines(_ image: CGImage) async throws -> [OCRLine] {
-        try await withCheckedThrowingContinuation { cont in
+        let image = Self.downscaled(image, maxWidth: maxWidth)
+        return try await withCheckedThrowingContinuation { cont in
             let request = VNRecognizeTextRequest { req, error in
                 if let error { return cont.resume(throwing: error) }
                 let obs = (req.results as? [VNRecognizedTextObservation]) ?? []

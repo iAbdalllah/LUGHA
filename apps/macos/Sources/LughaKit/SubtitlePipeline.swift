@@ -70,7 +70,7 @@ public final class SubtitlePipeline: @unchecked Sendable {
     public var stableFrames: Int
     public var hideAfter: TimeInterval
     /// How long a piece must be missing from the frames before it goes (OCR misses a frame now and then).
-    public var removeAfter: TimeInterval = 0.8
+    public var removeAfter: TimeInterval = 0.4
     public private(set) var current: Subtitle?
     public private(set) var history: [Subtitle] = []
     public var historyLimit = 50
@@ -142,6 +142,7 @@ public final class SubtitlePipeline: @unchecked Sendable {
 
     public func clear() {
         current = nil
+        cache = [:]
         tracks = [:]
         lastText = nil
         lastResult = []
@@ -193,17 +194,112 @@ public final class SubtitlePipeline: @unchecked Sendable {
 
     // MARK: matching
 
-    /// The translated pieces in one frame: the whole text as one sentence, else each known line on its own.
-    private func match(_ lines: [OCRLine], text: String) async -> [(SubtitleItem, Hit, String)] {
-        if let hit = await lookup(text) {
-            let box = lines.map(\.box).reduce(CGRect.null) { $0.union($1) }
-            return [(SubtitleItem(text: hit.target, speaker: hit.speaker, box: box.isNull ? .zero : box, lines: lines.count), hit, text)]
+    /// Lookups already made (hits and misses): the same text is on screen for many frames.
+    private var cache: [String: Hit?] = [:]
+
+    private func cachedLookup(_ q: String) async -> Hit? {
+        if let c = cache[q] { return c }
+        let h = await lookup(q)
+        if cache.count > 4000 { cache.removeAll(keepingCapacity: true) }
+        cache[q] = h
+        return h
+    }
+
+    /// "Clerk: Rent's just…" → ("Clerk", "Rent's just…"). Games put the speaker's name before the line; the package
+    /// has the line alone.
+    public static func splitSpeaker(_ text: String) -> (speaker: String?, text: String) {
+        guard let colon = text.firstIndex(of: ":") else { return (nil, text) }
+        let name = text[..<colon].trimmingCharacters(in: .whitespaces)
+        let rest = text[text.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+        let words = name.split(separator: " ")
+        guard !rest.isEmpty, (1...3).contains(words.count), name.count <= 24,
+              words.allSatisfy({ w in w.first.map { $0.isUppercase || $0.isNumber } ?? false }),
+              name.allSatisfy({ $0.isLetter || $0.isNumber || " .'-#".contains($0) }) else { return (nil, text) }
+        return (name, rest)
+    }
+
+    /// Worth a lookup: mostly Latin text with at least one word of 2+ letters (not OCR noise from the picture, not a
+    /// lone compass letter).
+    public static func looksLikeText(_ text: String) -> Bool {
+        let chars = text.filter { !$0.isWhitespace }
+        guard !chars.isEmpty else { return false }
+        let plain = chars.filter { $0.isASCII }.count
+        guard Double(plain) / Double(chars.count) >= 0.9 else { return false }
+        return text.split(whereSeparator: { !$0.isLetter }).contains { $0.count >= 2 }
+    }
+
+    /// Lines that read as one piece of text: each next line starts right under the previous one and is centred or
+    /// left-aligned with it (a subtitle wrapped onto two lines, a paragraph). HUD prompts elsewhere stay separate.
+    static func blocks(_ lines: [OCRLine]) -> [[OCRLine]] {
+        var blocks: [[OCRLine]] = []
+        for line in rows(lines).sorted(by: { $0.box.minY < $1.box.minY }) {
+            let h = max(line.box.height, 0.001)
+            if !line.box.isEmpty, splitSpeaker(line.text).speaker == nil,
+               let i = blocks.lastIndex(where: { b in
+                   guard let last = b.last, !last.box.isEmpty else { return false }
+                   let gap = line.box.minY - last.box.maxY
+                   let lh = max(last.box.height, h)
+                   let centred = abs(line.box.midX - last.box.midX) < max(last.box.width, line.box.width) * 0.25
+                   let leftAligned = abs(line.box.minX - last.box.minX) < lh
+                   return gap > -lh * 0.5 && gap < lh * 0.9 && abs(line.box.height - last.box.height) < lh * 0.45 && (centred || leftAligned)
+               }) {
+                blocks[i].append(line)
+            } else {
+                blocks.append([line])
+            }
         }
-        guard lines.count > 1 else { return [] }
+        return blocks
+    }
+
+    /// OCR sometimes reads one line as pieces side by side ("Clerk: Pfft! I'll" + "turn you upside down!"): pieces on
+    /// the same row with a small gap become one line.
+    static func rows(_ lines: [OCRLine]) -> [OCRLine] {
+        var out: [OCRLine] = []
+        for line in lines.sorted(by: { $0.box.minX < $1.box.minX }) {
+            if !line.box.isEmpty, let i = out.lastIndex(where: { a in
+                guard !a.box.isEmpty else { return false }
+                let h = min(a.box.height, line.box.height)
+                let overlap = min(a.box.maxY, line.box.maxY) - max(a.box.minY, line.box.minY)
+                let gap = line.box.minX - a.box.maxX
+                return overlap > h * 0.5 && gap > -h && gap < h * 1.2
+            }) {
+                out[i] = OCRLine(text: out[i].text + " " + line.text, box: out[i].box.union(line.box))
+            } else {
+                out.append(line)
+            }
+        }
+        return out
+    }
+
+    /// The translated pieces in one frame: each block as one sentence, else its lines one by one.
+    private func match(_ lines: [OCRLine], text: String) async -> [(SubtitleItem, Hit, String)] {
         var out: [(SubtitleItem, Hit, String)] = []
-        for line in lines.prefix(16) {
-            if let h = await lookup(line.text), !out.contains(where: { $0.1.entryId == h.entryId }) {
-                out.append((SubtitleItem(text: h.target, speaker: h.speaker, box: line.box, lines: 1), h, line.text))
+        func add(_ hit: Hit, _ box: CGRect, _ count: Int, _ source: String, _ speaker: String?) {
+            guard !out.contains(where: { $0.1.entryId == hit.entryId }) else { return }
+            out.append((SubtitleItem(text: hit.target, speaker: hit.speaker ?? speaker, box: box.isNull ? .zero : box, lines: count), hit, source))
+        }
+        /// One piece of text: with its speaker name taken off; very short text (a HUD word, a sign) only on an exact match.
+        func find(_ raw: String) async -> (Hit, String?)? {
+            let (speaker, body) = Self.splitSpeaker(raw)
+            // Without the name first; then as read (a label like "Mission: …" can be part of the line itself).
+            for (text, name) in speaker == nil ? [(raw, nil)] : [(body, speaker), (raw, nil)] {
+                guard Self.looksLikeText(text), let hit = await cachedLookup(text) else { continue }
+                let words = text.split(whereSeparator: { $0.isWhitespace }).count
+                if words <= 2 && hit.method != "exact" { continue }
+                return (hit, name)
+            }
+            return nil
+        }
+        for block in Self.blocks(lines).prefix(12) {
+            let box = block.map(\.box).reduce(CGRect.null) { $0.union($1) }
+            let joined = block.map(\.text).joined(separator: " ")
+            if let (hit, speaker) = await find(joined) {
+                add(hit, box, block.count, joined, speaker)
+                continue
+            }
+            guard block.count > 1 else { continue }
+            for line in block.prefix(16) {
+                if let (hit, speaker) = await find(line.text) { add(hit, line.box, 1, line.text, speaker) }
             }
         }
         return out
