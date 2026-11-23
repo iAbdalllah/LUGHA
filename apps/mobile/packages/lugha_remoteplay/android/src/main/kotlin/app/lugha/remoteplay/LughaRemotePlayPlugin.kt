@@ -76,8 +76,9 @@ class LughaRemotePlayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Ev
                     val registKey = Base64.decode(call.argument<String>("registKey"), Base64.DEFAULT)
                     val text = String(registKey.takeWhile { it != 0.toByte() }.toByteArray(), Charsets.US_ASCII)
                     val credential = text.toULongOrNull(16) ?: run { result.error("bad_key", "Unreadable registration key", null); return }
-                    val err = DiscoveryService.wakeup(null, call.argument<String>("host")!!, credential, call.argument<Boolean>("ps5") ?: true)
-                    if (err == 0) result.success(null) else result.error("wakeup_failed", "Wake-up failed ($err)", null)
+                    // Fire-and-forget UDP packet; the PS5 shows up as ready in discovery a few seconds later.
+                    DiscoveryService.wakeup(null, call.argument<String>("host")!!, credential, call.argument<Boolean>("ps5") ?: true)
+                    result.success(null)
                 }
                 "start" -> {
                     session?.stop()

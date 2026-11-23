@@ -16,7 +16,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.suspendCancellableCoroutine
 
-data class Subtitle(val sid: Long, val text: String, val speaker: String?, val receivedAt: Long)
+/** A translated piece and where its English is on screen (fractions, origin top-left); [lines] = English line count. */
+data class SubItem(val text: String, val speaker: String?, val x: Float, val y: Float, val w: Float, val h: Float, val lines: Int)
+
+/** [items] place each piece over its English; empty = show [text] at the style's position. */
+data class Subtitle(val sid: Long, val text: String, val speaker: String?, val receivedAt: Long, val items: List<SubItem> = emptyList())
 
 data class HubState(
     val subtitle: Subtitle? = null,

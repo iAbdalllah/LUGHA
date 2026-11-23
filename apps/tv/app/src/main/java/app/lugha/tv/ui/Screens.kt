@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.geometry.Offset
@@ -197,10 +199,27 @@ private fun LiveScreen(state: HubState, onSettings: () -> Unit) {
         Button(onClick = onSettings, modifier = Modifier.align(Alignment.TopStart).padding(36.dp).focusRequester(focus)) { Text(stringResource(R.string.settings)) }
 
         state.subtitle?.let { s ->
-            // Centred where the game draws its English subtitle (positionY), as wide as that area allows.
-            SubtitleBubble(s.text, s.speaker, state.style.fontScale, state.style.bgOpacity,
-                Modifier.align(BiasAlignment(0f, state.style.positionY * 2f - 1f)).padding(vertical = 24.dp),
-                maxWidth = maxWidth * state.style.maxWidth)
+            if (s.items.isEmpty()) {
+                // No positions: centred where the game draws its English subtitle (positionY).
+                SubtitleBubble(s.text, s.speaker, state.style.fontScale, state.style.bgOpacity,
+                    Modifier.align(BiasAlignment(0f, state.style.positionY * 2f - 1f)).padding(vertical = 24.dp),
+                    maxWidth = maxWidth * state.style.maxWidth)
+            } else {
+                // Each piece exactly over its English, text sized to one English line.
+                val sw = maxWidth
+                val sh = maxHeight
+                s.items.forEach { i ->
+                    val lineH = sh * (i.h / i.lines.coerceAtLeast(1))
+                    val scale = (lineH.value * 0.9f / 48f * state.style.fontScale).coerceIn(0.35f, 1.6f)
+                    androidx.compose.foundation.layout.Box(
+                        Modifier.offset(x = sw * i.x, y = sh * i.y).size(sw * i.w, sh * i.h),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        SubtitleBubble(i.text, i.speaker, scale, state.style.bgOpacity,
+                            Modifier.wrapContentSize(unbounded = true), maxWidth = (sw * i.w * 1.6f).coerceAtLeast(sw * 0.25f))
+                    }
+                }
+            }
         }
     }
 }

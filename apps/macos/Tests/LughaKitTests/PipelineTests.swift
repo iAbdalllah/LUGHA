@@ -70,4 +70,25 @@ final class PipelineTests: XCTestCase {
         XCTAssertFalse(p.tick(at: t0.addingTimeInterval(5)))
         XCTAssertNotNil(p.current)
     }
+
+    func testNoisyUnknownTextStillReplacesTheOldLine() async {
+        // Whole-window capture during play: HUD text changes every frame, none of it known.
+        let p = SubtitlePipeline(stableFrames: 2) { $0 == "Map" ? self.hit("الخريطة") : nil }
+        _ = await p.ingest(lines: ["Map"]); _ = await p.ingest(lines: ["Map"])
+        XCTAssertEqual(p.current?.text, "الخريطة")
+        _ = await p.ingest(lines: ["TURN ON", "$104"])
+        _ = await p.ingest(lines: ["TURN 0N", "$1O4"])
+        XCTAssertNil(p.current, "the menu closed: the Arabic must go even though the noise never repeats")
+    }
+
+    func testItemsKeepWhereTheEnglishWas() async {
+        let known: [String: (Int64, String)] = ["Map": (10, "الخريطة"), "Help": (11, "المساعدة")]
+        let p = SubtitlePipeline(stableFrames: 1) { t in
+            known[t].map { Hit(entryId: $0.0, packageId: "p", target: $0.1, speaker: nil, category: "menus", score: 1, method: "exact", providerId: "package", machineGenerated: false) }
+        }
+        let map = CGRect(x: 0.05, y: 0.30, width: 0.10, height: 0.03), help = CGRect(x: 0.05, y: 0.45, width: 0.10, height: 0.03)
+        _ = await p.ingest(ocr: [OCRLine(text: "Map", box: map), OCRLine(text: "Game", box: .zero), OCRLine(text: "Help", box: help)])
+        XCTAssertEqual(p.current?.items.map(\.box), [map, help])
+        XCTAssertEqual(p.current?.items.map(\.text), ["الخريطة", "المساعدة"])
+    }
 }

@@ -47,6 +47,7 @@ final class AppModel: ObservableObject {
         browser.start()
         Task { await bootstrap() }
         Task { await reconnectTV() }
+        startTVKeepAlive()
     }
 
     // MARK: Send to TV
@@ -78,7 +79,9 @@ final class AppModel: ObservableObject {
         tvKeepAlive?.invalidate()
         tvKeepAlive = Timer.scheduledTimer(withTimeInterval: 8, repeats: true) { [weak self] _ in
             Task { @MainActor in
-                guard let self, let tv = self.tv else { return }
+                guard let self else { return }
+                // Not connected (TV off, restarting, or the first attempt failed): keep trying while one is paired.
+                guard let tv = self.tv else { await self.reconnectTV(); return }
                 if await tv.isAlive() { return }
                 self.tv = nil
                 self.tvConnected = nil
@@ -120,7 +123,7 @@ final class AppModel: ObservableObject {
     private func mirrorToTV(_ sub: Subtitle?) async {
         guard let tv else { return }
         do {
-            if let sub { try await tv.show(sub.text, speaker: sub.speaker) } else { try await tv.clear() }
+            if let sub { try await tv.show(sub.text, speaker: sub.speaker, items: tvItems(sub)) } else { try await tv.clear() }
         } catch {
             self.tv = nil
             tvConnected = nil
@@ -325,6 +328,17 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Each translated piece placed where its English is on the TV: the capture area's fractions of the game picture,
+    /// times the piece's fractions of the capture area.
+    private func tvItems(_ sub: Subtitle) -> [TVSender.Item] {
+        guard let a = pictureArea else { return [] }
+        return sub.items.filter { $0.box.width > 0 }.map { i in
+            TVSender.Item(text: i.text, speaker: i.speaker,
+                          x: a.minX + i.box.minX * a.width, y: a.minY + i.box.minY * a.height,
+                          w: i.box.width * a.width, h: i.box.height * a.height, lines: i.lines)
+        }
+    }
+
     func pushStyleToTV() async {
         guard let tv else { return }
         let a = pictureArea ?? CGRect(x: 0.08, y: 0.78, width: 0.84, height: 0.16)
@@ -337,9 +351,9 @@ final class AppModel: ObservableObject {
         ocrBusy = true
         defer { ocrBusy = false }
         let t0 = Date()
-        let lines = (try? await ocr.recognize(image)) ?? []
-        lastRead = lines.joined(separator: " · ")
-        if await pipeline.ingest(lines: lines) {
+        let lines = (try? await ocr.recognizeLines(image)) ?? []
+        lastRead = lines.map(\.text).joined(separator: " · ")
+        if await pipeline.ingest(ocr: lines) {
             subtitle = pipeline.current
             history = pipeline.history
             if settings.showOnMac { overlay.update(subtitle) }

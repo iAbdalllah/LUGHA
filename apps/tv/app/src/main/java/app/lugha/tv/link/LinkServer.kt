@@ -147,8 +147,15 @@ class LinkServer(private val scope: CoroutineScope, private val hub: LinkHub = L
                     send(buildJsonObject { put("t", "welcome"); put("tv_name", hub.tvName); put("screen_w", 1920); put("screen_h", 1080) })
                 }
                 "sub.show" -> {
+                    val items = (m["items"] as? kotlinx.serialization.json.JsonArray).orEmpty().mapNotNull { e ->
+                        val o = e as? JsonObject ?: return@mapNotNull null
+                        fun f(k: String) = o[k]?.jsonPrimitive?.content?.toFloatOrNull()
+                        SubItem(o["text"]?.jsonPrimitive?.content ?: return@mapNotNull null, o["speaker"]?.jsonPrimitive?.content?.takeIf { it != "null" },
+                            f("x") ?: return@mapNotNull null, f("y") ?: return@mapNotNull null, f("w") ?: 0f, f("h") ?: 0f,
+                            o["lines"]?.jsonPrimitive?.content?.toIntOrNull() ?: 1)
+                    }.filter { it.w > 0f && it.h > 0f }
                     hub.show(Subtitle(m["sid"]?.jsonPrimitive?.long ?: 0, m["text"]?.jsonPrimitive?.content ?: "",
-                        m["speaker"]?.jsonPrimitive?.content?.takeIf { it != "null" }, System.currentTimeMillis()))
+                        m["speaker"]?.jsonPrimitive?.content?.takeIf { it != "null" }, System.currentTimeMillis(), items))
                     if (m["ack"]?.jsonPrimitive?.boolean == true) {
                         hub.awaitFrame()
                         val painted = SystemClock.elapsedRealtime() - t0

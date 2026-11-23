@@ -37,7 +37,7 @@ class LinkService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private lateinit var server: LinkServer
     private lateinit var discovery: Discovery
-    private var overlay: TextView? = null
+    private var overlay: android.widget.FrameLayout? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -68,57 +68,86 @@ class LinkService : Service() {
 
     private fun renderOverlay(s: HubState) {
         val wanted = LinkHub.store.overlayMode && Settings.canDrawOverlays(this) && !AppVisibility.foreground
-        if (!wanted) {
-            overlay?.visibility = View.GONE
-            return
-        }
-        val tv = overlay ?: createOverlay().also { overlay = it }
+        val layer = if (wanted) overlay ?: createOverlay().also { overlay = it } else overlay
+        if (layer == null) return
+        layer.removeAllViews()
         val sub = s.subtitle
-        if (sub == null) {
-            tv.visibility = View.GONE
+        if (!wanted || sub == null) {
+            layer.visibility = View.GONE
             return
         }
-        tv.text = SpannableStringBuilder().apply {
-            sub.speaker?.let {
-                append("$it: ")
-                setSpan(ForegroundColorSpan(Color.rgb(0xE9, 0xB4, 0x4C)), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            }
-            append(sub.text)
-        }
-        tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 34f * s.style.fontScale)
-        (tv.background as GradientDrawable).alpha = (s.style.bgOpacity * 255).toInt()
-        // Centre the line where the game draws its English subtitle (positionY), within maxWidth of the screen.
         val dm = resources.displayMetrics
-        tv.maxWidth = (dm.widthPixels * s.style.maxWidth).toInt()
-        tv.measure(View.MeasureSpec.makeMeasureSpec(tv.maxWidth, View.MeasureSpec.AT_MOST), View.MeasureSpec.UNSPECIFIED)
-        val lp = tv.layoutParams as WindowManager.LayoutParams
-        lp.gravity = Gravity.CENTER_HORIZONTAL or Gravity.TOP
-        lp.y = (dm.heightPixels * s.style.positionY - tv.measuredHeight / 2f).toInt().coerceIn(0, (dm.heightPixels - tv.measuredHeight).coerceAtLeast(0))
-        getSystemService(WindowManager::class.java).updateViewLayout(tv, lp)
-        tv.visibility = View.VISIBLE
+        val (sw, sh) = dm.widthPixels to dm.heightPixels
+        val style = s.style
+        if (sub.items.isEmpty()) {
+            // No positions (older sender): one line at the style's position.
+            val v = plate(sub.text, sub.speaker, 34f * style.fontScale, style.bgOpacity, (sw * style.maxWidth).toInt())
+            v.measure(View.MeasureSpec.makeMeasureSpec((sw * style.maxWidth).toInt(), View.MeasureSpec.AT_MOST), View.MeasureSpec.UNSPECIFIED)
+            place(layer, v, sw / 2f, sh * style.positionY, sw, sh)
+        } else {
+            // Each piece exactly over its English: centred on its box, text sized to one English line.
+            for (i in sub.items) {
+                val lineH = i.h * sh / i.lines.coerceAtLeast(1)
+                val px = (lineH * 0.9f * style.fontScale).coerceIn(18f, 84f)
+                val maxW = (i.w * sw * 1.6f).coerceAtLeast(sw * 0.25f).coerceAtMost(sw * 0.9f).toInt()
+                val v = plate(i.text, i.speaker, px / dm.scaledDensity, style.bgOpacity, maxW)
+                v.minWidth = (i.w * sw).toInt().coerceAtMost(maxW)
+                v.measure(View.MeasureSpec.makeMeasureSpec(maxW, View.MeasureSpec.AT_MOST), View.MeasureSpec.UNSPECIFIED)
+                place(layer, v, (i.x + i.w / 2) * sw, (i.y + i.h / 2) * sh, sw, sh)
+            }
+        }
+        layer.visibility = View.VISIBLE
     }
 
-    private fun createOverlay(): TextView {
-        val tv = TextView(this).apply {
-            setTextColor(Color.WHITE)
-            textDirection = View.TEXT_DIRECTION_RTL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
-            gravity = Gravity.CENTER
-            setPadding(56, 24, 56, 24)
-            setLineSpacing(0f, 1.15f)
-            typeface = if (Build.VERSION.SDK_INT >= 28) android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, 600, false) else android.graphics.Typeface.DEFAULT_BOLD
-            setShadowLayer(4f, 0f, 2f, Color.argb(220, 0, 0, 0))
-            background = GradientDrawable().apply { setColor(Color.BLACK); cornerRadius = 28f }
-            maxWidth = (resources.displayMetrics.widthPixels * 0.8).toInt()
+    /** Broadcast style: white semibold text with a soft shadow on a dark rounded plate; speaker in amber above. */
+    private fun plate(text: String, speaker: String?, sp: Float, bgOpacity: Float, maxW: Int) = TextView(this).apply {
+        this.text = SpannableStringBuilder().apply {
+            speaker?.let {
+                append(it).append("\n")
+                setSpan(ForegroundColorSpan(Color.rgb(0xE9, 0xB4, 0x4C)), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+            append(text)
         }
+        setTextColor(Color.WHITE)
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, sp)
+        textDirection = View.TEXT_DIRECTION_RTL
+        layoutDirection = View.LAYOUT_DIRECTION_RTL
+        gravity = Gravity.CENTER
+        val padH = (sp * resources.displayMetrics.scaledDensity * 0.7f).toInt()
+        val padV = (sp * resources.displayMetrics.scaledDensity * 0.28f).toInt()
+        setPadding(padH, padV, padH, padV)
+        setLineSpacing(0f, 1.12f)
+        typeface = if (Build.VERSION.SDK_INT >= 28) android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, 600, false) else android.graphics.Typeface.DEFAULT_BOLD
+        setShadowLayer(4f, 0f, 2f, Color.argb(220, 0, 0, 0))
+        background = GradientDrawable().apply {
+            setColor(Color.argb((bgOpacity * 255).toInt(), 0, 0, 0))
+            cornerRadius = sp * resources.displayMetrics.scaledDensity * 0.35f
+        }
+        maxWidth = maxW
+    }
+
+    /** Centres [v] (already measured) on (cx, cy), kept fully on screen. */
+    private fun place(layer: android.widget.FrameLayout, v: TextView, cx: Float, cy: Float, sw: Int, sh: Int) {
+        val w = v.measuredWidth
+        val h = v.measuredHeight
+        val lp = android.widget.FrameLayout.LayoutParams(android.widget.FrameLayout.LayoutParams.WRAP_CONTENT, android.widget.FrameLayout.LayoutParams.WRAP_CONTENT)
+        lp.leftMargin = (cx - w / 2f).toInt().coerceIn(0, (sw - w).coerceAtLeast(0))
+        lp.topMargin = (cy - h / 2f).toInt().coerceIn(0, (sh - h).coerceAtLeast(0))
+        layer.addView(v, lp)
+    }
+
+    /** A full-screen, click-through, transparent layer above other apps and inputs. */
+    private fun createOverlay(): android.widget.FrameLayout {
+        val layer = android.widget.FrameLayout(this)
         val lp = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT,
-        ).apply { y = 90 }
-        getSystemService(WindowManager::class.java).addView(tv, lp)
-        return tv
+        ).apply { gravity = Gravity.TOP or Gravity.START }
+        getSystemService(WindowManager::class.java).addView(layer, lp)
+        return layer
     }
 
     companion object {

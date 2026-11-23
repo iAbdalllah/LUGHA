@@ -56,8 +56,9 @@ final class OverlayModel: ObservableObject {
     @Published var anchor: CGRect?
 }
 
-/// Broadcast-style subtitle: white semibold Arabic with a soft shadow on a dark rounded plate that hides the English
-/// underneath; speaker names in amber; fades in and out.
+/// Broadcast-style subtitles drawn exactly over the English: each translated piece is centred on the box where OCR
+/// found its English, at least as wide, with the text sized to the English line's height (scaled by Font size).
+/// Without positions it falls back to the capture area's centre, or the Position setting.
 struct SubtitleOverlayView: View {
     @ObservedObject var model: OverlayModel
     @ObservedObject var settings: AppSettings
@@ -66,17 +67,40 @@ struct SubtitleOverlayView: View {
         GeometryReader { geo in
             ZStack {
                 if let s = model.subtitle {
-                    let anchor = model.anchor
-                    let width = anchor.map { max($0.width, min(geo.size.width * 0.5, 720)) } ?? geo.size.width * 0.7
-                    SubtitlePlate(subtitle: s, fontSize: settings.fontSize, opacity: settings.backgroundOpacity)
-                        .frame(maxWidth: width)
-                        .position(x: anchor?.midX ?? geo.size.width / 2,
-                                  y: anchor?.midY ?? geo.size.height * settings.verticalPosition)
-                        .transition(.opacity)
-                        .id(s.text)
+                    ForEach(Array(placed(s, in: geo.size).enumerated()), id: \.offset) { _, p in
+                        SubtitlePlate(subtitle: Subtitle(text: p.item.text, speaker: p.item.speaker, source: "", score: 1),
+                                      fontSize: p.font, opacity: settings.backgroundOpacity)
+                            .frame(minWidth: p.minWidth, maxWidth: p.maxWidth)
+                            .fixedSize(horizontal: p.minWidth > 0, vertical: true)
+                            .position(p.center)
+                    }
+                    .transition(.opacity)
+                    .id(s.text)
                 }
             }
             .animation(.easeInOut(duration: 0.15), value: model.subtitle?.text)
+        }
+    }
+
+    private struct Placed { let item: SubtitleItem; let center: CGPoint; let font: Double; let minWidth: CGFloat; let maxWidth: CGFloat }
+
+    private func placed(_ s: Subtitle, in size: CGSize) -> [Placed] {
+        let scale = settings.fontSize / 30
+        guard let a = model.anchor else {
+            return s.items.prefix(1).map { Placed(item: $0, center: CGPoint(x: size.width / 2, y: size.height * settings.verticalPosition),
+                                                  font: settings.fontSize, minWidth: 0, maxWidth: size.width * 0.7) }
+        }
+        return s.items.map { i in
+            guard i.box.width > 0 else {
+                return Placed(item: i, center: CGPoint(x: a.midX, y: a.midY), font: settings.fontSize, minWidth: 0, maxWidth: max(a.width, 480))
+            }
+            let box = CGRect(x: a.minX + i.box.minX * a.width, y: a.minY + i.box.minY * a.height,
+                             width: i.box.width * a.width, height: i.box.height * a.height)
+            let lineHeight = box.height / CGFloat(max(i.lines, 1))
+            let font = min(max(Double(lineHeight) * 0.9 * scale, 13), 64)
+            // Wide enough to hide the English; long Arabic may grow up to the whole area's width.
+            return Placed(item: i, center: CGPoint(x: box.midX, y: box.midY), font: font,
+                          minWidth: 0, maxWidth: max(box.width * 1.6, min(a.width, 900)))
         }
     }
 }

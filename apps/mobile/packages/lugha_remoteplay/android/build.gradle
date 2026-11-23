@@ -19,6 +19,15 @@ apply plugin: 'kotlin-parcelize'
 
 def chiaki = file("${projectDir}/../../../third_party/chiaki-ng")
 
+// Build only the ABIs Flutter is targeting (`flutter build apk --target-platform android-arm`): chiaki-ng and its
+// OpenSSL/curl dependencies take a few hundred MB and several minutes per ABI.
+def remotePlayAbis() {
+    def map = ['android-arm': 'armeabi-v7a', 'android-arm64': 'arm64-v8a', 'android-x64': 'x86_64']
+    def tp = rootProject.findProperty('target-platform')
+    def abis = tp ? tp.toString().split(',').collect { map[it.trim()] }.findAll { it } : []
+    return abis ?: ['arm64-v8a', 'armeabi-v7a', 'x86_64']
+}
+
 android {
     namespace 'app.lugha.remoteplay'
     compileSdk 35
@@ -38,7 +47,7 @@ android {
                         '-DCHIAKI_ENABLE_STEAMDECK_NATIVE=OFF', '-DANDROID_STL=c++_shared',
                         '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON',
                         '-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384'
-                abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86_64'
+                abiFilters(*remotePlayAbis())
             }
         }
     }

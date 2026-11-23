@@ -86,7 +86,10 @@ public final class CaptureService: NSObject, SCStreamOutput, SCStreamDelegate, @
         await stop()
         let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: false)
         let candidates = content.windows.filter { $0.owningApplication?.bundleIdentifier == bundleID && $0.windowLayer == 0 && $0.frame.width >= 320 }
-        guard let window = candidates.max(by: { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height }) else {
+        // Apps like PS Remote Play keep hidden helper windows: prefer the visible one (on screen, maybe covered),
+        // then the largest. Off-screen windows give no picture.
+        let visible = candidates.filter(\.isOnScreen)
+        guard let window = (visible.isEmpty ? candidates : visible).max(by: { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height }) else {
             throw NSError(domain: "LUGHA", code: 2, userInfo: [NSLocalizedDescriptionKey: "window_not_found"])
         }
         let size = window.frame.size

@@ -192,11 +192,19 @@ public final class TVSender: @unchecked Sendable {
 
     /// Show a line on the TV. With `waitForAck`, returns the round trip until the TV painted it (ms).
     @discardableResult
-    public func show(_ text: String, speaker: String?, waitForAck: Bool = false) async throws -> Double? {
+    public func show(_ text: String, speaker: String?, items: [Item] = [], waitForAck: Bool = false) async throws -> Double? {
         let id = takeID()
         let t0 = DispatchTime.now()
         var m: [String: Any] = ["t": "sub.show", "id": id, "sid": id, "text": text, "dir": "rtl", "ack": waitForAck]
         if let speaker { m["speaker"] = speaker }
+        // Placed pieces (over the English, as fractions of the picture). Older TVs ignore this and show `text`.
+        if !items.isEmpty {
+            m["items"] = items.map { i -> [String: Any] in
+                var d: [String: Any] = ["text": i.text, "x": i.x, "y": i.y, "w": i.w, "h": i.h, "lines": i.lines]
+                if let s = i.speaker { d["speaker"] = s }
+                return d
+            }
+        }
         try await send(m)
         guard waitForAck else { return nil }
         while true {
@@ -206,6 +214,17 @@ public final class TVSender: @unchecked Sendable {
                 lastLatencyMs = ms
                 return ms
             }
+        }
+    }
+
+    /// A translated piece and where its English is, as fractions of the picture (origin top-left).
+    public struct Item: Sendable {
+        public let text: String
+        public let speaker: String?
+        public let x, y, w, h: Double
+        public let lines: Int
+        public init(text: String, speaker: String?, x: Double, y: Double, w: Double, h: Double, lines: Int) {
+            self.text = text; self.speaker = speaker; self.x = x; self.y = y; self.w = w; self.h = h; self.lines = lines
         }
     }
 
