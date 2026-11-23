@@ -35,6 +35,8 @@ public final class SubtitlePipeline: @unchecked Sendable {
     private var candidateCount = 0
     private var lastTextAt: Date?
     private var shownSource: String?
+    /// When the capture area became empty (nil while text is there). Drives [tick].
+    private var emptySince: Date?
 
     public init(stableFrames: Int = 2, hideAfter: TimeInterval = 1.2, lookup: @escaping (String) async -> Hit?) {
         self.stableFrames = stableFrames
@@ -50,6 +52,7 @@ public final class SubtitlePipeline: @unchecked Sendable {
         guard !text.isEmpty else {
             candidate = nil
             candidateCount = 0
+            if emptySince == nil { emptySince = now }
             if current != nil, let last = lastTextAt, now.timeIntervalSince(last) >= hideAfter {
                 current = nil
                 shownSource = nil
@@ -58,6 +61,7 @@ public final class SubtitlePipeline: @unchecked Sendable {
             return false
         }
         lastTextAt = now
+        emptySince = nil
         if text == shownSource { return false }
         if text == candidate { candidateCount += 1 } else { candidate = text; candidateCount = 1 }
         guard candidateCount >= stableFrames else { return false }
@@ -98,10 +102,22 @@ public final class SubtitlePipeline: @unchecked Sendable {
                         entryId: first.1.entryId, packageId: first.1.packageId)
     }
 
+    /// Call a few times a second. Screen capture only delivers frames when the picture changes, so after the English
+    /// line disappears there may be no further frame; this hides the Arabic once the area has been empty long enough.
+    /// Returns true when `current` changed.
+    @discardableResult
+    public func tick(at now: Date = Date()) -> Bool {
+        guard current != nil, let since = emptySince, now.timeIntervalSince(since) >= hideAfter else { return false }
+        current = nil
+        shownSource = nil
+        return true
+    }
+
     public func clear() {
         current = nil
         shownSource = nil
         candidate = nil
         candidateCount = 0
+        emptySince = nil
     }
 }

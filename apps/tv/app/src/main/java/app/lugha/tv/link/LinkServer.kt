@@ -159,8 +159,9 @@ class LinkServer(private val scope: CoroutineScope, private val hub: LinkHub = L
                 "sub.clear" -> hub.clear()
                 "style.set" -> hub.setStyle(OverlayStyle(
                     fontScale = m["font_scale"]?.jsonPrimitive?.float ?: 1f,
-                    positionBottom = (m["position_y"]?.jsonPrimitive?.float ?: 0.9f) >= 0.5f,
-                    bgOpacity = m["bg_opacity"]?.jsonPrimitive?.float ?: 0.75f))
+                    positionY = (m["position_y"]?.jsonPrimitive?.float ?: 0.86f).coerceIn(0.05f, 0.95f),
+                    bgOpacity = m["bg_opacity"]?.jsonPrimitive?.float ?: 0.8f,
+                    maxWidth = (m["max_width"]?.jsonPrimitive?.float ?: 0.8f).coerceIn(0.3f, 0.95f)))
                 "ping" -> send(buildJsonObject { put("t", "pong"); put("id", m["id"]!!.jsonPrimitive.long) })
                 "bye" -> return
             }

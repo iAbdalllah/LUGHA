@@ -49,4 +49,25 @@ final class PipelineTests: XCTestCase {
         _ = await p.ingest(lines: ["Nothing", "Known"])
         XCTAssertNil(p.current)
     }
+
+    func testHidesWhenTheAreaStaysEmptyWithoutNewFrames() async {
+        let p = SubtitlePipeline(stableFrames: 1, hideAfter: 1.0) { _ in self.hit("مرحبًا") }
+        let t0 = Date(timeIntervalSince1970: 1000)
+        _ = await p.ingest(lines: ["Hello"], at: t0)
+        XCTAssertNotNil(p.current)
+        // One empty frame, then the picture stops changing: no more frames arrive.
+        _ = await p.ingest(lines: [], at: t0.addingTimeInterval(0.2))
+        XCTAssertFalse(p.tick(at: t0.addingTimeInterval(0.8)), "not empty long enough yet")
+        XCTAssertTrue(p.tick(at: t0.addingTimeInterval(1.3)))
+        XCTAssertNil(p.current)
+    }
+
+    func testTickKeepsALineThatIsStillOnScreen() async {
+        let p = SubtitlePipeline(stableFrames: 1, hideAfter: 1.0) { _ in self.hit("مرحبًا") }
+        let t0 = Date(timeIntervalSince1970: 1000)
+        _ = await p.ingest(lines: ["Hello"], at: t0)
+        // The English stays and the picture is static: no frames, but nothing says it went away.
+        XCTAssertFalse(p.tick(at: t0.addingTimeInterval(5)))
+        XCTAssertNotNil(p.current)
+    }
 }

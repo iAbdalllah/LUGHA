@@ -10,7 +10,18 @@ import app.lugha.tv.link.Wire.str
 data class PairedSender(val publicKey: String, val fingerprint: String, val name: String, val pairedAt: Long)
 
 @Serializable
-data class OverlayStyle(val fontScale: Float = 1.0f, val positionBottom: Boolean = true, val bgOpacity: Float = 0.75f)
+/**
+ * How subtitles look. [positionY] is the vertical centre as a fraction of the screen (the sender sets it to where the
+ * game draws its English subtitle, so the Arabic covers it); [maxWidth] is the fraction of the width a line may use.
+ */
+data class OverlayStyle(
+    val fontScale: Float = 1.0f,
+    val positionY: Float = 0.86f,
+    val bgOpacity: Float = 0.8f,
+    val maxWidth: Float = 0.8f,
+) {
+    val positionBottom get() = positionY >= 0.5f
+}
 
 /** This TV's link identity, its paired senders and display preferences (app-private storage). */
 class LinkStore(context: Context) {

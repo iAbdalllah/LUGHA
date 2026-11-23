@@ -87,8 +87,13 @@ class LinkService : Service() {
         }
         tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 34f * s.style.fontScale)
         (tv.background as GradientDrawable).alpha = (s.style.bgOpacity * 255).toInt()
+        // Centre the line where the game draws its English subtitle (positionY), within maxWidth of the screen.
+        val dm = resources.displayMetrics
+        tv.maxWidth = (dm.widthPixels * s.style.maxWidth).toInt()
+        tv.measure(View.MeasureSpec.makeMeasureSpec(tv.maxWidth, View.MeasureSpec.AT_MOST), View.MeasureSpec.UNSPECIFIED)
         val lp = tv.layoutParams as WindowManager.LayoutParams
-        lp.gravity = Gravity.CENTER_HORIZONTAL or if (s.style.positionBottom) Gravity.BOTTOM else Gravity.TOP
+        lp.gravity = Gravity.CENTER_HORIZONTAL or Gravity.TOP
+        lp.y = (dm.heightPixels * s.style.positionY - tv.measuredHeight / 2f).toInt().coerceIn(0, (dm.heightPixels - tv.measuredHeight).coerceAtLeast(0))
         getSystemService(WindowManager::class.java).updateViewLayout(tv, lp)
         tv.visibility = View.VISIBLE
     }
@@ -99,7 +104,10 @@ class LinkService : Service() {
             textDirection = View.TEXT_DIRECTION_RTL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             gravity = Gravity.CENTER
-            setPadding(48, 22, 48, 22)
+            setPadding(56, 24, 56, 24)
+            setLineSpacing(0f, 1.15f)
+            typeface = if (Build.VERSION.SDK_INT >= 28) android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, 600, false) else android.graphics.Typeface.DEFAULT_BOLD
+            setShadowLayer(4f, 0f, 2f, Color.argb(220, 0, 0, 0))
             background = GradientDrawable().apply { setColor(Color.BLACK); cornerRadius = 28f }
             maxWidth = (resources.displayMetrics.widthPixels * 0.8).toInt()
         }

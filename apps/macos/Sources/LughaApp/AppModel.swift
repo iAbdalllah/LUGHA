@@ -63,6 +63,7 @@ final class AppModel: ObservableObject {
             tv = s
             tvConnected = s.tv.name
             tvStatus = ""
+            await pushStyleToTV()
             if let sub = subtitle { try? await s.show(sub.text, speaker: sub.speaker) }
         } catch {
             tvStatus = error.localizedDescription
@@ -77,6 +78,7 @@ final class AppModel: ObservableObject {
         if let s = try? await TVSender.connect(target, senderName: senderName, secretHex: id.secretHex) {
             tv = s
             tvConnected = s.tv.name
+            await pushStyleToTV()
         }
     }
 
@@ -214,13 +216,22 @@ final class AppModel: ObservableObject {
                 // Window mode: the game can be played on the TV while its Remote Play window sits behind other windows.
                 let w = try await capture.startWindow(bundleID: bundleID, area: settings.windowArea, onFrame: handler)
                 captureWindow = w
+                let a = settings.windowArea, f = w.frame
+                // The Arabic sits exactly over the English: the subtitle area, in global screen points.
+                overlay.anchor = CGRect(x: f.minX + a.minX * f.width, y: f.minY + a.minY * f.height, width: a.width * f.width, height: a.height * f.height)
+                pictureArea = a
             } else {
                 guard let region = settings.captureRegion else { status = L.t("Choose a region first"); return }
                 try await capture.start(displayID: settings.displayID, region: region, excludingWindowIDs: overlay.windowIDs, onFrame: handler)
+                let origin = CGDisplayBounds(settings.displayID ?? CGMainDisplayID())
+                overlay.anchor = region.offsetBy(dx: origin.minX, dy: origin.minY)
+                pictureArea = CGRect(x: region.minX / origin.width, y: region.minY / origin.height, width: region.width / origin.width, height: region.height / origin.height)
             }
             if settings.showOnMac { overlay.show() }
             running = true
             status = ""
+            await pushStyleToTV()
+            startHeartbeat()
         } catch let e as NSError where e.localizedDescription == "window_not_found" {
             status = L.t("Open PS Remote Play and connect to your PS5 first.")
         } catch {
@@ -254,12 +265,39 @@ final class AppModel: ObservableObject {
     }
 
     func stop() async {
+        heartbeat?.invalidate()
+        heartbeat = nil
         await capture.stop()
         pipeline.clear()
         subtitle = nil
         overlay.update(nil)
         overlay.hide()
         running = false
+    }
+
+    /// The subtitle area as fractions of the game picture — sent to the TV so it draws the Arabic in the same place.
+    private var pictureArea: CGRect?
+    private var heartbeat: Timer?
+
+    /// Screen capture sends no frame while the picture is unchanged, so check a few times a second whether the
+    /// English line is gone and the Arabic should go too.
+    private func startHeartbeat() {
+        heartbeat?.invalidate()
+        heartbeat = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.running, self.pipeline.tick() else { return }
+                self.subtitle = nil
+                self.overlay.update(nil)
+                await self.mirrorToTV(nil)
+            }
+        }
+    }
+
+    func pushStyleToTV() async {
+        guard let tv else { return }
+        let a = pictureArea ?? CGRect(x: 0.08, y: 0.78, width: 0.84, height: 0.16)
+        try? await tv.setStyle(fontScale: settings.fontSize / 30, positionY: Double(a.midY), bgOpacity: settings.backgroundOpacity,
+                               maxWidth: Double(min(max(a.width, 0.5), 0.9)))
     }
 
     private func process(_ image: CGImage) async {

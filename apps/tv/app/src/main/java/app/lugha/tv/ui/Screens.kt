@@ -12,6 +12,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.ui.BiasAlignment
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
@@ -155,16 +158,24 @@ private fun PairScreen(state: HubState, onBack: () -> Unit) {
 }
 
 @Composable
-fun SubtitleBubble(text: String, speaker: String?, fontScale: Float, bgOpacity: Float, modifier: Modifier = Modifier) {
-    Text(
-        buildAnnotatedString {
-            speaker?.let { withStyle(SpanStyle(color = Amber)) { append("$it: ") } }
-            append(text)
-        },
-        modifier = modifier.widthIn(max = 1500.dp).background(Color.Black.copy(alpha = bgOpacity), RoundedCornerShape(20.dp)).padding(horizontal = 44.dp, vertical = 20.dp),
-        color = Color.White, fontSize = (52 * fontScale).sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, lineHeight = (72 * fontScale).sp,
-        style = MaterialTheme.typography.bodyLarge.copy(textDirection = TextDirection.Rtl),
-    )
+fun SubtitleBubble(text: String, speaker: String?, fontScale: Float, bgOpacity: Float, modifier: Modifier = Modifier, maxWidth: androidx.compose.ui.unit.Dp = 1150.dp) {
+    // Broadcast style: white semibold Arabic with a soft shadow on a dark plate that hides the English underneath;
+    // the speaker's name sits above in amber.
+    val shadow = Shadow(Color.Black.copy(alpha = 0.85f), Offset(0f, 2f), 4f)
+    Column(
+        modifier.widthIn(max = maxWidth).background(Color.Black.copy(alpha = bgOpacity), RoundedCornerShape((18 * fontScale).dp))
+            .padding(horizontal = (40 * fontScale).dp, vertical = (16 * fontScale).dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        speaker?.let {
+            Text(it, color = Amber, fontSize = (30 * fontScale).sp, fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.bodyLarge.copy(textDirection = TextDirection.Rtl, shadow = shadow))
+        }
+        Text(
+            text, color = Color.White, fontSize = (48 * fontScale).sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center,
+            lineHeight = (66 * fontScale).sp, style = MaterialTheme.typography.bodyLarge.copy(textDirection = TextDirection.Rtl, shadow = shadow),
+        )
+    }
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -186,8 +197,10 @@ private fun LiveScreen(state: HubState, onSettings: () -> Unit) {
         Button(onClick = onSettings, modifier = Modifier.align(Alignment.TopStart).padding(36.dp).focusRequester(focus)) { Text(stringResource(R.string.settings)) }
 
         state.subtitle?.let { s ->
+            // Centred where the game draws its English subtitle (positionY), as wide as that area allows.
             SubtitleBubble(s.text, s.speaker, state.style.fontScale, state.style.bgOpacity,
-                Modifier.align(if (state.style.positionBottom) Alignment.BottomCenter else Alignment.TopCenter).padding(vertical = 110.dp, horizontal = 120.dp))
+                Modifier.align(BiasAlignment(0f, state.style.positionY * 2f - 1f)).padding(vertical = 24.dp),
+                maxWidth = maxWidth * state.style.maxWidth)
         }
     }
 }
@@ -220,7 +233,7 @@ private fun SettingsScreen(state: HubState, onPair: () -> Unit, onHistory: () ->
                     LinkHub.setStyle(st.copy(fontScale = sizes[(sizes.indexOfFirst { it >= st.fontScale } + 1) % sizes.size]))
                 }, focus)
             }
-            item { SettingRow(stringResource(R.string.position), stringResource(if (st.positionBottom) R.string.bottom else R.string.top), { LinkHub.setStyle(st.copy(positionBottom = !st.positionBottom)) }) }
+            item { SettingRow(stringResource(R.string.position), stringResource(if (st.positionBottom) R.string.bottom else R.string.top), { LinkHub.setStyle(st.copy(positionY = if (st.positionBottom) 0.14f else 0.86f)) }) }
             item {
                 val ops = listOf(0.5f, 0.75f, 0.9f)
                 SettingRow(stringResource(R.string.background), "${(st.bgOpacity * 100).toInt()}%", { LinkHub.setStyle(st.copy(bgOpacity = ops[(ops.indexOfFirst { it >= st.bgOpacity } + 1) % ops.size])) })
