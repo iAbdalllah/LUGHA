@@ -14,6 +14,9 @@ final class GameMarkup
 
     public static function source(string $text): string
     {
+        $text = self::tones($text);
+        // "In Spanish: …", "Unknown Language: …": a note for the translator, not shown on screen.
+        $text = preg_replace('/^\s*(?:In [A-Z][a-z]+|Unknown Language):\s+/', '', $text);
         $text = preg_replace('/~n~/i', ' ', $text);
         $text = self::inline($text);
         $text = preg_replace('/~[^~\s]{0,80}~/', ' ', $text); // icons: not text on screen
@@ -26,6 +29,7 @@ final class GameMarkup
 
     public static function target(string $text): string
     {
+        $text = self::tones($text);
         $text = preg_replace('/~n~/i', "\n", $text);
         $text = self::inline($text);
         $text = preg_replace('/~INPUT_[^~\s]{0,80}~/', self::BUTTON, $text);
@@ -34,6 +38,12 @@ final class GameMarkup
         $text = preg_replace('/ +([.,!?;:،؟])/u', '$1', preg_replace('/[ \t]{2,}/', ' ', $text));
 
         return trim(preg_replace('/ *\n */', "\n", $text));
+    }
+
+    /** "~tone~ [laughs] ~tone~": a sound cue the game does not show with the subtitle. */
+    private static function tones(string $text): string
+    {
+        return preg_replace('/~tone~\s*\[[^\]~]{0,60}\]\s*(?:~tone~)?/u', ' ', $text);
     }
 
     /** Colours and timing sit inside words and before punctuation: removed without leaving a space. */

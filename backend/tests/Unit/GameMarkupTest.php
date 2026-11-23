@@ -32,4 +32,15 @@ class GameMarkupTest extends TestCase
         $this->assertSame(42, GameMarkup::lineId(GameMarkup::segmentId(42, 3)));
         $this->assertSame(42, GameMarkup::lineId(GameMarkup::segmentId(42, 0)));
     }
+
+    public function test_sound_cues_and_language_notes_are_not_on_screen(): void
+    {
+        $this->assertSame('All the time. You gonna have me howling to the moon, girl!', GameMarkup::source('All the time. You gonna have me howling to the moon, girl!~tone~ [howls] ~tone~'));
+        $this->assertSame('دايم. بتخليني أعوي للقمر يا بنت!', GameMarkup::target('دايم. بتخليني أعوي للقمر يا بنت! ~tone~ [تعوي] ~tone~'));
+        $this->assertSame('Alright, dude. Okay...', GameMarkup::source('In Spanish: Alright, dude. Okay...'));
+        $this->assertSame('Where are you going?', GameMarkup::source('Unknown Language: Where are you going?'));
+        $this->assertSame('Mission: Go to the shop', GameMarkup::source('Mission: Go to the shop'));
+        $this->assertSame([['You think you can keep up?', 'تحسب إنك تقدر تجاريني؟'], ['Not even.', 'ولا حتى.']],
+            GameMarkup::segments('~sl:0:2.98~~tone~ [laughs] ~tone~You think you can keep up?~sl:0~Not even.', '~sl:0:2.98~~tone~ [يضحك] ~tone~تحسب إنك تقدر تجاريني؟~sl:0~ولا حتى.'));
+    }
 }

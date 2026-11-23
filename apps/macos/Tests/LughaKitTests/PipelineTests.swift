@@ -192,4 +192,39 @@ final class PipelineTests: XCTestCase {
         XCTAssertEqual(SubtitlePipeline.splitSpeaker("Officer Diaz: Hands up!").text, "Hands up!")
         XCTAssertNil(SubtitlePipeline.splitSpeaker("Now for the second part: fuck off.").speaker)
     }
+
+    func testTwoStackedSubtitlesAreMatchedAsTheirOwnRuns() async {
+        // Recorded: a two-line subtitle with the next speaker's line right under it.
+        let p = SubtitlePipeline(stableFrames: 1, lookup: lookupTable([
+            "Hey.. police? I think somebody's here for my body parts. Lock'em up!": "هيه... الشرطة؟ أظن فيه أحد يبي يقطعني. اقبضوا عليه",
+            "Dear God!": "يا ساتر!",
+        ]))
+        await p.ingest(ocr: [
+            OCRLine(text: "Hey.. police? I think somebody's here for my body parts.", box: box([0.35, 0.822, 0.299, 0.026])),
+            OCRLine(text: "Lock'em up!", box: box([0.464, 0.85, 0.07, 0.029])),
+            OCRLine(text: "Dear God!", box: box([0.465, 0.893, 0.063, 0.026])),
+        ])
+        XCTAssertEqual(p.current?.items.map(\.text), ["هيه... الشرطة؟ أظن فيه أحد يبي يقطعني. اقبضوا عليه", "يا ساتر!"])
+    }
+
+    func testASignWordReadIntoTheSubtitleRowIsDropped() async {
+        let p = SubtitlePipeline(stableFrames: 1, lookup: lookupTable(["Hold your horses! I'm going.": "اصبر شوي! أنا رايح."]))
+        await p.ingest(ocr: [OCRLine(text: "Hold your horses! I'm going. LOEGER", box: box([0.35, 0.85, 0.3, 0.03]))])
+        XCTAssertEqual(p.current?.items.map(\.text), ["اصبر شوي! أنا رايح."])
+        XCTAssertEqual(SubtitlePipeline.withoutStrayWord("OK. GTA is here"), [], "a sentence-case line keeps an all-caps word that is not at an end")
+        XCTAssertEqual(SubtitlePipeline.withoutStrayWord("SPEED LIMIT 40"), [], "an all-caps sign stays whole")
+    }
+
+    func testAHudWordOcrMissesForAMomentStaysUp() async {
+        let p = SubtitlePipeline(stableFrames: 1, lookup: lookupTable(["THREATEN": "هدد", "Hold your horses! I'm going.": "اصبر شوي! أنا رايح."]))
+        let t0 = Date(timeIntervalSince1970: 0)
+        let hud = OCRLine(text: "THREATEN", box: box([0.93, 0.72, 0.06, 0.08]))
+        let line = OCRLine(text: "Hold your horses! I'm going.", box: box([0.35, 0.85, 0.3, 0.03]))
+        await p.ingest(ocr: [hud, line], at: t0)
+        await p.ingest(ocr: [OCRLine(text: "Something else entirely", box: box([0.1, 0.1, 0.2, 0.03]))], at: t0.addingTimeInterval(0.2))
+        p.tick(at: t0.addingTimeInterval(0.7))
+        XCTAssertEqual(p.current?.items.map(\.text), ["هدد"], "the dialogue line goes on time, the HUD word waits")
+        p.tick(at: t0.addingTimeInterval(1.1))
+        XCTAssertNil(p.current)
+    }
 }

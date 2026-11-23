@@ -71,6 +71,8 @@ public final class SubtitlePipeline: @unchecked Sendable {
     public var hideAfter: TimeInterval
     /// How long a piece must be missing from the frames before it goes (OCR misses a frame now and then).
     public var removeAfter: TimeInterval = 0.4
+    /// The same for one- and two-word pieces (HUD prompts), which OCR misses more often.
+    public var shortRemoveAfter: TimeInterval = 1.0
     public private(set) var current: Subtitle?
     public private(set) var history: [Subtitle] = []
     public var historyLimit = 50
@@ -152,8 +154,12 @@ public final class SubtitlePipeline: @unchecked Sendable {
     // MARK: state → current
 
     private func publish(at now: Date) -> Bool {
-        let hold = lastFrameEmpty ? hideAfter : removeAfter
-        tracks = tracks.filter { !($0.value.missing && now.timeIntervalSince($0.value.lastSeen) >= hold) }
+        tracks = tracks.filter { _, t in
+            // A button prompt or HUD word ("THREATEN", "STORE") is read on and off by OCR: it gets longer to come back.
+            let short = t.source.split(whereSeparator: { $0.isWhitespace }).count <= 2
+            let hold = lastFrameEmpty ? hideAfter : (short ? max(removeAfter, shortRemoveAfter) : removeAfter)
+            return !(t.missing && now.timeIntervalSince(t.lastSeen) >= hold)
+        }
         let shown = tracks.values.filter { $0.seen >= stableFrames }
             .sorted { a, b in
                 // Screen order: rows top to bottom (1% bands, so tiny OCR jitter can't swap them), then left to right,
@@ -216,6 +222,21 @@ public final class SubtitlePipeline: @unchecked Sendable {
               words.allSatisfy({ w in w.first.map { $0.isUppercase || $0.isNumber } ?? false }),
               name.allSatisfy({ $0.isLetter || $0.isNumber || " .'-#".contains($0) }) else { return (nil, text) }
         return (name, rest)
+    }
+
+    /// "Hold your horses! I'm going. LOEGER" → "Hold your horses! I'm going.": an all-caps word at either end of a
+    /// sentence-case line is usually a shop sign behind the subtitle that OCR read into the same row.
+    public static func withoutStrayWord(_ text: String) -> [String] {
+        var words = text.split(separator: " ").map(String.init)
+        guard words.count >= 4, text.contains(where: { $0.isLowercase }) else { return [] }
+        func stray(_ w: String) -> Bool {
+            let letters = w.filter(\.isLetter)
+            return letters.count >= 3 && letters.allSatisfy(\.isUppercase) && w != "OK"
+        }
+        var out: [String] = []
+        if stray(words.last!) { words.removeLast(); out.append(words.joined(separator: " ")) }
+        if stray(words.first!) { words.removeFirst(); out.append(words.joined(separator: " ")) }
+        return out
     }
 
     /// Worth a lookup: mostly Latin text with at least one word of 2+ letters (not OCR noise from the picture, not a
@@ -283,10 +304,13 @@ public final class SubtitlePipeline: @unchecked Sendable {
             let (speaker, body) = Self.splitSpeaker(raw)
             // Without the name first; then as read (a label like "Mission: …" can be part of the line itself).
             for (text, name) in speaker == nil ? [(raw, nil)] : [(body, speaker), (raw, nil)] {
-                guard Self.looksLikeText(text), let hit = await cachedLookup(text) else { continue }
-                let words = text.split(whereSeparator: { $0.isWhitespace }).count
-                if words <= 2 && hit.method != "exact" { continue }
-                return (hit, name)
+                // As read; then without a sign word OCR joined to the row ("I'm going. LOEGER").
+                for candidate in [text] + Self.withoutStrayWord(text) {
+                    guard Self.looksLikeText(candidate), let hit = await cachedLookup(candidate) else { continue }
+                    let words = candidate.split(whereSeparator: { $0.isWhitespace }).count
+                    if words <= 2 && hit.method != "exact" { continue }
+                    return (hit, name)
+                }
             }
             return nil
         }
@@ -298,8 +322,23 @@ public final class SubtitlePipeline: @unchecked Sendable {
                 continue
             }
             guard block.count > 1 else { continue }
-            for line in block.prefix(16) {
-                if let (hit, speaker) = await find(line.text) { add(hit, line.box, 1, line.text, speaker) }
+            // Two subtitles stacked (a new speaker under the last one): the longest run of lines that matches,
+            // from the top down; a line that is part of nothing is skipped.
+            let rows = Array(block.prefix(16))
+            var i = 0
+            while i < rows.count {
+                var matched = false
+                for end in stride(from: min(rows.count, i + 4), to: i, by: -1) where !(i == 0 && end == rows.count) {
+                    let run = rows[i..<end]
+                    let text = run.map(\.text).joined(separator: " ")
+                    if let (hit, speaker) = await find(text) {
+                        add(hit, run.map(\.box).reduce(CGRect.null) { $0.union($1) }, run.count, text, speaker)
+                        i = end
+                        matched = true
+                        break
+                    }
+                }
+                if !matched { i += 1 }
             }
         }
         return out

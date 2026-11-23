@@ -57,11 +57,15 @@ pub struct Thresholds {
     pub probe_grams: usize,
     /// Trigrams found in more than this share of lines carry no signal and are not probed.
     pub max_df_ratio: f32,
+    /// A query this long (normalized chars) may match the start or end of a longer line…
+    pub partial_min_chars: usize,
+    /// …when it is this close to that part of it.
+    pub partial_accept: f32,
 }
 
 impl Default for Thresholds {
     fn default() -> Self {
-        Self { accept: 0.86, with_context: 0.75, context_bonus: 0.05, min_shared_grams: 0.30, len_tolerance: 0.25, probe_grams: 16, max_df_ratio: 0.05 }
+        Self { accept: 0.86, with_context: 0.75, context_bonus: 0.05, min_shared_grams: 0.30, len_tolerance: 0.25, probe_grams: 16, max_df_ratio: 0.05, partial_min_chars: 24, partial_accept: 0.92 }
     }
 }
 
@@ -257,11 +261,23 @@ impl Matcher {
                 Err(_) => continue,
             };
             for (id, _probe_hits, norm_len) in rows {
-                if (norm_len as f32 - q_len).abs() > q_len * t.len_tolerance {
+                // A long line the game shows in parts: the query is the start or the end of it.
+                let partial = norm_len as f32 > q_len * (1.0 + t.len_tolerance);
+                if partial && (minimized || q_len < t.partial_min_chars as f32 || norm_len as f32 > q_len * 4.0) {
+                    continue;
+                }
+                if !partial && (norm_len as f32 - q_len).abs() > q_len * t.len_tolerance {
                     continue;
                 }
                 let Some(c) = self.candidate(p, id) else { continue };
                 let mut score = match (&c.source, minimized) {
+                    (Some(src), false) if partial => {
+                        let s = partial_score(norm, src);
+                        if s < t.partial_accept {
+                            continue;
+                        }
+                        s - 0.02
+                    }
                     (Some(src), false) => strsim::normalized_damerau_levenshtein(norm, src)
                         .max(strsim::normalized_damerau_levenshtein(&ocr_fold(norm), &ocr_fold(src))) as f32,
                     _ => {
@@ -308,4 +324,31 @@ impl Matcher {
             machine_generated: false,
         }
     }
+}
+
+/// How well `q` matches the start or the end of the longer `src` (cut at the nearest word boundary).
+fn partial_score(q: &str, src: &str) -> f32 {
+    let n = q.chars().count();
+    let chars: Vec<char> = src.chars().collect();
+    if n == 0 || chars.len() <= n {
+        return 0.0;
+    }
+    let cut = |s: &[char]| -> String { s.iter().collect() };
+    let mut best = 0.0f64;
+    // Allow the cut to fall a few characters either side so a part ending mid-word still lines up.
+    for d in 0..=4usize {
+        for len in [n.saturating_sub(d), (n + d).min(chars.len())] {
+            if len == 0 {
+                continue;
+            }
+            let head = cut(&chars[..len]);
+            let tail = cut(&chars[chars.len() - len..]);
+            for part in [head, tail] {
+                let s = strsim::normalized_damerau_levenshtein(q, &part)
+                    .max(strsim::normalized_damerau_levenshtein(&ocr_fold(q), &ocr_fold(&part)));
+                best = best.max(s);
+            }
+        }
+    }
+    best as f32
 }

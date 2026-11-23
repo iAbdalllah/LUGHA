@@ -237,5 +237,24 @@ fn a_package_built_on_disk_matches_the_in_memory_build() {
     let pkg = Package::from_lpk(&disk.lpk, &License::parse(&w.license("1.0.0", &ck, &w.device, NOW + 60)).unwrap(), &w.trust, &w.device, NOW).unwrap();
     let mut m = Matcher::new(vec![pkg]);
     assert_eq!(m.lookup(&Query::new("Continue")).map(|h| h.target), Some("متابعة".to_string()));
-    assert_eq!(m.lookup(&Query::new("Thcn wc tcll hirn thc caravarn lcft withaut us.")).is_none(), true);
+    assert!(m.lookup(&Query::new("Thcn wc tcll hirn thc caravarn lcft withaut us.")).is_none());
+}
+
+#[test]
+fn a_long_line_shown_in_parts_matches_from_its_start_or_end() {
+    let w = World::new();
+    let ck: [u8; 32] = crypto::random_bytes();
+    let mut es = entries();
+    es.push(entry(7, "Hey... police? I think somebody's here for my body parts. Lock 'em up!", "هيه... الشرطة؟ أظن فيه أحد يبي يقطعني. اقبضوا عليه", "side_dialogues", None, None));
+    es.push(entry(8, "Everyone stay calm, we're only gonna be a second. Pop the register.", "كلكم اهدوا، ما راح نطول. افتح الكاشير.", "side_dialogues", None, None));
+    let (sealed, _) = build_full(&meta("1.0.0"), &es, &w.key, &ck, None, NOW).unwrap();
+    let pkg = Package::from_lpk(&sealed.lpk, &License::parse(&w.license("1.0.0", &ck, &w.device, NOW + 60)).unwrap(), &w.trust, &w.device, NOW).unwrap();
+    let mut m = Matcher::new(vec![pkg]);
+
+    assert_eq!(m.lookup(&Query::new("Hey.. police? l think somebody's here for my body parts.")).map(|h| h.entry_id), Some(7));
+    assert_eq!(m.lookup(&Query::new("Everyone stay calm, we're only gonna be a second")).map(|h| h.entry_id), Some(8));
+    assert_eq!(m.lookup(&Query::new("we're only gonna be a second. Pop the register.")).map(|h| h.entry_id), Some(8));
+    // Too short to stand for a whole line, and text that is only similar, stay unmatched.
+    assert!(m.lookup(&Query::new("Hey... police?")).is_none());
+    assert!(m.lookup(&Query::new("Everyone stay calm, we're going to the beach today")).is_none());
 }
