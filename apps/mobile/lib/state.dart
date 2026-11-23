@@ -252,6 +252,7 @@ class AppState extends ChangeNotifier {
     try {
       final k = await _linkKeys();
       tv = await TvSender.pair(host: host, port: port, code: code, name: name, senderName: _senderName, secretHex: k.secretHex);
+      _startTvKeepAlive();
       pairedTvs = [...pairedTvs.where((t) => t.publicKey != tv!.tv.publicKey), tv!.tv];
       await _secure.write(key: 'paired_tvs', value: jsonEncode(pairedTvs.map((t) => t.toJson()).toList()));
       _pushStyle();
@@ -268,6 +269,7 @@ class AppState extends ChangeNotifier {
     try {
       final k = await _linkKeys();
       tv = await TvSender.connect(pairedTvs.last, senderName: _senderName, secretHex: k.secretHex);
+      _startTvKeepAlive();
       _pushStyle();
     } catch (e) {
       status = '$e';
@@ -300,6 +302,21 @@ class AppState extends ChangeNotifier {
   String? rpLastSource;
   StreamSubscription<RpEvent>? _rpSub;
   Timer? _rpHide;
+  Timer? _tvKeepAlive;
+
+  /// LUGHA TV drops a link that is silent for 20 s; subtitles can be minutes apart.
+  void _startTvKeepAlive() {
+    _tvKeepAlive?.cancel();
+    _tvKeepAlive = Timer.periodic(const Duration(seconds: 8), (_) {
+      try {
+        tv?.keepAlive();
+      } catch (_) {
+        tv = null;
+        _tvKeepAlive?.cancel();
+        notifyListeners();
+      }
+    });
+  }
 
   Future<void> loadRemotePlay() async {
     psnAccountId = await _secure.read(key: 'psn_account_id');

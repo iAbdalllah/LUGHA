@@ -64,9 +64,26 @@ final class AppModel: ObservableObject {
             tvConnected = s.tv.name
             tvStatus = ""
             await pushStyleToTV()
+            startTVKeepAlive()
             if let sub = subtitle { try? await s.show(sub.text, speaker: sub.speaker) }
         } catch {
             tvStatus = error.localizedDescription
+        }
+    }
+
+    /// LUGHA TV closes a link that is silent for 20 s, and subtitles can be minutes apart: ping every 8 s, and
+    /// reconnect (re-sending the style and the current line) as soon as a ping goes unanswered.
+    private var tvKeepAlive: Timer?
+    private func startTVKeepAlive() {
+        tvKeepAlive?.invalidate()
+        tvKeepAlive = Timer.scheduledTimer(withTimeInterval: 8, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, let tv = self.tv else { return }
+                if await tv.isAlive() { return }
+                self.tv = nil
+                self.tvConnected = nil
+                await self.reconnectTV()
+            }
         }
     }
 
@@ -74,11 +91,17 @@ final class AppModel: ObservableObject {
         guard tv == nil, let last = pairedTVs.last, let id = try? TVSender.identity(keychain) else { return }
         // The TV may have a new address: prefer what Bonjour currently reports under the same name.
         var target = last
+        // Right after launch Bonjour may not have answered yet; give it a moment (saved addresses can be stale).
+        for _ in 0 ..< 10 where !tvsFound.contains(where: { $0.name == last.name }) {
+            try? await Task.sleep(nanoseconds: 300_000_000)
+        }
         if let seen = tvsFound.first(where: { $0.name == last.name }) { target.host = seen.host; target.port = seen.port }
         if let s = try? await TVSender.connect(target, senderName: senderName, secretHex: id.secretHex) {
             tv = s
             tvConnected = s.tv.name
             await pushStyleToTV()
+            if let sub = subtitle { try? await s.show(sub.text, speaker: sub.speaker) }
+            startTVKeepAlive()
         }
     }
 

@@ -183,6 +183,9 @@ class TvSender {
   void setStyle({required double fontScale, required bool bottom, required double bgOpacity}) =>
       _send({'t': 'style.set', 'font_scale': fontScale, 'position_y': bottom ? 0.9 : 0.1, 'bg_opacity': bgOpacity});
 
+  /// LUGHA TV drops a link that is silent for 20 s; senders call this every few seconds between subtitles.
+  void keepAlive() => _send({'t': 'ping', 'id': _id++});
+
   Future<bool> ping() async {
     _send({'t': 'ping', 'id': _id++});
     return (await _receive())['t'] == 'pong';

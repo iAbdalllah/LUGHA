@@ -214,7 +214,22 @@ public final class TVSender: @unchecked Sendable {
     public func ping() async throws -> Bool {
         let id = takeID()
         try await send(["t": "ping", "id": id])
-        return try await receive()["t"] as? String == "pong"
+        // Skip anything else the TV sent (late paint acks) until our pong.
+        while true {
+            let r = try await receive()
+            if r["t"] as? String == "pong" { return true }
+        }
+    }
+
+    /// Ping with a deadline: false when the TV doesn't answer in time (link dropped).
+    public func isAlive(timeout: TimeInterval = 3) async -> Bool {
+        await withTaskGroup(of: Bool.self) { group in
+            group.addTask { (try? await self.ping()) ?? false }
+            group.addTask { try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000)); return false }
+            let first = await group.next() ?? false
+            group.cancelAll()
+            return first
+        }
     }
 
     /// `positionY`: vertical centre of the subtitle as a fraction of the picture (0 top, 1 bottom) — set to where the game
@@ -261,11 +276,15 @@ public final class TVBrowser: @unchecked Sendable {
         for r in results {
             guard case let .service(name, _, _, _) = r.endpoint else { continue }
             group.enter()
-            let c = NWConnection(to: r.endpoint, using: .tcp)
+            // Resolve over IPv4: a link-local IPv6 address (fe80::…) is useless once saved without its interface scope,
+            // and the TV is on the same IPv4 LAN anyway.
+            let params = NWParameters.tcp
+            (params.defaultProtocolStack.internetProtocol as? NWProtocolIP.Options)?.version = .v4
+            let c = NWConnection(to: r.endpoint, using: params)
             c.stateUpdateHandler = { state in
                 if case .ready = state, case let .hostPort(host, port)? = c.currentPath?.remoteEndpoint {
                     var h = "\(host)"
-                    if let pct = h.firstIndex(of: "%") { h = String(h[..<pct]) } // strip interface scope
+                    if let pct = h.firstIndex(of: "%") { h = String(h[..<pct]) }
                     found.append(Found(name: name, host: h, port: port.rawValue))
                     c.cancel()
                     group.leave()
