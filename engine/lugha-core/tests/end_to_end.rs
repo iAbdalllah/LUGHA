@@ -1,4 +1,4 @@
-use lugha_core::builder::{build_delta, build_full, validate, BuildMeta, KeyFile};
+use lugha_core::builder::{build_delta, build_full, build_full_on_disk, validate, BuildMeta, KeyFile};
 use lugha_core::content::{self, EntryInput, GlossaryTerm};
 use lugha_core::crypto::{self, DeviceKeys};
 use lugha_core::license::{License, LicensePayload};
@@ -218,4 +218,24 @@ fn validation_reports_problems() {
     }
     assert!(r.warnings.iter().any(|i| i.code == "glossary_dnt" && i.entry_id == Some(12)));
     assert!(matches!(build_full(&meta("1.0.0"), &bad, &KeyFile::generate("k"), &[0; 32], None, NOW), Err(Error::Build(_))));
+}
+
+#[test]
+fn a_package_built_on_disk_matches_the_in_memory_build() {
+    let w = World::new();
+    let ck: [u8; 32] = crypto::random_bytes();
+    let dir = std::env::temp_dir().join(format!("lugha-disk-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (mem, _) = build_full(&meta("1.0.0"), &entries(), &w.key, &ck, None, NOW).unwrap();
+    let (disk, report) = build_full_on_disk(&meta("1.0.0"), &entries(), &w.key, &ck, None, NOW, &dir).unwrap();
+    assert!(report.ok());
+    assert_eq!(disk.manifest.content_sha256, mem.manifest.content_sha256, "same logical content");
+    assert_eq!(disk.manifest.entry_count, mem.manifest.entry_count);
+    assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 0, "no scratch files left behind");
+    std::fs::remove_dir(&dir).unwrap();
+
+    let pkg = Package::from_lpk(&disk.lpk, &License::parse(&w.license("1.0.0", &ck, &w.device, NOW + 60)).unwrap(), &w.trust, &w.device, NOW).unwrap();
+    let mut m = Matcher::new(vec![pkg]);
+    assert_eq!(m.lookup(&Query::new("Continue")).map(|h| h.target), Some("متابعة".to_string()));
+    assert_eq!(m.lookup(&Query::new("Thcn wc tcll hirn thc caravarn lcft withaut us.")).is_none(), true);
 }

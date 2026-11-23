@@ -17,6 +17,9 @@ return [
     // Largest admin upload (translation import files), in KB. Must stay under PHP's upload_max_filesize.
     'max_upload_kb' => (int) env('LUGHA_MAX_UPLOAD_KB', 204800),
 
+    // Packages with more lines than this get no delta (building one needs several full copies in memory).
+    'delta_max_lines' => (int) env('LUGHA_DELTA_MAX_LINES', 100000),
+
     // Saudi VAT in basis points (1500 = 15%). Store prices are VAT-inclusive.
     'vat_rate_bps' => (int) env('LUGHA_VAT_RATE_BPS', 1500),
     'seller' => [

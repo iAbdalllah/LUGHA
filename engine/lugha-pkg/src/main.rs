@@ -184,7 +184,8 @@ fn run(cli: Cli) -> Result<(serde_json::Value, u8), String> {
             }
             let kf: KeyFile = read_json(&key)?;
             let profile = profile.map(|p| std::fs::read(&p).map_err(|e| e.to_string())).transpose()?;
-            let (sealed, report) = builder::build_full(&meta, &entries, &kf, &env_key("LUGHA_CONTENT_KEY")?, profile.as_deref(), now()).map_err(|e| e.to_string())?;
+            let work = out.parent().filter(|p| !p.as_os_str().is_empty()).map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
+            let (sealed, report) = builder::build_full_on_disk(&meta, &entries, &kf, &env_key("LUGHA_CONTENT_KEY")?, profile.as_deref(), now(), &work).map_err(|e| e.to_string())?;
             Ok((json!({"file": write_out(&out, &sealed.lpk)?, "manifest": sealed.manifest, "report": report}), 0))
         }
         Cmd::Delta { base, meta, entries, key, out } => {

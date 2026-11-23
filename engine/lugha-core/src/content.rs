@@ -180,16 +180,14 @@ pub fn logical_hash(conn: &Connection) -> Result<String> {
     let mut stmt = conn.prepare(
         "SELECT e.id, e.source, e.target, c.slug, e.speaker, e.scene, e.seq FROM entries e JOIN categories c ON c.id = e.category_id ORDER BY e.id",
     )?;
-    let rows: Vec<[String; 7]> = stmt
-        .query_map([], |r| {
-            Ok([
-                r.get::<_, i64>(0)?.to_string(), s(r.get(1)?), r.get(2)?, r.get(3)?, s(r.get(4)?), s(r.get(5)?),
-                r.get::<_, Option<i64>>(6)?.map(|v| v.to_string()).unwrap_or_else(|| "\u{0}".into()),
-            ])
-        })?
-        .collect::<std::result::Result<_, _>>()?;
     let mut alias = conn.prepare("SELECT hex(key_hash) FROM entry_aliases WHERE entry_id = ?1 ORDER BY 1")?;
-    for row in rows {
+    // Streamed row by row: a whole game is hundreds of thousands of lines.
+    let mut rows = stmt.query([])?;
+    while let Some(r) = rows.next()? {
+        let row = [
+            r.get::<_, i64>(0)?.to_string(), s(r.get(1)?), r.get(2)?, r.get(3)?, s(r.get(4)?), s(r.get(5)?),
+            r.get::<_, Option<i64>>(6)?.map(|v| v.to_string()).unwrap_or_else(|| "\u{0}".into()),
+        ];
         feed(&row);
         let aliases: Vec<String> = alias.query_map([&row[0]], |r| r.get(0))?.collect::<std::result::Result<_, _>>()?;
         feed(&[format!("aliases:{}", aliases.join(","))]);

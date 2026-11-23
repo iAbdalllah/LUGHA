@@ -30,9 +30,8 @@ final class BuildPackageVersion
         @mkdir($work, 0700, true);
 
         try {
-            [$meta, $entries] = $this->export($version);
+            [$meta, $entryCount] = $this->export($version, "$work/entries.jsonl");
             file_put_contents("$work/meta.json", json_encode($meta, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
-            file_put_contents("$work/entries.jsonl", implode("\n", array_map(fn ($e) => json_encode($e, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $entries)));
 
             $key = SigningKey::load();
             $contentKey = random_bytes(32);
@@ -49,20 +48,26 @@ final class BuildPackageVersion
             $package = $version->package;
             $dir = "packages/{$package->slug}";
             $fullPath = "$dir/{$package->slug}-{$version->version}.lpk";
-            Storage::disk(self::DISK)->put($fullPath, file_get_contents("$work/full.lpk"));
+            $this->store($fullPath, "$work/full.lpk");
             $version->files()->delete();
             PackageFile::create(['package_version_id' => $version->id, 'kind' => 'full', 'disk' => self::DISK, 'path' => $fullPath,
                 'size_bytes' => $result['json']['file']['size'], 'sha256' => $result['json']['file']['sha256']]);
 
-            $log = ["Full package: {$result['json']['file']['size']} bytes, ".count($entries).' lines.'];
-            if ($base = $this->deltaBase($version)) {
+            $log = ["Full package: {$result['json']['file']['size']} bytes, {$entryCount} lines."];
+            // A delta of a very large package costs several full copies of it in memory to build and verify — more
+            // than shared hosting allows. Devices then download the full package instead.
+            $base = $entryCount <= (int) config('lugha.delta_max_lines') ? $this->deltaBase($version) : null;
+            if ($entryCount > (int) config('lugha.delta_max_lines')) {
+                $log[] = 'Delta skipped: more than '.config('lugha.delta_max_lines').' lines (devices download the full package).';
+            }
+            if ($base) {
                 $baseFile = $base->fullFile();
                 $delta = $this->run(['delta', '--base', Storage::disk($baseFile->disk)->path($baseFile->path), '--meta', "$work/meta.json",
                     '--entries', "$work/entries.jsonl", '--key', SigningKey::path(), '--out', "$work/delta.lpk"],
                     ['LUGHA_CONTENT_KEY' => bin2hex($contentKey), 'LUGHA_BASE_CONTENT_KEY' => bin2hex($base->contentKey())]);
                 if ($delta['code'] === 0) {
                     $deltaPath = "$dir/{$package->slug}-{$base->version}_to_{$version->version}.lpkd";
-                    Storage::disk(self::DISK)->put($deltaPath, file_get_contents("$work/delta.lpk"));
+                    $this->store($deltaPath, "$work/delta.lpk");
                     PackageFile::create(['package_version_id' => $version->id, 'kind' => 'delta', 'base_version_id' => $base->id, 'disk' => self::DISK,
                         'path' => $deltaPath, 'size_bytes' => $delta['json']['file']['size'], 'sha256' => $delta['json']['file']['sha256']]);
                     $log[] = "Delta from {$base->version}: {$delta['json']['file']['size']} bytes.";
@@ -75,7 +80,7 @@ final class BuildPackageVersion
                 'build_status' => 'validated',
                 'content_key_encrypted' => bin2hex($contentKey),
                 'signing_key_id' => $key->keyId,
-                'entry_count' => count($entries),
+                'entry_count' => $entryCount,
                 'coverage' => $meta['coverage_bp'],
                 'build_report' => $result['json']['report'] ?? null,
                 'build_log' => implode("\n", $log),
@@ -93,8 +98,24 @@ final class BuildPackageVersion
         }
     }
 
-    /** @return array{0: array, 1: array<int, array>} */
-    public function export(PackageVersion $version): array
+    /** Copies a built file into storage as a stream (packages can be hundreds of MB). */
+    private function store(string $path, string $file): void
+    {
+        $in = fopen($file, 'rb');
+        try {
+            Storage::disk(self::DISK)->writeStream($path, $in);
+        } finally {
+            is_resource($in) && fclose($in);
+        }
+    }
+
+    /**
+     * Writes the package's published lines to $entriesPath (JSON lines, by id) row by row — a whole game is
+     * hundreds of thousands of lines, so they are never all in memory — and returns the build meta and line count.
+     *
+     * @return array{0: array, 1: int}
+     */
+    public function export(PackageVersion $version, string $entriesPath): array
     {
         $package = $version->package()->with(['game.versions', 'style', 'platforms'])->first();
         $categories = $package->effectiveCategories();
@@ -109,11 +130,17 @@ final class BuildPackageVersion
             ->when($maxId, fn ($q) => $q->where(fn ($w) => $w->whereNull('min_game_version_id')->orWhere('min_game_version_id', '<=', $maxId)))
             ->when($minId, fn ($q) => $q->where(fn ($w) => $w->whereNull('max_game_version_id')->orWhere('max_game_version_id', '>=', $minId)));
 
-        $entries = $base()->where('status', TranslationStatus::Published)->orderBy('id')->get()
-            ->map(fn (Translation $t) => array_filter([
-                'id' => $t->id, 'source' => $t->source_text, 'target' => $t->target_text, 'category' => $slugs[$t->category_id],
-                'speaker' => $t->speaker, 'scene' => $t->scene_ref, 'seq' => $t->sequence_no,
-            ], fn ($v) => $v !== null))->values()->all();
+        $out = fopen($entriesPath, 'wb');
+        $count = 0;
+        $rows = $base()->toBase()->where('status', TranslationStatus::Published->value)
+            ->select(['id', 'source_text', 'target_text', 'category_id', 'speaker', 'scene_ref', 'sequence_no'])->lazyById(2000);
+        foreach ($rows as $t) {
+            fwrite($out, ($count++ ? "\n" : '').json_encode(array_filter([
+                'id' => (int) $t->id, 'source' => $t->source_text, 'target' => $t->target_text, 'category' => $slugs[$t->category_id],
+                'speaker' => $t->speaker, 'scene' => $t->scene_ref, 'seq' => $t->sequence_no === null ? null : (int) $t->sequence_no,
+            ], fn ($v) => $v !== null), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+        }
+        fclose($out);
 
         $totals = $base()->selectRaw('category_id, count(*) as n')->groupBy('category_id')->pluck('n', 'category_id');
         $published = $base()->where('status', TranslationStatus::Published)->selectRaw('category_id, count(*) as n')->groupBy('category_id')->pluck('n', 'category_id');
@@ -145,7 +172,7 @@ final class BuildPackageVersion
             'glossary' => $glossary,
         ];
 
-        return [$meta, $entries];
+        return [$meta, $count];
     }
 
     /** Previous built release of the same major that a delta can start from. */

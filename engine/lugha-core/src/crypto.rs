@@ -23,6 +23,13 @@ pub fn aes_encrypt(key: &[u8; 32], nonce: &[u8; 12], plain: &[u8]) -> Vec<u8> {
     Aes256Gcm::new(key.into()).encrypt(Nonce::from_slice(nonce), plain).expect("aes-gcm encrypt")
 }
 
+/// Same output as [aes_encrypt] (ciphertext then tag), encrypting the buffer in place.
+pub fn aes_encrypt_vec(key: &[u8; 32], nonce: &[u8; 12], mut buf: Vec<u8>) -> Vec<u8> {
+    use aes_gcm::aead::AeadInPlace;
+    Aes256Gcm::new(key.into()).encrypt_in_place(Nonce::from_slice(nonce), b"", &mut buf).expect("aes-gcm encrypt");
+    buf
+}
+
 pub fn aes_decrypt(key: &[u8; 32], nonce: &[u8; 12], cipher: &[u8]) -> Result<Vec<u8>> {
     Aes256Gcm::new(key.into()).decrypt(Nonce::from_slice(nonce), cipher).map_err(|_| Error::Decrypt)
 }

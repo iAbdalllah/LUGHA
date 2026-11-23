@@ -181,7 +181,13 @@ pub fn validate(meta: &BuildMeta, entries: &[EntryInput]) -> Report {
 
 pub fn build_db(meta: &BuildMeta, entries: &[EntryInput]) -> Result<Connection> {
     let mut conn = Connection::open_in_memory()?;
-    content::create(&conn)?;
+    fill_db(&mut conn, meta, entries)?;
+    conn.execute_batch("VACUUM")?;
+    Ok(conn)
+}
+
+fn fill_db(conn: &mut Connection, meta: &BuildMeta, entries: &[EntryInput]) -> Result<()> {
+    content::create(conn)?;
     let tx = conn.transaction()?;
     for (k, v) in meta_rows(meta) {
         content::set_meta(&tx, &k, &v)?;
@@ -194,8 +200,7 @@ pub fn build_db(meta: &BuildMeta, entries: &[EntryInput]) -> Result<Connection> 
     }
     content::finalize(&tx)?;
     tx.commit()?;
-    conn.execute_batch("VACUUM")?;
-    Ok(conn)
+    Ok(())
 }
 
 fn meta_rows(meta: &BuildMeta) -> Vec<(String, String)> {
@@ -214,11 +219,22 @@ pub struct Sealed {
     pub manifest: Manifest,
 }
 
+/// zstd level: the strongest for normal packages; a faster one for very large content (a whole game's script),
+/// where level 19 takes many minutes for a few percent.
+fn zstd_level(len: u64) -> i32 {
+    if len > 64 * 1024 * 1024 { 12 } else { 19 }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn seal(meta: &BuildMeta, kind: Kind, base_version: Option<String>, payload: &[u8], content_sha256: String, entry_count: u32, key: &KeyFile, content_key: &[u8; 32], profile: Option<&[u8]>, now: i64) -> Result<Sealed> {
+    let compressed = zstd::encode_all(Cursor::new(payload), zstd_level(payload.len() as u64))?;
+    seal_compressed(meta, kind, base_version, compressed, content_sha256, entry_count, key, content_key, profile, now)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn seal_compressed(meta: &BuildMeta, kind: Kind, base_version: Option<String>, compressed: Vec<u8>, content_sha256: String, entry_count: u32, key: &KeyFile, content_key: &[u8; 32], profile: Option<&[u8]>, now: i64) -> Result<Sealed> {
     let nonce: [u8; 12] = crypto::random_bytes();
-    let compressed = zstd::encode_all(Cursor::new(payload), 19)?;
-    let enc = crypto::aes_encrypt(content_key, &nonce, &compressed);
+    let enc = crypto::aes_encrypt_vec(content_key, &nonce, compressed);
     let payload_name = if kind == Kind::Full { "content.db.zst.enc" } else { "delta.ops.zst.enc" };
 
     let mut files_data: BTreeMap<String, Vec<u8>> = BTreeMap::new();
@@ -292,6 +308,43 @@ pub fn build_full(meta: &BuildMeta, entries: &[EntryInput], key: &KeyFile, conte
     let hash = content::logical_hash(&conn)?;
     let db = content::to_bytes(&conn)?;
     Ok((seal(meta, Kind::Full, None, &db, hash, entries.len() as u32, key, content_key, profile, now)?, report))
+}
+
+/// [build_full] for large packages: the content DB is built in a temporary file in `work_dir` (a small page cache
+/// instead of the whole DB in memory, several times over) and compressed straight from that file. Same output.
+#[allow(clippy::too_many_arguments)]
+pub fn build_full_on_disk(meta: &BuildMeta, entries: &[EntryInput], key: &KeyFile, content_key: &[u8; 32], profile: Option<&[u8]>, now: i64, work_dir: &std::path::Path) -> Result<(Sealed, Report)> {
+    let report = validate(meta, entries);
+    if !report.ok() {
+        return Err(Error::Build(serde_json::to_string(&report)?));
+    }
+    let tag: [u8; 6] = crypto::random_bytes();
+    let tmp = work_dir.join(format!(".content-{}.db", hex::encode(tag)));
+    let packed = work_dir.join(format!(".content-{}.packed.db", hex::encode(tag)));
+    let cleanup = || {
+        for p in [&tmp, &packed] {
+            for suffix in ["", "-journal", "-wal", "-shm"] {
+                let _ = std::fs::remove_file(format!("{}{suffix}", p.display()));
+            }
+        }
+    };
+    let result = (|| -> Result<(Vec<u8>, String)> {
+        let mut conn = Connection::open(&tmp)?;
+        // A scratch file: no crash safety needed, and at most ~64 MB of page cache.
+        conn.execute_batch("PRAGMA journal_mode = OFF; PRAGMA synchronous = OFF; PRAGMA cache_size = -65536; PRAGMA temp_store = FILE;")?;
+        fill_db(&mut conn, meta, entries)?;
+        let hash = content::logical_hash(&conn)?;
+        // Compact copy (what VACUUM gives the in-memory build), written file to file.
+        conn.execute("VACUUM INTO ?1", [packed.to_string_lossy()])?;
+        drop(conn);
+        let len = std::fs::metadata(&packed)?.len();
+        let mut compressed = Vec::new();
+        zstd::stream::copy_encode(std::fs::File::open(&packed)?, &mut compressed, zstd_level(len))?;
+        Ok((compressed, hash))
+    })();
+    cleanup();
+    let (compressed, hash) = result?;
+    Ok((seal_compressed(meta, Kind::Full, None, compressed, hash, entries.len() as u32, key, content_key, profile, now)?, report))
 }
 
 /// Ops that turn `old` (a plain content DB) into the package described by `meta` + `entries`.
