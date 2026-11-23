@@ -20,8 +20,9 @@ let package = Package(
             dependencies: ["CLugha"],
             path: "Sources/LughaKit",
             linkerSettings: [
-                .unsafeFlags(["-L\(engineLib)"]),
-                .linkedLibrary("lugha_ffi"),
+                // The static archive by path: the same folder also holds liblugha_ffi.dylib (built for Android's
+                // cdylib), and `-l` would pick the dylib — an absolute path outside the app that macOS refuses to load.
+                .unsafeFlags(["\(engineLib)/liblugha_ffi.a"]),
                 .linkedFramework("Security"),
                 .linkedFramework("Vision"),
                 .linkedFramework("ScreenCaptureKit"),

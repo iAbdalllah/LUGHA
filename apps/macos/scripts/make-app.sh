@@ -36,3 +36,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 PLIST
 codesign --force --options runtime --sign "${SIGN_IDENTITY:--}" "$APP"
 echo "$APP"
+
+# Guard: the app must not depend on anything outside itself and the system (a dylib by absolute path crashes at launch).
+if otool -L "$APP/Contents/MacOS/LUGHA" | tail -n +2 | grep -vqE '^\s*(/System/|/usr/lib/)'; then
+  echo "error: LUGHA links a library outside the system:" >&2; otool -L "$APP/Contents/MacOS/LUGHA" >&2; exit 1
+fi
