@@ -13,4 +13,6 @@ Schedule::command('lugha:qa-scores')->dailyAt('03:30');
 
 // Shared hosting has no supervisor: the one cron entry (schedule:run, every minute) also drains the queue
 // (order and feedback emails). A worker that finds the queue empty exits at once.
-Schedule::command('queue:work --stop-when-empty --max-time=50 --tries=3')->everyMinute()->withoutOverlapping()->runInBackground();
+// The overlap lock expires after 5 min: if the host kills a background worker before it can release it, the queue
+// would otherwise stall for 24 h. A second worker never takes a running job (queue retry_after is 1 h).
+Schedule::command('queue:work --stop-when-empty --max-time=50 --tries=3')->everyMinute()->withoutOverlapping(5)->runInBackground();
