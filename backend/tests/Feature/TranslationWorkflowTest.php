@@ -117,11 +117,13 @@ class TranslationWorkflowTest extends TestCase
         $csv .= "BIG_1,dialogues,Line number 1,سطر واحد\n"; // the same key again later in the file updates, not duplicates
         $csv .= "OTHER_KEY,dialogues,Line number 2,سطر ٢\n"; // another key with the same English shares that line
         $csv .= ",dialogues,Line number 3,سطر ٣\n"; // an unkeyed row with known English updates it
+        $csv .= "SING_1,dialogue,Singular category,مفرد\nSUB_1,Subtitle,A subtitle,ترجمة\n"; // other tools' category names
         Storage::disk('local')->put('imports/big.csv', $csv);
 
         ImportTranslationsJob::dispatchSync('imports/big.csv', $game, $style, $user);
 
-        $this->assertSame($rows, Translation::where('game_id', $game->id)->count());
+        $this->assertSame($rows + 2, Translation::where('game_id', $game->id)->count());
+        $this->assertSame('dialogues', Translation::where('string_key', 'SUB_1')->first()->category->slug);
         $this->assertSame('سطر واحد', Translation::where('string_key', 'BIG_1')->value('target_text'));
         $this->assertSame('سطر ٣', Translation::where('string_key', 'BIG_3')->value('target_text'));
         $this->assertNull(Translation::where('string_key', 'OTHER_KEY')->first());

@@ -22,6 +22,9 @@ final class TranslationTransfer
 {
     public const COLUMNS = ['string_key', 'category', 'source_text', 'target_text', 'speaker', 'context', 'scene_ref', 'sequence_no', 'status'];
 
+    /** Category names other tools use, mapped to LUGHA's (singular forms are tried automatically). */
+    public const CATEGORY_ALIASES = ['subtitle' => 'dialogues', 'subtitles' => 'dialogues', 'dialog' => 'dialogues', 'cutscene_subtitle' => 'cutscenes', 'menu_item' => 'menus', 'hud' => 'ui', 'system' => 'system_messages'];
+
     /** Rows saved per database transaction: big files commit as they go instead of holding one huge transaction. */
     public const CHUNK = 500;
 
@@ -90,7 +93,7 @@ final class TranslationTransfer
             foreach ($rows as $i => $row) {
                 $line = $i + 2; // header is line 1
                 $source = trim((string) ($row['source_text'] ?? ''));
-                $catId = $categories[trim((string) ($row['category'] ?? ''))] ?? null;
+                $catId = $this->categoryId((string) ($row['category'] ?? ''), $categories);
                 if ($source === '') {
                     $error($line, __('Missing source_text'));
 
@@ -160,6 +163,15 @@ final class TranslationTransfer
                 $stats['updated']++;
             }
         });
+    }
+
+    /** A category by its slug, its plural, or a known alias ("dialogue", "Subtitle" → dialogues). */
+    private function categoryId(string $name, $categories): ?int
+    {
+        $slug = str_replace([' ', '-'], '_', strtolower(trim($name)));
+        $slug = self::CATEGORY_ALIASES[$slug] ?? $slug;
+
+        return $categories[$slug] ?? $categories[$slug.'s'] ?? null;
     }
 
     /** Writes the game's lines to a temp file and returns its path. */
