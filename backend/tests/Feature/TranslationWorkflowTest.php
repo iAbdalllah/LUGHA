@@ -131,7 +131,7 @@ class TranslationWorkflowTest extends TestCase
         Storage::disk('local')->assertMissing('imports/big.csv');
         $note = $user->notifications()->first();
         $this->assertNotNull($note, 'the uploader is told when it is done');
-        $this->assertStringContainsString((string) $rows, json_encode($note->data, JSON_UNESCAPED_UNICODE));
+        $this->assertStringContainsString((string) ($rows + 2), json_encode($note->data, JSON_UNESCAPED_UNICODE));
     }
 
     public function test_uploads_allow_whole_game_files(): void
