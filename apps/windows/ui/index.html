@@ -59,6 +59,23 @@
     </div>
     <div class="preview" id="preview"><span class="muted">ستظهر الترجمة هنا وفوق اللعبة.</span></div>
     <div class="card">
+      <h2>اقرأ الترجمة من</h2>
+      <p class="muted">للعب على التلفاز: اختر نافذة PS Remote Play. تستمر القراءة والنافذة خلف النوافذ الأخرى — لا تصغّرها.</p>
+      <div class="row">
+        <label>المصدر<select id="source"><option value="">منطقة من الشاشة</option></select></label>
+        <button id="source-refresh" class="ghost">تحديث القائمة</button>
+      </div>
+      <div id="window-opts" hidden>
+        <p class="muted">منطقة الترجمة داخل النافذة (نِسَب من حجمها، الافتراضي: الشريط السفلي).</p>
+        <div class="grid4" dir="ltr">
+          <label>X %<input id="wx" type="number" min="0" max="100"></label><label>Y %<input id="wy" type="number" min="0" max="100"></label>
+          <label>W %<input id="ww" type="number" min="1" max="100"></label><label>H %<input id="wh" type="number" min="1" max="100"></label>
+        </div>
+        <label class="check"><input type="checkbox" id="show-pc"> اعرض الترجمة على هذا الكمبيوتر أيضًا</label>
+        <div class="row"><button id="window-save">حفظ</button></div>
+      </div>
+    </div>
+    <div class="card" id="region-card">
       <h2>منطقة الالتقاط</h2>
       <p class="muted">المنطقة التي تظهر فيها ترجمة اللعبة الإنجليزية (بالبكسل على الشاشة الرئيسية).</p>
       <div class="grid4" dir="ltr">

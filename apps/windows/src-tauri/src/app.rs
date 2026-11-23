@@ -65,6 +65,13 @@ pub struct Settings {
     pub tv_addr: Option<String>,
     pub tv_public: Option<String>,
     pub interval_ms: u64,
+    /// Window mode: read from the window whose title contains this (e.g. "PS Remote Play") instead of a screen
+    /// region. It keeps working while the window is covered, so the game can be played on the TV.
+    pub capture_window: Option<String>,
+    /// Subtitle area inside that window, as fractions (x, y, w, h) of its client area.
+    pub window_area: (f32, f32, f32, f32),
+    /// Also draw subtitles on this PC (often off in window mode: they go to the TV).
+    pub show_on_pc: bool,
 }
 
 impl Default for Settings {
@@ -76,6 +83,9 @@ impl Default for Settings {
             tv_addr: None,
             tv_public: None,
             interval_ms: 200,
+            capture_window: None,
+            window_area: (0.08, 0.70, 0.84, 0.26),
+            show_on_pc: true,
         }
     }
 }
@@ -245,6 +255,9 @@ pub struct Status {
     tv_connected: bool,
     ocr_language: String,
     windows: bool,
+    capture_window: Option<String>,
+    window_area: (f32, f32, f32, f32),
+    show_on_pc: bool,
     last_error: Option<String>,
 }
 
@@ -295,6 +308,9 @@ fn status(core: tauri::State<'_, Shared>, cap: tauri::State<'_, Capture>) -> Cmd
         tv_paired: c.settings.tv_public.is_some(),
         tv_connected: c.tv.is_some(),
         ocr_language: c.settings.ocr_language.clone(),
+        capture_window: c.settings.capture_window.clone(),
+        window_area: c.settings.window_area,
+        show_on_pc: c.settings.show_on_pc,
         windows: cfg!(windows),
         last_error: c.last_error.take(),
     })
@@ -389,6 +405,34 @@ fn report_line(core: tauri::State<'_, Shared>, package: String, entry_id: i64, r
 #[tauri::command(async)]
 fn history(core: tauri::State<'_, Shared>) -> Cmd<Vec<Line>> {
     Ok(lock(&core).history.iter().map(Line::from).collect())
+}
+
+/// Titles of open windows, PS Remote Play first.
+#[tauri::command(async)]
+fn list_windows() -> Cmd<Vec<String>> {
+    #[cfg(windows)]
+    {
+        let mut t: Vec<String> = crate::capture::list_windows().into_iter().map(|(_, t)| t).filter(|t| !t.starts_with("LUGHA")).collect();
+        t.sort_by_key(|x| (!x.to_lowercase().contains("remote play"), x.to_lowercase()));
+        t.dedup();
+        Ok(t)
+    }
+    #[cfg(not(windows))]
+    Ok(vec![])
+}
+
+#[tauri::command(async)]
+fn set_capture_window(core: tauri::State<'_, Shared>, title: Option<String>, area: Option<(f32, f32, f32, f32)>, show_on_pc: Option<bool>) -> Cmd<()> {
+    let mut c = lock(&core);
+    c.settings.capture_window = title.filter(|t| !t.trim().is_empty());
+    if let Some(a) = area.filter(|a| a.2 > 0.02 && a.3 > 0.02) {
+        c.settings.window_area = a;
+    }
+    if let Some(s) = show_on_pc {
+        c.settings.show_on_pc = s;
+    }
+    c.settings.save();
+    Ok(())
 }
 
 #[tauri::command(async)]
@@ -487,10 +531,16 @@ fn start_capture(app: tauri::AppHandle, core: tauri::State<'_, Shared>, cap: tau
     if cap.running.swap(true, Ordering::SeqCst) {
         return Ok(());
     }
-    let region = lock(&core).settings.region.unwrap_or_else(default_region);
-    place_overlay(&app, region);
-    if let Some(w) = app.get_webview_window("overlay") {
-        let _ = w.show();
+    let (region, show_on_pc, window_mode) = {
+        let c = lock(&core);
+        (c.settings.region.unwrap_or_else(default_region), c.settings.show_on_pc, c.settings.capture_window.is_some())
+    };
+    // Window mode with "show on this PC" off: subtitles go only to the TV.
+    if !window_mode || show_on_pc {
+        place_overlay(&app, region);
+        if let Some(w) = app.get_webview_window("overlay") {
+            let _ = w.show();
+        }
     }
     let running = cap.running.clone();
     let shared: Shared = core.inner().clone();
@@ -522,11 +572,23 @@ fn capture_loop(app: tauri::AppHandle, shared: Shared, running: Arc<AtomicBool>)
     let mut pipeline = Pipeline::default();
     while running.load(Ordering::SeqCst) {
         let t0 = Instant::now();
-        let (region, interval) = {
+        let (region, interval, window, area) = {
             let c = shared.lock().unwrap_or_else(|p| p.into_inner());
-            (c.settings.region.unwrap_or_else(default_region), c.settings.interval_ms)
+            (c.settings.region.unwrap_or_else(default_region), c.settings.interval_ms, c.settings.capture_window.clone(), c.settings.window_area)
         };
-        let lines = crate::capture::capture(region.into()).ok().and_then(|f| ocr.recognize(&f).ok()).unwrap_or_default();
+        let frame = match window {
+            // Window mode: the window may be behind others while the game is played on the TV.
+            Some(title) => match crate::capture::find_window(&title) {
+                Some(hwnd) => crate::capture::capture_window(hwnd, area).ok(),
+                None => {
+                    let _ = app.emit("capture-error", format!("لم يُعثر على نافذة «{title}». افتح PS Remote Play واتصل بجهاز PS5."));
+                    running.store(false, Ordering::SeqCst);
+                    break;
+                }
+            },
+            None => crate::capture::capture(region.into()).ok(),
+        };
+        let lines = frame.and_then(|f| ocr.recognize(&f).ok()).unwrap_or_default();
         let mut c = shared.lock().unwrap_or_else(|p| p.into_inner());
         let core = &mut *c;
         let changed = pipeline.ingest(&lines, Instant::now(), |t| {
@@ -608,6 +670,8 @@ pub fn run() {
             lookup,
             history,
             report_line,
+            list_windows,
+            set_capture_window,
             set_region,
             set_ocr_language,
             tv_pair,

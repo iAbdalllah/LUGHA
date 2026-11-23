@@ -59,6 +59,8 @@ dialog::backdrop { background: #0009; }
 .quote .sub { font-size: 18px; font-weight: 600; }
 .quote .src { color: var(--muted); font-size: 13px; direction: ltr; unicode-bidi: isolate; text-align: end; }
 .row.end { justify-content: flex-end; }
+label.check { flex-direction: row; align-items: center; gap: 8px; color: var(--text); }
+label.check input { width: auto; }
 .list li .txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .list li .acts { display: flex; align-items: center; }
 button.link { background: none; border: 0; color: var(--muted); padding: 4px 8px; font-size: 13px; }

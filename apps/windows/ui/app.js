@@ -102,6 +102,24 @@ async function refresh() {
   d.textContent = `هذا الجهاز: ${state.device_id || '—'} · الخادم: ${state.server}`;
   acc.append(n, d);
   $('ocr-lang').value = state.ocr_language;
+
+  // Read from: screen region or a window (PS Remote Play)
+  const win = state.capture_window;
+  if (win && ![...$('source').options].some((o) => o.value === win)) $('source').append(new Option(win + ' (غير مفتوحة)', win));
+  $('source').value = win || '';
+  $('window-opts').hidden = !win;
+  $('region-card').hidden = !!win;
+  const a = state.window_area;
+  [['wx', a[0]], ['wy', a[1]], ['ww', a[2]], ['wh', a[3]]].forEach(([id, v]) => ($(id).value = Math.round(v * 100)));
+  $('show-pc').checked = state.show_on_pc;
+}
+
+async function loadWindows() {
+  const titles = await call('list_windows');
+  const cur = $('source').value;
+  $('source').innerHTML = '<option value="">منطقة من الشاشة</option>';
+  titles.forEach((t) => $('source').append(new Option(t.toLowerCase().includes('remote play') ? t + ' ★' : t, t)));
+  $('source').value = cur;
 }
 
 function btn(label, fn, cls = '') {
@@ -215,6 +233,14 @@ $('region-save').onclick = async () => {
   toast('تم حفظ المنطقة');
   refresh();
 };
+$('source').onchange = async (e) => { await call('set_capture_window', { title: e.target.value || null, area: null, showOnPc: null }); refresh(); };
+$('source-refresh').onclick = loadWindows;
+$('window-save').onclick = async () => {
+  const area = ['wx', 'wy', 'ww', 'wh'].map((id) => Math.min(100, Math.max(0, +$(id).value)) / 100);
+  await call('set_capture_window', { title: $('source').value || null, area, showOnPc: $('show-pc').checked });
+  toast('تم الحفظ');
+  refresh();
+};
 $('region-reset').onclick = async () => { await call('set_region', { region: null }); refresh(); };
 
 $('try-go').onclick = async () => {
@@ -250,7 +276,7 @@ listen('subtitle', ({ payload }) => renderSub(payload));
 listen('tv-lost', () => { toast('انقطع الاتصال بالتلفاز', true); refresh(); });
 listen('capture-error', ({ payload }) => { toast(payload, true); refresh(); });
 
-refresh();
+loadWindows().then(refresh);
 
 // ---- browser preview mock (not used inside the app) ----
 function mockInvoke(cmd, args) {
@@ -258,6 +284,7 @@ function mockInvoke(cmd, args) {
     signed_in: location.hash !== '#signin', user: 'لاعب تجريبي', server: 'http://127.0.0.1:8040', device_id: '01JD7W…',
     packages: [['sandline-sa-full', '1.1.0']], region: { x: 192, y: 810, w: 1536, h: 243 }, capturing: false,
     tv: '192.168.1.20:47800', tv_paired: true, tv_connected: true, ocr_language: 'en-US', windows: true, last_error: null,
+    capture_window: null, window_area: [0.08, 0.7, 0.84, 0.26], show_on_pc: true,
   });
   const lines = { 'water costs more than gold out here': { text: 'الماء هنا أغلى من الذهب.', speaker: 'سالم', source: 'Water costs more than gold out here', entry_id: 6, package_id: 'sandline-sa-full' } };
   switch (cmd) {
@@ -268,6 +295,8 @@ function mockInvoke(cmd, args) {
     case 'history': return Promise.resolve(Object.values(lines));
     case 'sync_now': return Promise.resolve({ installed: [], updated: [], removed: [], errors: [] });
     case 'tv_test': return Promise.resolve(18);
+    case 'list_windows': return Promise.resolve(['PS Remote Play', 'Discord', 'File Explorer']);
+    case 'set_capture_window': if (args.title !== undefined) m.capture_window = args.title; if (args.area) m.window_area = args.area; if (args.showOnPc != null) m.show_on_pc = args.showOnPc; return Promise.resolve();
     case 'report_line': mockInvoke.last = args; return Promise.resolve();
     case 'start_device_sign_in': return Promise.resolve({ device_code: 'x', user_code: '7K4-Q9P', url: 'http://127.0.0.1:8040/activate', interval: 5 });
     case 'poll_device_sign_in': return Promise.resolve(null);
