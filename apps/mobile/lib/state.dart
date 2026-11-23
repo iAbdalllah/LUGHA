@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:lugha_engine/lugha_engine.dart';
+import 'package:lugha_remoteplay/lugha_remoteplay.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'api.dart';
@@ -57,12 +59,16 @@ class AppState extends ChangeNotifier {
   bool get signedIn => api.token != null;
   String get deviceKind => Platform.isIOS ? 'ios' : 'android';
 
-  static Uri defaultServer() => Uri.parse(Platform.isAndroid ? 'http://10.0.2.2:8040/' : 'http://127.0.0.1:8040/');
+  /// Release builds use the live server; debug builds a local backend (the emulator reaches the host at 10.0.2.2).
+  static Uri defaultServer() => kReleaseMode
+      ? Uri.parse('https://lugha.iabdallah.com/')
+      : Uri.parse(Platform.isAndroid ? 'http://10.0.2.2:8040/' : 'http://127.0.0.1:8040/');
 
   Future<void> init() async {
     final server = await _secure.read(key: 'server');
     L.lang = await _secure.read(key: 'lang') ?? 'ar';
     api = ApiClient(baseUrl: server != null ? Uri.parse(server) : defaultServer(), token: await _secure.read(key: 'token'), language: L.lang);
+    await loadRemotePlay();
     final tvs = await _secure.read(key: 'paired_tvs');
     if (tvs != null) pairedTvs = (jsonDecode(tvs) as List).map((e) => PairedTv.fromJson(e as Map<String, dynamic>)).toList();
     store = PackageStore(Directory('${(await getApplicationSupportDirectory()).path}/packages'));
@@ -284,6 +290,132 @@ class AppState extends ChangeNotifier {
   }
 
   void _pushStyle() => tv?.setStyle(fontScale: tvFontScale, bottom: tvBottom, bgOpacity: tvBgOpacity);
+
+  // ── PS5 Remote Play (play on the TV; this phone reads the subtitles from the console's stream) ──
+
+  String? psnAccountId;
+  Registration? ps5;
+  bool rpRunning = false;
+  String rpStatus = '';
+  String? rpLastSource;
+  StreamSubscription<RpEvent>? _rpSub;
+  Timer? _rpHide;
+
+  Future<void> loadRemotePlay() async {
+    psnAccountId = await _secure.read(key: 'psn_account_id');
+    final r = await _secure.read(key: 'ps5_registration');
+    ps5 = r == null ? null : Registration.fromJson(r);
+    notifyListeners();
+  }
+
+  Future<void> setPsnAccountId(String id) async {
+    psnAccountId = id;
+    await _secure.write(key: 'psn_account_id', value: id);
+    notifyListeners();
+  }
+
+  Future<void> registerPs5(Console c, String pin) async {
+    rpStatus = '';
+    try {
+      final r = await RemotePlay.register(host: c.host, psnAccountId: psnAccountId!, pin: pin, ps5: c.ps5);
+      ps5 = r;
+      await _secure.write(key: 'ps5_registration', value: r.toJson());
+    } on RemotePlayException catch (e) {
+      rpStatus = '$e';
+    }
+    notifyListeners();
+  }
+
+  Future<void> forgetPs5() async {
+    await stopRemotePlay();
+    ps5 = null;
+    await _secure.delete(key: 'ps5_registration');
+    notifyListeners();
+  }
+
+  /// Finds the registered PS5 (its address may have changed), wakes it if resting, and starts reading subtitles.
+  Future<void> startRemotePlay({Area area = Area.subtitles}) async {
+    final reg = ps5;
+    if (reg == null) return;
+    rpStatus = L.t('Connecting to PS5…');
+    notifyListeners();
+    try {
+      final consoles = await RemotePlay.discover();
+      final match = consoles.where((c) => c.host == reg.host).firstOrNull ?? (consoles.length == 1 ? consoles.first : null);
+      var r = reg;
+      if (match != null && match.host != reg.host) {
+        r = reg.withHost(match.host);
+        ps5 = r;
+        await _secure.write(key: 'ps5_registration', value: r.toJson());
+      }
+      if (match != null && !match.ready) {
+        await RemotePlay.wakeup(r);
+        rpStatus = L.t('Waking the PS5…');
+        notifyListeners();
+        await Future<void>.delayed(const Duration(seconds: 12));
+      }
+      _rpSub ??= RemotePlay.events.listen(_onRp);
+      await RemotePlay.start(r, area: area);
+    } on RemotePlayException catch (e) {
+      rpStatus = '$e';
+    }
+    notifyListeners();
+  }
+
+  Future<void> stopRemotePlay() async {
+    if (!rpRunning && _rpSub == null) return;
+    await RemotePlay.stop();
+    await _rpSub?.cancel();
+    _rpSub = null;
+    rpRunning = false;
+    rpStatus = '';
+    tv?.clear();
+    notifyListeners();
+  }
+
+  void _onRp(RpEvent e) {
+    switch (e) {
+      case RpConnected():
+        rpRunning = true;
+        rpStatus = L.t('Reading subtitles from the PS5');
+      case RpPinRequest():
+        rpStatus = L.t('The PS5 asks for its login passcode');
+      case RpStopped(:final reason, :final error):
+        rpRunning = false;
+        rpStatus = error ? reason : '';
+        _rpSub?.cancel();
+        _rpSub = null;
+        tv?.clear();
+      case RpText(:final lines):
+        _onSubtitleText(lines);
+    }
+    notifyListeners();
+  }
+
+  /// Recognized text → reviewed Arabic line → TV. Unknown text clears the TV after a short silence.
+  void _onSubtitleText(List<String> lines) {
+    final text = lines.join(' ').trim();
+    if (text.isEmpty) {
+      _rpHide ??= Timer(const Duration(milliseconds: 1200), () {
+        _rpHide = null;
+        rpLastSource = null;
+        tv?.clear();
+      });
+      return;
+    }
+    _rpHide?.cancel();
+    _rpHide = null;
+    if (text == rpLastSource) return;
+    rpLastSource = text;
+    final hit = engine?.lookup(text);
+    if (hit == null) {
+      tv?.clear();
+      return;
+    }
+    history.insert(0, Line(text, hit.target, hit.speaker, DateTime.now(), entryId: hit.entryId, packageId: hit.packageId));
+    if (history.length > 50) history.removeLast();
+    tv?.show(hit.target, speaker: hit.speaker);
+  }
 
   Future<void> sendTestLine() async {
     final line = history.firstWhere((l) => l.target != null, orElse: () => Line('', 'نطلع مع الفجر. وأحد ما يتكلم عن الليلة.', 'ريم', DateTime.now()));

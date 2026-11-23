@@ -5,6 +5,7 @@ import 'l10n.dart';
 import 'screens/account_screen.dart';
 import 'screens/devices_screen.dart';
 import 'screens/library_screen.dart';
+import 'screens/play_screen.dart';
 import 'screens/sign_in_screen.dart';
 import 'screens/tv_screen.dart';
 import 'state.dart';
@@ -65,13 +66,13 @@ class _ShellState extends State<Shell> {
   }
 
   void _onApp() {
-    if (widget.app.deviceLimitReached && _tab != 1) setState(() => _tab = 1); // show Devices so a slot can be freed
+    if (widget.app.deviceLimitReached && _tab != 3) setState(() => _tab = 3); // show Devices so a slot can be freed
   }
 
   @override
   Widget build(BuildContext context) {
     final app = widget.app;
-    final pages = [LibraryScreen(app: app), DevicesScreen(app: app), TvScreen(app: app), AccountScreen(app: app)];
+    final pages = [LibraryScreen(app: app), PlayScreen(app: app), TvScreen(app: app), DevicesScreen(app: app), AccountScreen(app: app)];
     return Scaffold(
       body: SafeArea(child: pages[_tab]),
       bottomNavigationBar: NavigationBar(
@@ -79,8 +80,9 @@ class _ShellState extends State<Shell> {
         onDestinationSelected: (i) => setState(() => _tab = i),
         destinations: [
           NavigationDestination(icon: const Icon(Icons.library_books_outlined), label: L.t('Library')),
-          NavigationDestination(icon: const Icon(Icons.devices_outlined), label: L.t('Devices')),
+          NavigationDestination(icon: const Icon(Icons.sports_esports_outlined), label: L.t('PS5')),
           NavigationDestination(icon: const Icon(Icons.tv_outlined), label: L.t('TV')),
+          NavigationDestination(icon: const Icon(Icons.devices_outlined), label: L.t('Devices')),
           NavigationDestination(icon: const Icon(Icons.person_outline), label: L.t('Account')),
         ],
       ),

@@ -26,6 +26,19 @@ class L {
     'Thanks — your report was sent to the reviewers.': 'شكرًا، وصل بلاغك لفريق المراجعة.',
     'reason.wrong_meaning': 'معنى خاطئ', 'reason.typo': 'خطأ إملائي', 'reason.awkward': 'صياغة ركيكة',
     'reason.wrong_speaker': 'المتحدث خاطئ', 'reason.offensive': 'محتوى مسيء', 'reason.other': 'سبب آخر',
+    'PS5': 'PS5', 'Play on your TV': 'العب على التلفاز',
+    'Play on the TV as usual. This phone connects to your PS5 over Wi‑Fi, reads the game\'s English subtitles and shows the Arabic on the TV.':
+        'العب على التلفاز كالمعتاد. يتصل هذا الجوال بجهاز PS5 عبر الواي فاي، ويقرأ ترجمة اللعبة الإنجليزية ويعرض العربية على التلفاز.',
+    'Sign in to PlayStation Network': 'تسجيل الدخول إلى PlayStation Network', 'Signed in to PSN': 'تم تسجيل الدخول إلى PSN',
+    'Your password goes only to Sony; LUGHA keeps just your account number.': 'كلمة المرور تذهب إلى Sony فقط؛ تحفظ لغة رقم حسابك فقط.',
+    'Link your PS5': 'اربط جهاز PS5', 'Find PS5': 'ابحث عن PS5', 'No PS5 found on this Wi‑Fi.': 'لم يُعثر على PS5 على هذه الشبكة.',
+    'On the PS5: Settings › System › Remote Play › Link Device. Enter the 8 digits it shows.': 'على الـPS5: الإعدادات › النظام › التشغيل عن بُعد › ربط جهاز. أدخل الأرقام الثمانية الظاهرة.',
+    'Code from the PS5': 'الرمز من الـPS5', 'Link': 'ربط', 'Linked to %s': 'مرتبط بـ %s', 'Unlink': 'إلغاء الربط', 'Resting': 'في وضع الراحة',
+    'Start reading subtitles': 'ابدأ قراءة الترجمة', 'Stop': 'إيقاف', 'Connecting to PS5…': 'جارٍ الاتصال بالـPS5…', 'Waking the PS5…': 'جارٍ تشغيل الـPS5…',
+    'Reading subtitles from the PS5': 'تُقرأ الترجمة من الـPS5', 'The PS5 asks for its login passcode': 'يطلب الـPS5 رمز الدخول',
+    'Connect a LUGHA TV first (TV tab) to see the Arabic on the TV.': 'اربط تلفاز لغة أولًا (تبويب التلفاز) لترى العربية عليه.',
+    'Keep this phone on and LUGHA open while you play.': 'أبقِ الجوال مشغّلًا وتطبيق لغة مفتوحًا أثناء اللعب.',
+    'Last line': 'آخر سطر',
     'Wrong code': 'رمز خاطئ', 'Device limit reached — remove a device, then sync.': 'وصلت إلى حد الأجهزة — أزل جهازًا ثم زامن.', 'Packages loaded: %s': 'الباقات المحمّلة: %s', 'Last sync': 'آخر مزامنة',
   };
 
