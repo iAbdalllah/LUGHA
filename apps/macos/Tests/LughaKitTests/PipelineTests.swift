@@ -111,4 +111,24 @@ final class PipelineTests: XCTestCase {
         _ = await p.ingest(lines: ["Map", "Help"], at: t0.addingTimeInterval(0.3))
         XCTAssertEqual(p.current?.items.count, 2)
     }
+
+    func testAlternatingMenuReadsKeepEveryLabelSteady() async {
+        let known: [String: (Int64, String)] = ["Map": (10, "الخريطة"), "Store": (11, "المتجر"), "Settings": (12, "الإعدادات")]
+        let p = SubtitlePipeline(stableFrames: 2) { t in
+            known[t].map { Hit(entryId: $0.0, packageId: "p", target: $0.1, speaker: nil, category: "menus", score: 1, method: "exact", providerId: "package", machineGenerated: false) }
+        }
+        let t0 = Date(timeIntervalSince1970: 1000)
+        _ = await p.ingest(lines: ["Map", "Store", "Settings"], at: t0)
+        _ = await p.ingest(lines: ["Map", "Store", "Settings"], at: t0.addingTimeInterval(0.1))
+        let steady = p.current?.text
+        XCTAssertEqual(p.current?.items.count, 3)
+        // An animated background: each frame OCR misses a different item.
+        var changes = 0
+        for k in 0 ..< 12 {
+            let frame = [["Map", "Settings"], ["Store", "Settings", "Map"], ["Map", "Store"], ["Settings", "Map", "Store"]][k % 4]
+            if await p.ingest(lines: frame, at: t0.addingTimeInterval(0.2 + Double(k) * 0.12)) { changes += 1 }
+        }
+        XCTAssertEqual(changes, 0, "no label may blink while the menu is up")
+        XCTAssertEqual(p.current?.text, steady)
+    }
 }

@@ -171,7 +171,8 @@ class LinkServer(private val scope: CoroutineScope, private val hub: LinkHub = L
                     bgOpacity = m["bg_opacity"]?.jsonPrimitive?.float ?: 0.8f,
                     maxWidth = (m["max_width"]?.jsonPrimitive?.float ?: 0.8f).coerceIn(0.3f, 0.95f),
                     mode = m["mode"]?.jsonPrimitive?.content ?: "native",
-                    textColor = m["text_color"]?.jsonPrimitive?.content ?: "white"))
+                    textColor = m["text_color"]?.jsonPrimitive?.content ?: "white",
+                    font = m["font"]?.jsonPrimitive?.content ?: ""))
                 "ping" -> send(buildJsonObject { put("t", "pong"); put("id", m["id"]!!.jsonPrimitive.long) })
                 "bye" -> return
             }

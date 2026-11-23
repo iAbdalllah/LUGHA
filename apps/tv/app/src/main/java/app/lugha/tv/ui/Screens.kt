@@ -161,6 +161,16 @@ private fun PairScreen(state: HubState, onBack: () -> Unit) {
     }
 }
 
+/** The Arabic font chosen on the Mac (same ids), bundled in res/font. */
+fun arabicFont(id: String): androidx.compose.ui.text.font.FontFamily? = when (id) {
+    "naskh" -> androidx.compose.ui.text.font.FontFamily(androidx.compose.ui.text.font.Font(R.font.noto_naskh_arabic))
+    "kufi" -> androidx.compose.ui.text.font.FontFamily(androidx.compose.ui.text.font.Font(R.font.noto_kufi_arabic))
+    "cairo" -> androidx.compose.ui.text.font.FontFamily(androidx.compose.ui.text.font.Font(R.font.cairo))
+    "tajawal" -> androidx.compose.ui.text.font.FontFamily(androidx.compose.ui.text.font.Font(R.font.tajawal_bold))
+    "amiri" -> androidx.compose.ui.text.font.FontFamily(androidx.compose.ui.text.font.Font(R.font.amiri_bold))
+    else -> null
+}
+
 @Composable
 fun SubtitleBubble(text: String, speaker: String?, fontScale: Float, bgOpacity: Float, modifier: Modifier = Modifier, maxWidth: androidx.compose.ui.unit.Dp = 1150.dp) {
     // Broadcast style: white semibold Arabic with a soft shadow on a dark plate that hides the English underneath;
@@ -177,6 +187,7 @@ fun SubtitleBubble(text: String, speaker: String?, fontScale: Float, bgOpacity: 
         }
         Text(
             text, color = Color.White, fontSize = (48 * fontScale).sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center,
+            fontFamily = arabicFont(LinkHub.state.value.style.font),
             lineHeight = (66 * fontScale).sp, style = MaterialTheme.typography.bodyLarge.copy(textDirection = TextDirection.Rtl, shadow = shadow),
         )
     }
@@ -221,6 +232,7 @@ private fun LiveScreen(state: HubState, onSettings: () -> Unit) {
                         if (state.style.mode == "native") {
                             // The game's own colours on a plate that covers the English.
                             Text(i.text, color = i.fg?.let { Color(it) } ?: Color.White, fontSize = (48 * scale).sp, fontWeight = FontWeight.SemiBold,
+                                fontFamily = arabicFont(state.style.font),
                                 textAlign = TextAlign.Center, maxLines = 2,
                                 style = MaterialTheme.typography.bodyLarge.copy(textDirection = TextDirection.Rtl),
                                 modifier = Modifier.wrapContentSize(unbounded = true)

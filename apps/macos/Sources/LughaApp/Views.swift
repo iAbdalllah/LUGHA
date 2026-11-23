@@ -295,9 +295,6 @@ struct TextOptions: View {
     @EnvironmentObject var app: AppModel
     @ObservedObject var settings: AppSettings
 
-    private static let fonts: [(String, String)] = [("", "SF Arabic"), ("Geeza Pro", "Geeza Pro"), ("Damascus", "Damascus"),
-                                                   ("Baghdad", "Baghdad"), ("Al Nile", "Al Nile"), ("Kufi Standard GK", "Kufi")]
-
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(L.t("Text style")).font(.caption).foregroundColor(.secondary)
@@ -317,8 +314,10 @@ struct TextOptions: View {
                     }
                     .frame(maxWidth: 150)
                 }
-                Picker(L.t("Font"), selection: $settings.fontName) {
-                    ForEach(Self.fonts, id: \.0) { Text($0.1).tag($0.0) }
+                Picker(L.t("Font"), selection: Binding(get: { settings.fontName }, set: { settings.fontName = $0; Task { await app.textOptionsChanged() } })) {
+                    ForEach(ArabicFonts.all, id: \.id) { f in
+                        Text(f.label).font(f.family.map { .custom($0, size: 13) } ?? .system(size: 13)).tag(f.id)
+                    }
                 }
             }
             .font(.caption)

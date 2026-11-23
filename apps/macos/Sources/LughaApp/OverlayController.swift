@@ -67,16 +67,16 @@ struct SubtitleOverlayView: View {
         GeometryReader { geo in
             ZStack {
                 if let s = model.subtitle {
-                    ForEach(Array(placed(s, in: geo.size).enumerated()), id: \.offset) { _, p in
+                    // Keyed by text: a label that stays is never redrawn; only labels that come or go fade.
+                    ForEach(placed(s, in: geo.size), id: \.item.text) { p in
                         SubtitlePlate(item: p.item, fontSize: p.font, settings: settings, cover: p.cover)
                             .frame(maxWidth: p.maxWidth)
                             .position(p.center)
+                            .transition(.opacity)
                     }
-                    .transition(.opacity)
-                    .id(s.text)
                 }
             }
-            .animation(.easeInOut(duration: 0.15), value: model.subtitle?.text)
+            .animation(.easeInOut(duration: 0.15), value: model.subtitle?.items.map(\.text))
         }
     }
 
@@ -117,7 +117,7 @@ struct SubtitlePlate: View {
     var cover: CGSize = .zero
 
     private var font: Font {
-        settings.fontName.isEmpty ? .system(size: fontSize, weight: .semibold) : .custom(settings.fontName, size: fontSize).weight(.semibold)
+        ArabicFonts.family(settings.fontName).map { Font.custom($0, size: fontSize).weight(.semibold) } ?? .system(size: fontSize, weight: .semibold)
     }
     private var chosenColor: Color { settings.textColor == "yellow" ? Color(red: 1, green: 0.86, blue: 0.25) : .white }
     private func color(_ c: RGB?) -> Color? { c.map { Color(.sRGB, red: $0.r, green: $0.g, blue: $0.b) } }

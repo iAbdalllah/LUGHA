@@ -259,11 +259,12 @@ public final class TVSender: @unchecked Sendable {
 
     /// `positionY`: vertical centre of the subtitle as a fraction of the picture (0 top, 1 bottom) — set to where the game
     /// draws its English subtitle so the Arabic covers it. `maxWidth`: fraction of the picture width the line may use.
-    public func setStyle(fontScale: Double, positionY: Double, bgOpacity: Double, maxWidth: Double? = nil, mode: String? = nil, textColor: String? = nil) async throws {
+    public func setStyle(fontScale: Double, positionY: Double, bgOpacity: Double, maxWidth: Double? = nil, mode: String? = nil, textColor: String? = nil, font: String? = nil) async throws {
         var m: [String: Any] = ["t": "style.set", "font_scale": fontScale, "position_y": positionY, "bg_opacity": bgOpacity]
         if let maxWidth { m["max_width"] = maxWidth }
         if let mode { m["mode"] = mode }
         if let textColor { m["text_color"] = textColor }
+        if let font { m["font"] = font }
         try await send(m)
     }
 

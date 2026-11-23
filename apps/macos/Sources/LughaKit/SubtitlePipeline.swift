@@ -57,33 +57,39 @@ public struct Subtitle: Equatable, Sendable {
     }
 }
 
-/// OCR lines in, translated text to show out. Pure state machine (testable with a fake clock):
-/// - each frame is matched first as one sentence (a subtitle), else line by line (a menu);
-/// - a change (a new match, or "nothing we know") must hold for `stableFrames` frames before it shows, so half-drawn
-///   text doesn't flash — stability is judged on the match, not the raw text, so noisy HUD text doesn't block it;
-/// - when the area is empty the Arabic stays through short gaps and hides after `hideAfter` (see [tick]);
+/// OCR lines in, translated text to show out. Pure state machine (testable with a fake clock).
+///
+/// Each frame is matched first as one sentence (a subtitle), else line by line (a menu). Every translated piece is then
+/// tracked on its own, so animated menus — where OCR reads a slightly different set of items each frame — don't blink:
+/// - a piece appears once it was read on `stableFrames` frames (no half-drawn text);
+/// - it stays while it keeps being read, following its English if it moves;
+/// - it goes only after frames *without* it for `removeAfter` (`hideAfter` when the area is empty). A static screen sends
+///   no frames at all, so a line still on screen is never dropped just because time passed (see [tick]);
 /// - the same OCR text again costs no lookup.
 public final class SubtitlePipeline: @unchecked Sendable {
     public var stableFrames: Int
     public var hideAfter: TimeInterval
-    /// Removing a translation (nothing known any more, or a menu read with fewer items) must hold this long: OCR
-    /// misses a frame now and then on animated menus, and the Arabic must not blink.
+    /// How long a piece must be missing from the frames before it goes (OCR misses a frame now and then).
     public var removeAfter: TimeInterval = 0.8
-    /// When the current frames started disagreeing by losing items (nil while they don't).
-    private var shrinkSince: Date?
     public private(set) var current: Subtitle?
     public private(set) var history: [Subtitle] = []
     public var historyLimit = 50
 
+    private struct Track {
+        var item: SubtitleItem
+        var hit: Hit
+        var source: String
+        var seen: Int
+        var lastSeen: Date
+        var missing: Bool
+        var order: Int
+    }
+
     private let lookup: (String) async -> Hit?
-    private var candidateKey: String?
-    private var candidateCount = 0
-    /// When the capture area became empty (nil while text is there). Drives [tick].
-    private var emptySince: Date?
+    private var tracks: [String: Track] = [:]
+    private var lastFrameEmpty = false
     private var lastText: String?
-    private var lastResult: Subtitle?
-    /// Last frame that had any text: short gaps are measured from here.
-    private var lastTextAt: Date?
+    private var lastResult: [(SubtitleItem, Hit, String)] = []
 
     public init(stableFrames: Int = 2, hideAfter: TimeInterval = 1.2, lookup: @escaping (String) async -> Hit?) {
         self.stableFrames = stableFrames
@@ -101,111 +107,106 @@ public final class SubtitlePipeline: @unchecked Sendable {
     @discardableResult
     public func ingest(ocr: [OCRLine], at now: Date = Date()) async -> Bool {
         let lines = ocr.map { OCRLine(text: $0.text.trimmingCharacters(in: .whitespaces), box: $0.box) }.filter { !$0.text.isEmpty }
-        guard !lines.isEmpty else {
-            candidateKey = nil
-            candidateCount = 0
-            if emptySince == nil { emptySince = lastTextAt ?? now }
-            return tick(at: now)
+        lastFrameEmpty = lines.isEmpty
+        var found: [(SubtitleItem, Hit, String)] = []
+        if !lines.isEmpty {
+            let text = lines.map(\.text).joined(separator: "\n")
+            if text == lastText {
+                found = lastResult
+            } else {
+                found = await match(lines, text: text)
+                lastText = text
+                lastResult = found
+            }
         }
-        emptySince = nil
-        lastTextAt = now
-
-        let text = lines.map(\.text).joined(separator: "\n")
-        let result: Subtitle?
-        if text == lastText {
-            result = lastResult
-        } else {
-            result = await match(lines, text: text)
-            lastText = text
-            lastResult = result
+        // Update every tracked piece: read in this frame, or missing from it.
+        let foundKeys = Set(found.map(\.0.text))
+        for k in tracks.keys where !foundKeys.contains(k) { tracks[k]!.missing = true }
+        let nextOrder = (tracks.values.map(\.order).max() ?? -1) + 1
+        for (n, (item, hit, source)) in found.enumerated() {
+            if var t = tracks[item.text] {
+                // Keep the order from first sight: OCR lists lines in a slightly different order on some frames.
+                t.item = item; t.hit = hit; t.source = source; t.seen += 1; t.lastSeen = now; t.missing = false
+                tracks[item.text] = t
+            } else {
+                tracks[item.text] = Track(item: item, hit: hit, source: source, seen: 1, lastSeen: now, missing: false, order: nextOrder + n)
+            }
         }
-
-        // Same translation still on screen: keep it, follow the English if it moved.
-        if let r = result, let c = current, r.text == c.text {
-            candidateKey = nil
-            candidateCount = 0
-            shrinkSince = nil
-            if moved(r.items, c.items) { current = r; return true }
-            return false
-        }
-        // Losing pieces (nothing known, or only some of the menu read): wait `removeAfter` before believing it.
-        if let c = current, isShrink(result, of: c) {
-            candidateKey = nil
-            candidateCount = 0
-            if shrinkSince == nil { shrinkSince = now }
-            guard now.timeIntervalSince(shrinkSince!) >= removeAfter else { return false }
-            shrinkSince = nil
-            current = result
-            if let r = result { history.insert(r, at: 0); if history.count > historyLimit { history.removeLast() } }
-            return true
-        }
-        shrinkSince = nil
-        let key = result?.text ?? "\u{2205}" // ∅ = text we have no translation for
-        if key == candidateKey { candidateCount += 1 } else { candidateKey = key; candidateCount = 1 }
-        guard candidateCount >= stableFrames else { return false }
-        candidateKey = nil
-        candidateCount = 0
-
-        guard let r = result else {
-            // Only unknown text left: the English we translated is gone.
-            let changed = current != nil
-            current = nil
-            return changed
-        }
-        current = r
-        history.insert(r, at: 0)
-        if history.count > historyLimit { history.removeLast() }
-        return true
+        return publish(at: now)
     }
 
-    /// Call a few times a second. Screen capture only delivers frames when the picture changes, so after the English
-    /// line disappears there may be no further frame; this hides the Arabic once the area has been empty long enough.
-    /// Returns true when `current` changed.
+    /// Call a few times a second: screen capture sends no frame while the picture is static, so pieces whose English
+    /// went away (a frame without them was seen) are removed on time even if no further frame arrives.
     @discardableResult
-    public func tick(at now: Date = Date()) -> Bool {
-        guard current != nil, let since = emptySince, now.timeIntervalSince(since) >= hideAfter else { return false }
-        current = nil
-        return true
-    }
+    public func tick(at now: Date = Date()) -> Bool { publish(at: now) }
 
     public func clear() {
         current = nil
-        candidateKey = nil
-        candidateCount = 0
-        emptySince = nil
-        shrinkSince = nil
+        tracks = [:]
         lastText = nil
-        lastResult = nil
+        lastResult = []
+        lastFrameEmpty = false
+    }
+
+    // MARK: state → current
+
+    private func publish(at now: Date) -> Bool {
+        let hold = lastFrameEmpty ? hideAfter : removeAfter
+        tracks = tracks.filter { !($0.value.missing && now.timeIntervalSince($0.value.lastSeen) >= hold) }
+        let shown = tracks.values.filter { $0.seen >= stableFrames }
+            .sorted { a, b in
+                // Screen order: rows top to bottom (1% bands, so tiny OCR jitter can't swap them), then left to right,
+                // then the order they were first seen.
+                let ra = (a.item.box.minY * 100).rounded(), rb = (b.item.box.minY * 100).rounded()
+                if ra != rb { return ra < rb }
+                if abs(a.item.box.minX - b.item.box.minX) > 0.01 { return a.item.box.minX < b.item.box.minX }
+                return a.order < b.order
+            }
+        let next = make(shown)
+        let changed: Bool
+        switch (current, next) {
+        case (nil, nil): changed = false
+        case let (c?, n?): changed = c.text != n.text || moved(n.items, c.items)
+        default: changed = true
+        }
+        if changed {
+            if let n = next, n.text != current?.text {
+                history.insert(n, at: 0)
+                if history.count > historyLimit { history.removeLast() }
+            }
+            current = next
+        }
+        return changed
+    }
+
+    private func make(_ shown: [Track]) -> Subtitle? {
+        guard let first = shown.first else { return nil }
+        if shown.count == 1 {
+            let t = first
+            return Subtitle(text: t.item.text, speaker: t.item.speaker, source: t.source, score: t.hit.score,
+                            entryId: t.hit.entryId, packageId: t.hit.packageId, items: [t.item])
+        }
+        return Subtitle(text: shown.map(\.item.text).joined(separator: "  ·  "), speaker: nil,
+                        source: shown.map(\.source).joined(separator: "\n"), score: shown.map(\.hit.score).min() ?? first.hit.score,
+                        entryId: first.hit.entryId, packageId: first.hit.packageId, items: shown.map(\.item))
     }
 
     // MARK: matching
 
-    private func match(_ lines: [OCRLine], text: String) async -> Subtitle? {
+    /// The translated pieces in one frame: the whole text as one sentence, else each known line on its own.
+    private func match(_ lines: [OCRLine], text: String) async -> [(SubtitleItem, Hit, String)] {
         if let hit = await lookup(text) {
-            // A subtitle: the lines together are one sentence.
             let box = lines.map(\.box).reduce(CGRect.null) { $0.union($1) }
-            let item = SubtitleItem(text: hit.target, speaker: hit.speaker, box: box.isNull ? .zero : box, lines: lines.count)
-            return Subtitle(text: hit.target, speaker: hit.speaker, source: text, score: hit.score, entryId: hit.entryId, packageId: hit.packageId, items: [item])
+            return [(SubtitleItem(text: hit.target, speaker: hit.speaker, box: box.isNull ? .zero : box, lines: lines.count), hit, text)]
         }
-        guard lines.count > 1 else { return nil }
-        // A menu or list: each line is its own entry. Keep the known ones, in screen order, each where it is.
-        var hits: [(OCRLine, Hit)] = []
+        guard lines.count > 1 else { return [] }
+        var out: [(SubtitleItem, Hit, String)] = []
         for line in lines.prefix(16) {
-            if let h = await lookup(line.text), !hits.contains(where: { $0.1.entryId == h.entryId }) { hits.append((line, h)) }
+            if let h = await lookup(line.text), !out.contains(where: { $0.1.entryId == h.entryId }) {
+                out.append((SubtitleItem(text: h.target, speaker: h.speaker, box: line.box, lines: 1), h, line.text))
+            }
         }
-        guard let first = hits.first else { return nil }
-        return Subtitle(text: hits.map(\.1.target).joined(separator: "  ·  "), speaker: nil,
-                        source: hits.map(\.0.text).joined(separator: "\n"), score: hits.map(\.1.score).min() ?? first.1.score,
-                        entryId: first.1.entryId, packageId: first.1.packageId,
-                        items: hits.map { SubtitleItem(text: $0.1.target, speaker: $0.1.speaker, box: $0.0.box, lines: 1) })
-    }
-
-    /// Nothing known any more, or only a subset of what is shown (a frame where OCR missed some menu items).
-    private func isShrink(_ r: Subtitle?, of c: Subtitle) -> Bool {
-        guard let r else { return true }
-        let shown = Set(c.items.map(\.text))
-        let now = Set(r.items.map(\.text))
-        return now.isSubset(of: shown) && now.count < shown.count
+        return out
     }
 
     /// True when the English moved enough to re-place the Arabic (more than ~1.5% of the area).

@@ -23,6 +23,8 @@ data class OverlayStyle(
     val mode: String = "native",
     /** Text colour for box/outline: "white" or "yellow". */
     val textColor: String = "white",
+    /** Arabic font id, same as the Mac: "" (system), naskh, kufi, cairo, tajawal, amiri — bundled in res/font. */
+    val font: String = "",
 ) {
     val positionBottom get() = positionY >= 0.5f
 }

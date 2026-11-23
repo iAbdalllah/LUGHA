@@ -37,7 +37,7 @@ public final class AppSettings: ObservableObject, @unchecked Sendable {
     @Published public var textStyle: String = "native" { didSet { d.set(textStyle, forKey: "textStyle") } }
     /// Text colour for the Box and Outline styles: "white" or "yellow".
     @Published public var textColor: String = "white" { didSet { d.set(textColor, forKey: "textColor") } }
-    /// Arabic font on this Mac ("" = system, SF Arabic).
+    /// Arabic font id shared with the TV: "", naskh, kufi, cairo, tajawal, amiri ("" = system).
     @Published public var fontName: String = "" { didSet { d.set(fontName, forKey: "fontName") } }
 
     /// Where most games put dialogue: the lower band, centred.
@@ -61,6 +61,6 @@ public final class AppSettings: ObservableObject, @unchecked Sendable {
         if d.object(forKey: "showOnMac") != nil { showOnMac = d.bool(forKey: "showOnMac") }
         if let s = d.string(forKey: "textStyle") { textStyle = s }
         if let s = d.string(forKey: "textColor") { textColor = s }
-        if let s = d.string(forKey: "fontName") { fontName = s }
+        if let s = d.string(forKey: "fontName"), ["", "naskh", "kufi", "cairo", "tajawal", "amiri"].contains(s) { fontName = s }
     }
 }

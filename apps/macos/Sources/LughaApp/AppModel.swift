@@ -41,6 +41,7 @@ final class AppModel: ObservableObject {
 
     init() {
         settings.load()
+        ArabicFonts.registerBundled()
         L.language = settings.interfaceLanguage
         if let d = UserDefaults.standard.data(forKey: "pairedTVs"), let tvs = try? JSONDecoder().decode([PairedTV].self, from: d) { pairedTVs = tvs }
         browser.onChange = { [weak self] found in Task { @MainActor in self?.tvsFound = found } }
@@ -361,7 +362,8 @@ final class AppModel: ObservableObject {
         guard let tv else { return }
         let a = pictureArea ?? CGRect(x: 0.08, y: 0.78, width: 0.84, height: 0.16)
         try? await tv.setStyle(fontScale: settings.fontSize / 30, positionY: Double(a.midY), bgOpacity: settings.backgroundOpacity,
-                               maxWidth: Double(min(max(a.width, 0.5), 0.9)), mode: settings.textStyle, textColor: settings.textColor)
+                               maxWidth: Double(min(max(a.width, 0.5), 0.9)), mode: settings.textStyle, textColor: settings.textColor,
+                               font: settings.fontName)
     }
 
     private func process(_ image: CGImage) async {

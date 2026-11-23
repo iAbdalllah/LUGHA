@@ -66,45 +66,67 @@ class LinkService : Service() {
         if (Build.VERSION.SDK_INT >= 29) startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE) else startForeground(1, n)
     }
 
+    /** Plates on screen, keyed by their text, so a label that stays is updated in place instead of redrawn. */
+    private val plates = mutableMapOf<String, TextView>()
+
     private fun renderOverlay(s: HubState) {
         val wanted = LinkHub.store.overlayMode && Settings.canDrawOverlays(this) && !AppVisibility.foreground
         val layer = if (wanted) overlay ?: createOverlay().also { overlay = it } else overlay
         if (layer == null) return
-        layer.removeAllViews()
         val sub = s.subtitle
         if (!wanted || sub == null) {
+            layer.removeAllViews()
+            plates.clear()
             layer.visibility = View.GONE
             return
         }
         val dm = resources.displayMetrics
         val (sw, sh) = dm.widthPixels to dm.heightPixels
         val style = s.style
-        if (sub.items.isEmpty()) {
-            // No positions (older sender): one line at the style's position.
-            val v = plate(sub.text, sub.speaker, 34f * style.fontScale, style, null, null, (sw * style.maxWidth).toInt())
-            v.measure(View.MeasureSpec.makeMeasureSpec((sw * style.maxWidth).toInt(), View.MeasureSpec.AT_MOST), View.MeasureSpec.UNSPECIFIED)
-            place(layer, v, sw / 2f, sh * style.positionY, sw, sh)
-        } else {
-            // Each piece exactly over its English: centred on its box, text sized to one English line.
-            for (i in sub.items) {
-                val lineH = i.h * sh / i.lines.coerceAtLeast(1)
-                val px = (lineH * 0.9f * style.fontScale).coerceIn(18f, 84f)
-                val maxW = (i.w * sw * 1.6f).coerceAtLeast(sw * 0.25f).coerceAtMost(sw * 0.9f).toInt()
-                val v = plate(i.text, i.speaker, px / dm.scaledDensity, style, i.bg, i.fg, maxW)
-                v.minWidth = (i.w * sw).toInt().coerceAtMost(maxW) + (if (style.mode == "native") 8 else 0)
-                if (style.mode == "native") v.minHeight = (i.h * sh).toInt() + 4
-                v.measure(View.MeasureSpec.makeMeasureSpec(maxW, View.MeasureSpec.AT_MOST), View.MeasureSpec.UNSPECIFIED)
-                place(layer, v, (i.x + i.w / 2) * sw, (i.y + i.h / 2) * sh, sw, sh)
-            }
+        // What to show: each placed piece, or (older senders) one line at the style's position.
+        data class Want(val text: String, val speaker: String?, val sp: Float, val bg: Int?, val fg: Int?, val maxW: Int, val minW: Int, val minH: Int, val cx: Float, val cy: Float)
+        val wants = if (sub.items.isEmpty()) {
+            listOf(Want(sub.text, sub.speaker, 34f * style.fontScale, null, null, (sw * style.maxWidth).toInt(), 0, 0, sw / 2f, sh * style.positionY))
+        } else sub.items.map { i ->
+            val lineH = i.h * sh / i.lines.coerceAtLeast(1)
+            val px = (lineH * 0.9f * style.fontScale).coerceIn(18f, 84f)
+            val maxW = (i.w * sw * 1.6f).coerceAtLeast(sw * 0.25f).coerceAtMost(sw * 0.9f).toInt()
+            val native = style.mode == "native"
+            Want(i.text, i.speaker, px / dm.scaledDensity, i.bg, i.fg, maxW,
+                (i.w * sw).toInt().coerceAtMost(maxW) + (if (native) 8 else 0), if (native) (i.h * sh).toInt() + 4 else 0,
+                (i.x + i.w / 2) * sw, (i.y + i.h / 2) * sh)
+        }
+        val keep = wants.map { it.text }.toSet()
+        plates.keys.filter { it !in keep }.forEach { layer.removeView(plates.remove(it)) }
+        for (w in wants) {
+            val v = plates[w.text] ?: TextView(this).also { plates[w.text] = it }
+            styleplate(v, w.text, w.speaker, w.sp, style, w.bg, w.fg, w.maxW)
+            v.minWidth = w.minW
+            v.minHeight = w.minH
+            v.measure(View.MeasureSpec.makeMeasureSpec(w.maxW, View.MeasureSpec.AT_MOST), View.MeasureSpec.UNSPECIFIED)
+            place(layer, v, w.cx, w.cy, sw, sh)
         }
         layer.visibility = View.VISIBLE
+    }
+
+    private fun typeface(font: String): android.graphics.Typeface {
+        val res = when (font) {
+            "naskh" -> R.font.noto_naskh_arabic
+            "kufi" -> R.font.noto_kufi_arabic
+            "cairo" -> R.font.cairo
+            "tajawal" -> R.font.tajawal_bold
+            "amiri" -> R.font.amiri_bold
+            else -> 0
+        }
+        val base = if (res != 0) androidx.core.content.res.ResourcesCompat.getFont(this, res) ?: android.graphics.Typeface.DEFAULT else android.graphics.Typeface.DEFAULT
+        return if (Build.VERSION.SDK_INT >= 28) android.graphics.Typeface.create(base, 600, false) else android.graphics.Typeface.create(base, android.graphics.Typeface.BOLD)
     }
 
     /**
      * One translated piece in the chosen style: native (the game's own background and text colours on a plate that
      * covers the English — reads as if the game drew Arabic), box (white/yellow on a dark rounded plate) or outline.
      */
-    private fun plate(text: String, speaker: String?, sp: Float, style: OverlayStyle, bg: Int?, fg: Int?, maxW: Int) = TextView(this).apply {
+    private fun styleplate(view: TextView, text: String, speaker: String?, sp: Float, style: OverlayStyle, bg: Int?, fg: Int?, maxW: Int) = view.apply {
         val chosen = if (style.textColor == "yellow") Color.rgb(255, 219, 64) else Color.WHITE
         this.text = SpannableStringBuilder().apply {
             speaker?.let {
@@ -117,15 +139,17 @@ class LinkService : Service() {
         textDirection = View.TEXT_DIRECTION_RTL
         gravity = Gravity.CENTER
         setLineSpacing(0f, 1.1f)
-        typeface = if (Build.VERSION.SDK_INT >= 28) android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, 600, false) else android.graphics.Typeface.DEFAULT_BOLD
+        typeface = typeface(style.font)
         val em = sp * resources.displayMetrics.scaledDensity
         when (style.mode) {
             "native" -> {
+                setShadowLayer(0f, 0f, 0f, 0)
                 setTextColor(fg ?: Color.WHITE)
                 setPadding((em * 0.25f).toInt(), 0, (em * 0.25f).toInt(), 0)
                 background = GradientDrawable().apply { setColor(bg ?: Color.argb((style.bgOpacity * 255).toInt(), 0, 0, 0)); cornerRadius = 4f }
             }
             "outline" -> {
+                background = null
                 setTextColor(chosen)
                 setShadowLayer(em * 0.16f, 0f, 0f, Color.BLACK)
                 setPadding((em * 0.2f).toInt(), 0, (em * 0.2f).toInt(), 0)
@@ -149,7 +173,7 @@ class LinkService : Service() {
             Gravity.LEFT or Gravity.TOP)
         lp.leftMargin = (cx - w / 2f).toInt().coerceIn(0, (sw - w).coerceAtLeast(0))
         lp.topMargin = (cy - h / 2f).toInt().coerceIn(0, (sh - h).coerceAtLeast(0))
-        layer.addView(v, lp)
+        if (v.parent == null) layer.addView(v, lp) else v.layoutParams = lp
     }
 
     /** A full-screen, click-through, transparent layer above other apps and inputs. */
