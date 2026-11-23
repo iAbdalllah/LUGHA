@@ -150,9 +150,10 @@ class LinkServer(private val scope: CoroutineScope, private val hub: LinkHub = L
                     val items = (m["items"] as? kotlinx.serialization.json.JsonArray).orEmpty().mapNotNull { e ->
                         val o = e as? JsonObject ?: return@mapNotNull null
                         fun f(k: String) = o[k]?.jsonPrimitive?.content?.toFloatOrNull()
+                        fun color(k: String) = o[k]?.jsonPrimitive?.content?.let { runCatching { android.graphics.Color.parseColor(it) }.getOrNull() }
                         SubItem(o["text"]?.jsonPrimitive?.content ?: return@mapNotNull null, o["speaker"]?.jsonPrimitive?.content?.takeIf { it != "null" },
                             f("x") ?: return@mapNotNull null, f("y") ?: return@mapNotNull null, f("w") ?: 0f, f("h") ?: 0f,
-                            o["lines"]?.jsonPrimitive?.content?.toIntOrNull() ?: 1)
+                            o["lines"]?.jsonPrimitive?.content?.toIntOrNull() ?: 1, color("bg"), color("fg"))
                     }.filter { it.w > 0f && it.h > 0f }
                     hub.show(Subtitle(m["sid"]?.jsonPrimitive?.long ?: 0, m["text"]?.jsonPrimitive?.content ?: "",
                         m["speaker"]?.jsonPrimitive?.content?.takeIf { it != "null" }, System.currentTimeMillis(), items))
@@ -168,7 +169,9 @@ class LinkServer(private val scope: CoroutineScope, private val hub: LinkHub = L
                     fontScale = m["font_scale"]?.jsonPrimitive?.float ?: 1f,
                     positionY = (m["position_y"]?.jsonPrimitive?.float ?: 0.86f).coerceIn(0.05f, 0.95f),
                     bgOpacity = m["bg_opacity"]?.jsonPrimitive?.float ?: 0.8f,
-                    maxWidth = (m["max_width"]?.jsonPrimitive?.float ?: 0.8f).coerceIn(0.3f, 0.95f)))
+                    maxWidth = (m["max_width"]?.jsonPrimitive?.float ?: 0.8f).coerceIn(0.3f, 0.95f),
+                    mode = m["mode"]?.jsonPrimitive?.content ?: "native",
+                    textColor = m["text_color"]?.jsonPrimitive?.content ?: "white"))
                 "ping" -> send(buildJsonObject { put("t", "pong"); put("id", m["id"]!!.jsonPrimitive.long) })
                 "bye" -> return
             }

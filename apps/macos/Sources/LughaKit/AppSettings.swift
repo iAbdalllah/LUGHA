@@ -32,6 +32,14 @@ public final class AppSettings: ObservableObject, @unchecked Sendable {
     /// Also draw subtitles on this Mac (off is typical in window mode: they go to the TV).
     @Published public var showOnMac: Bool = true { didSet { d.set(showOnMac, forKey: "showOnMac") } }
 
+    /// How the Arabic looks: "native" (the game's own colours, as if the game drew it), "box" (dark plate),
+    /// "outline" (no plate, outlined text like film subtitles).
+    @Published public var textStyle: String = "native" { didSet { d.set(textStyle, forKey: "textStyle") } }
+    /// Text colour for the Box and Outline styles: "white" or "yellow".
+    @Published public var textColor: String = "white" { didSet { d.set(textColor, forKey: "textColor") } }
+    /// Arabic font on this Mac ("" = system, SF Arabic).
+    @Published public var fontName: String = "" { didSet { d.set(fontName, forKey: "fontName") } }
+
     /// Where most games put dialogue: the lower band, centred.
     public static let defaultWindowArea = CGRect(x: 0.08, y: 0.70, width: 0.84, height: 0.26)
     /// Everything except the title bar: menus, HUD and subtitles.
@@ -48,5 +56,8 @@ public final class AppSettings: ObservableObject, @unchecked Sendable {
         captureAppBundleID = d.string(forKey: "captureAppBundleID")
         if let a = d.string(forKey: "windowArea") { windowArea = NSRectFromString(a) }
         if d.object(forKey: "showOnMac") != nil { showOnMac = d.bool(forKey: "showOnMac") }
+        if let s = d.string(forKey: "textStyle") { textStyle = s }
+        if let s = d.string(forKey: "textColor") { textColor = s }
+        if let s = d.string(forKey: "fontName") { fontName = s }
     }
 }

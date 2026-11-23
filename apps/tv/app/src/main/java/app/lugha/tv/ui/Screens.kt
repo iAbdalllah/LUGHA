@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.BiasAlignment
@@ -211,12 +213,24 @@ private fun LiveScreen(state: HubState, onSettings: () -> Unit) {
                 s.items.forEach { i ->
                     val lineH = sh * (i.h / i.lines.coerceAtLeast(1))
                     val scale = (lineH.value * 0.9f / 48f * state.style.fontScale).coerceIn(0.35f, 1.6f)
+                    // absoluteOffset: the TV may run right-to-left, and offset() would mirror the position.
                     androidx.compose.foundation.layout.Box(
-                        Modifier.offset(x = sw * i.x, y = sh * i.y).size(sw * i.w, sh * i.h),
+                        Modifier.absoluteOffset(x = sw * i.x, y = sh * i.y).size(sw * i.w, sh * i.h),
                         contentAlignment = Alignment.Center,
                     ) {
-                        SubtitleBubble(i.text, i.speaker, scale, state.style.bgOpacity,
-                            Modifier.wrapContentSize(unbounded = true), maxWidth = (sw * i.w * 1.6f).coerceAtLeast(sw * 0.25f))
+                        if (state.style.mode == "native") {
+                            // The game's own colours on a plate that covers the English.
+                            Text(i.text, color = i.fg?.let { Color(it) } ?: Color.White, fontSize = (48 * scale).sp, fontWeight = FontWeight.SemiBold,
+                                textAlign = TextAlign.Center, maxLines = 2,
+                                style = MaterialTheme.typography.bodyLarge.copy(textDirection = TextDirection.Rtl),
+                                modifier = Modifier.wrapContentSize(unbounded = true)
+                                    .background(i.bg?.let { Color(it) } ?: Color.Black.copy(alpha = state.style.bgOpacity), RoundedCornerShape(4.dp))
+                                    .sizeIn(minWidth = sw * i.w + 4.dp, minHeight = sh * i.h + 2.dp)
+                                    .padding(horizontal = (12 * scale).dp))
+                        } else {
+                            SubtitleBubble(i.text, i.speaker, scale, if (state.style.mode == "outline") 0f else state.style.bgOpacity,
+                                Modifier.wrapContentSize(unbounded = true), maxWidth = (sw * i.w * 1.6f).coerceAtLeast(sw * 0.25f))
+                        }
                     }
                 }
             }

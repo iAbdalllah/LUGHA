@@ -44,6 +44,8 @@ struct MenuPanelView: View {
             SourcePicker(settings: settings).environmentObject(app)
             Button(settings.captureAppBundleID == nil ? L.t("Select capture region") : L.t("Select subtitle area in the window")) { app.pickRegion() }
 
+            TextOptions(settings: settings).environmentObject(app)
+
             VStack(alignment: .leading, spacing: 6) {
                 Text(L.t("Font size")).font(.caption).foregroundColor(.secondary)
                 Slider(value: $settings.fontSize, in: 18 ... 48)
@@ -279,5 +281,41 @@ struct SourcePicker: View {
             }
         }
         .task { await app.refreshWindows() }
+    }
+}
+
+/// How the Arabic looks: style, text colour and font.
+struct TextOptions: View {
+    @EnvironmentObject var app: AppModel
+    @ObservedObject var settings: AppSettings
+
+    private static let fonts: [(String, String)] = [("", "SF Arabic"), ("Geeza Pro", "Geeza Pro"), ("Damascus", "Damascus"),
+                                                   ("Baghdad", "Baghdad"), ("Al Nile", "Al Nile"), ("Kufi Standard GK", "Kufi")]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(L.t("Text style")).font(.caption).foregroundColor(.secondary)
+            Picker("", selection: Binding(get: { settings.textStyle }, set: { settings.textStyle = $0; Task { await app.textOptionsChanged() } })) {
+                Text(L.t("Native")).tag("native")
+                Text(L.t("Box")).tag("box")
+                Text(L.t("Outline")).tag("outline")
+            }
+            .pickerStyle(.segmented).labelsHidden()
+            Text(settings.textStyle == "native" ? L.t("In the game's own colours, as if the game drew it.") : " ")
+                .font(.caption2).foregroundColor(.secondary)
+            HStack {
+                if settings.textStyle != "native" {
+                    Picker(L.t("Colour"), selection: Binding(get: { settings.textColor }, set: { settings.textColor = $0; Task { await app.textOptionsChanged() } })) {
+                        Text(L.t("White")).tag("white")
+                        Text(L.t("Yellow")).tag("yellow")
+                    }
+                    .frame(maxWidth: 150)
+                }
+                Picker(L.t("Font"), selection: $settings.fontName) {
+                    ForEach(Self.fonts, id: \.0) { Text($0.1).tag($0.0) }
+                }
+            }
+            .font(.caption)
+        }
     }
 }

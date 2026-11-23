@@ -81,7 +81,7 @@ class LinkService : Service() {
         val style = s.style
         if (sub.items.isEmpty()) {
             // No positions (older sender): one line at the style's position.
-            val v = plate(sub.text, sub.speaker, 34f * style.fontScale, style.bgOpacity, (sw * style.maxWidth).toInt())
+            val v = plate(sub.text, sub.speaker, 34f * style.fontScale, style, null, null, (sw * style.maxWidth).toInt())
             v.measure(View.MeasureSpec.makeMeasureSpec((sw * style.maxWidth).toInt(), View.MeasureSpec.AT_MOST), View.MeasureSpec.UNSPECIFIED)
             place(layer, v, sw / 2f, sh * style.positionY, sw, sh)
         } else {
@@ -90,8 +90,9 @@ class LinkService : Service() {
                 val lineH = i.h * sh / i.lines.coerceAtLeast(1)
                 val px = (lineH * 0.9f * style.fontScale).coerceIn(18f, 84f)
                 val maxW = (i.w * sw * 1.6f).coerceAtLeast(sw * 0.25f).coerceAtMost(sw * 0.9f).toInt()
-                val v = plate(i.text, i.speaker, px / dm.scaledDensity, style.bgOpacity, maxW)
-                v.minWidth = (i.w * sw).toInt().coerceAtMost(maxW)
+                val v = plate(i.text, i.speaker, px / dm.scaledDensity, style, i.bg, i.fg, maxW)
+                v.minWidth = (i.w * sw).toInt().coerceAtMost(maxW) + (if (style.mode == "native") 8 else 0)
+                if (style.mode == "native") v.minHeight = (i.h * sh).toInt() + 4
                 v.measure(View.MeasureSpec.makeMeasureSpec(maxW, View.MeasureSpec.AT_MOST), View.MeasureSpec.UNSPECIFIED)
                 place(layer, v, (i.x + i.w / 2) * sw, (i.y + i.h / 2) * sh, sw, sh)
             }
@@ -99,8 +100,12 @@ class LinkService : Service() {
         layer.visibility = View.VISIBLE
     }
 
-    /** Broadcast style: white semibold text with a soft shadow on a dark rounded plate; speaker in amber above. */
-    private fun plate(text: String, speaker: String?, sp: Float, bgOpacity: Float, maxW: Int) = TextView(this).apply {
+    /**
+     * One translated piece in the chosen style: native (the game's own background and text colours on a plate that
+     * covers the English — reads as if the game drew Arabic), box (white/yellow on a dark rounded plate) or outline.
+     */
+    private fun plate(text: String, speaker: String?, sp: Float, style: OverlayStyle, bg: Int?, fg: Int?, maxW: Int) = TextView(this).apply {
+        val chosen = if (style.textColor == "yellow") Color.rgb(255, 219, 64) else Color.WHITE
         this.text = SpannableStringBuilder().apply {
             speaker?.let {
                 append(it).append("\n")
@@ -108,20 +113,29 @@ class LinkService : Service() {
             }
             append(text)
         }
-        setTextColor(Color.WHITE)
         setTextSize(TypedValue.COMPLEX_UNIT_SP, sp)
         textDirection = View.TEXT_DIRECTION_RTL
-        layoutDirection = View.LAYOUT_DIRECTION_RTL
         gravity = Gravity.CENTER
-        val padH = (sp * resources.displayMetrics.scaledDensity * 0.7f).toInt()
-        val padV = (sp * resources.displayMetrics.scaledDensity * 0.28f).toInt()
-        setPadding(padH, padV, padH, padV)
-        setLineSpacing(0f, 1.12f)
+        setLineSpacing(0f, 1.1f)
         typeface = if (Build.VERSION.SDK_INT >= 28) android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, 600, false) else android.graphics.Typeface.DEFAULT_BOLD
-        setShadowLayer(4f, 0f, 2f, Color.argb(220, 0, 0, 0))
-        background = GradientDrawable().apply {
-            setColor(Color.argb((bgOpacity * 255).toInt(), 0, 0, 0))
-            cornerRadius = sp * resources.displayMetrics.scaledDensity * 0.35f
+        val em = sp * resources.displayMetrics.scaledDensity
+        when (style.mode) {
+            "native" -> {
+                setTextColor(fg ?: Color.WHITE)
+                setPadding((em * 0.25f).toInt(), 0, (em * 0.25f).toInt(), 0)
+                background = GradientDrawable().apply { setColor(bg ?: Color.argb((style.bgOpacity * 255).toInt(), 0, 0, 0)); cornerRadius = 4f }
+            }
+            "outline" -> {
+                setTextColor(chosen)
+                setShadowLayer(em * 0.16f, 0f, 0f, Color.BLACK)
+                setPadding((em * 0.2f).toInt(), 0, (em * 0.2f).toInt(), 0)
+            }
+            else -> {
+                setTextColor(chosen)
+                setShadowLayer(4f, 0f, 2f, Color.argb(220, 0, 0, 0))
+                setPadding((em * 0.7f).toInt(), (em * 0.28f).toInt(), (em * 0.7f).toInt(), (em * 0.28f).toInt())
+                background = GradientDrawable().apply { setColor(Color.argb((style.bgOpacity * 255).toInt(), 0, 0, 0)); cornerRadius = em * 0.35f }
+            }
         }
         maxWidth = maxW
     }
@@ -130,7 +144,9 @@ class LinkService : Service() {
     private fun place(layer: android.widget.FrameLayout, v: TextView, cx: Float, cy: Float, sw: Int, sh: Int) {
         val w = v.measuredWidth
         val h = v.measuredHeight
-        val lp = android.widget.FrameLayout.LayoutParams(android.widget.FrameLayout.LayoutParams.WRAP_CONTENT, android.widget.FrameLayout.LayoutParams.WRAP_CONTENT)
+        // Absolute LEFT/TOP: with the TV in Arabic the layout is right-to-left, and START would mirror every position.
+        val lp = android.widget.FrameLayout.LayoutParams(android.widget.FrameLayout.LayoutParams.WRAP_CONTENT, android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
+            Gravity.LEFT or Gravity.TOP)
         lp.leftMargin = (cx - w / 2f).toInt().coerceIn(0, (sw - w).coerceAtLeast(0))
         lp.topMargin = (cy - h / 2f).toInt().coerceIn(0, (sh - h).coerceAtLeast(0))
         layer.addView(v, lp)
@@ -138,14 +154,14 @@ class LinkService : Service() {
 
     /** A full-screen, click-through, transparent layer above other apps and inputs. */
     private fun createOverlay(): android.widget.FrameLayout {
-        val layer = android.widget.FrameLayout(this)
+        val layer = android.widget.FrameLayout(this).apply { layoutDirection = View.LAYOUT_DIRECTION_LTR }
         val lp = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT,
-        ).apply { gravity = Gravity.TOP or Gravity.START }
+        ).apply { gravity = Gravity.TOP or Gravity.LEFT }
         getSystemService(WindowManager::class.java).addView(layer, lp)
         return layer
     }

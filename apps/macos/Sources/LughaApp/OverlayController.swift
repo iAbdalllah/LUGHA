@@ -68,10 +68,8 @@ struct SubtitleOverlayView: View {
             ZStack {
                 if let s = model.subtitle {
                     ForEach(Array(placed(s, in: geo.size).enumerated()), id: \.offset) { _, p in
-                        SubtitlePlate(subtitle: Subtitle(text: p.item.text, speaker: p.item.speaker, source: "", score: 1),
-                                      fontSize: p.font, opacity: settings.backgroundOpacity)
-                            .frame(minWidth: p.minWidth, maxWidth: p.maxWidth)
-                            .fixedSize(horizontal: p.minWidth > 0, vertical: true)
+                        SubtitlePlate(item: p.item, fontSize: p.font, settings: settings, cover: p.cover)
+                            .frame(maxWidth: p.maxWidth)
                             .position(p.center)
                     }
                     .transition(.opacity)
@@ -82,7 +80,7 @@ struct SubtitleOverlayView: View {
         }
     }
 
-    private struct Placed { let item: SubtitleItem; let center: CGPoint; let font: Double; let minWidth: CGFloat; let maxWidth: CGFloat }
+    private struct Placed { let item: SubtitleItem; let center: CGPoint; let font: Double; let minWidth: CGFloat; let maxWidth: CGFloat; var cover: CGSize = .zero }
 
     private func placed(_ s: Subtitle, in size: CGSize) -> [Placed] {
         let scale = settings.fontSize / 30
@@ -100,38 +98,78 @@ struct SubtitleOverlayView: View {
             let font = min(max(Double(lineHeight) * 0.9 * scale, 13), 64)
             // Wide enough to hide the English; long Arabic may grow up to the whole area's width.
             return Placed(item: i, center: CGPoint(x: box.midX, y: box.midY), font: font,
-                          minWidth: 0, maxWidth: max(box.width * 1.6, min(a.width, 900)))
+                          minWidth: 0, maxWidth: max(box.width * 1.6, min(a.width, 900)),
+                          cover: CGSize(width: box.width + 8, height: box.height + 4))
         }
     }
 }
 
+/// One translated piece, in the chosen text style:
+/// - Native: the game's own background and text colours on a plate that exactly covers the English — it reads as if
+///   the game drew Arabic itself;
+/// - Box: white (or yellow) text with a soft shadow on a dark rounded plate;
+/// - Outline: no plate, outlined text like film subtitles.
 struct SubtitlePlate: View {
-    let subtitle: Subtitle
+    let item: SubtitleItem
     let fontSize: Double
-    let opacity: Double
+    @ObservedObject var settings: AppSettings
+    /// Native style: the size of the English to cover.
+    var cover: CGSize = .zero
+
+    private var font: Font {
+        settings.fontName.isEmpty ? .system(size: fontSize, weight: .semibold) : .custom(settings.fontName, size: fontSize).weight(.semibold)
+    }
+    private var chosenColor: Color { settings.textColor == "yellow" ? Color(red: 1, green: 0.86, blue: 0.25) : .white }
+    private func color(_ c: RGB?) -> Color? { c.map { Color(.sRGB, red: $0.r, green: $0.g, blue: $0.b) } }
 
     var body: some View {
+        switch settings.textStyle {
+        case "native": native
+        case "outline": outline
+        default: box
+        }
+    }
+
+    private var lines: some View {
         VStack(spacing: 2) {
-            if let speaker = subtitle.speaker {
-                Text(speaker)
-                    .font(.system(size: fontSize * 0.62, weight: .bold))
-                    .foregroundColor(Color(red: 0.91, green: 0.71, blue: 0.30))
+            if let speaker = item.speaker {
+                Text(speaker).font(.system(size: fontSize * 0.62, weight: .bold)).foregroundColor(Color(red: 0.91, green: 0.71, blue: 0.30))
             }
-            Text(subtitle.text)
-                .font(.system(size: fontSize, weight: .semibold))
-                .foregroundColor(.white)
-                .lineSpacing(fontSize * 0.18)
+            Text(item.text).font(font).lineSpacing(fontSize * 0.15)
         }
         .multilineTextAlignment(.center)
         .environment(\.layoutDirection, .rightToLeft)
-        .shadow(color: .black.opacity(0.85), radius: 2, x: 0, y: 1)
-        .padding(.horizontal, fontSize * 0.8)
-        .padding(.vertical, fontSize * 0.36)
-        .background(
-            RoundedRectangle(cornerRadius: fontSize * 0.35, style: .continuous)
-                .fill(Color.black.opacity(opacity))
-        )
         .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var native: some View {
+        let bg = color(item.background) ?? Color.black.opacity(settings.backgroundOpacity)
+        let fg = color(item.foreground) ?? .white
+        return lines
+            .foregroundColor(fg)
+            .padding(.horizontal, fontSize * 0.25)
+            .frame(minWidth: cover.width, minHeight: cover.height)
+            .background(RoundedRectangle(cornerRadius: 3, style: .continuous).fill(bg))
+    }
+
+    private var box: some View {
+        lines
+            .foregroundColor(chosenColor)
+            .shadow(color: .black.opacity(0.85), radius: 2, x: 0, y: 1)
+            .padding(.horizontal, fontSize * 0.8)
+            .padding(.vertical, fontSize * 0.36)
+            .background(RoundedRectangle(cornerRadius: fontSize * 0.35, style: .continuous).fill(Color.black.opacity(settings.backgroundOpacity)))
+    }
+
+    private var outline: some View {
+        // A crisp outline from four offset copies plus a soft shadow.
+        ZStack {
+            ForEach(0 ..< 4, id: \.self) { k in
+                lines.foregroundColor(.black).offset(x: [1.5, -1.5, 0, 0][k], y: [0, 0, 1.5, -1.5][k])
+            }
+            lines.foregroundColor(chosenColor)
+        }
+        .shadow(color: .black.opacity(0.7), radius: 3, x: 0, y: 2)
     }
 }
 

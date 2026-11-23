@@ -202,6 +202,8 @@ public final class TVSender: @unchecked Sendable {
             m["items"] = items.map { i -> [String: Any] in
                 var d: [String: Any] = ["text": i.text, "x": i.x, "y": i.y, "w": i.w, "h": i.h, "lines": i.lines]
                 if let s = i.speaker { d["speaker"] = s }
+                if let b = i.background { d["bg"] = b }
+                if let f = i.foreground { d["fg"] = f }
                 return d
             }
         }
@@ -223,8 +225,12 @@ public final class TVSender: @unchecked Sendable {
         public let speaker: String?
         public let x, y, w, h: Double
         public let lines: Int
-        public init(text: String, speaker: String?, x: Double, y: Double, w: Double, h: Double, lines: Int) {
+        /// Native style: the game's background and text colours (#RRGGBB).
+        public let background: String?
+        public let foreground: String?
+        public init(text: String, speaker: String?, x: Double, y: Double, w: Double, h: Double, lines: Int, background: String? = nil, foreground: String? = nil) {
             self.text = text; self.speaker = speaker; self.x = x; self.y = y; self.w = w; self.h = h; self.lines = lines
+            self.background = background; self.foreground = foreground
         }
     }
 
@@ -253,9 +259,11 @@ public final class TVSender: @unchecked Sendable {
 
     /// `positionY`: vertical centre of the subtitle as a fraction of the picture (0 top, 1 bottom) — set to where the game
     /// draws its English subtitle so the Arabic covers it. `maxWidth`: fraction of the picture width the line may use.
-    public func setStyle(fontScale: Double, positionY: Double, bgOpacity: Double, maxWidth: Double? = nil) async throws {
+    public func setStyle(fontScale: Double, positionY: Double, bgOpacity: Double, maxWidth: Double? = nil, mode: String? = nil, textColor: String? = nil) async throws {
         var m: [String: Any] = ["t": "style.set", "font_scale": fontScale, "position_y": positionY, "bg_opacity": bgOpacity]
         if let maxWidth { m["max_width"] = maxWidth }
+        if let mode { m["mode"] = mode }
+        if let textColor { m["text_color"] = textColor }
         try await send(m)
     }
 

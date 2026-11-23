@@ -17,7 +17,11 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.suspendCancellableCoroutine
 
 /** A translated piece and where its English is on screen (fractions, origin top-left); [lines] = English line count. */
-data class SubItem(val text: String, val speaker: String?, val x: Float, val y: Float, val w: Float, val h: Float, val lines: Int)
+data class SubItem(
+    val text: String, val speaker: String?, val x: Float, val y: Float, val w: Float, val h: Float, val lines: Int,
+    /** Native style: the game's background and text colours (ARGB), when the sender sampled them. */
+    val bg: Int? = null, val fg: Int? = null,
+)
 
 /** [items] place each piece over its English; empty = show [text] at the style's position. */
 data class Subtitle(val sid: Long, val text: String, val speaker: String?, val receivedAt: Long, val items: List<SubItem> = emptyList())

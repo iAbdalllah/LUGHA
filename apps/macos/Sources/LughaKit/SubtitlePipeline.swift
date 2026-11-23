@@ -9,16 +9,32 @@ public struct SubtitleItem: Equatable, Sendable {
     public let box: CGRect
     /// How many OCR lines the English took (to size the Arabic to one line's height).
     public let lines: Int
+    /// The game's own colours around and in the English (Native style); nil until sampled from the frame.
+    public var background: RGB?
+    public var foreground: RGB?
 
-    public init(text: String, speaker: String? = nil, box: CGRect = .zero, lines: Int = 1) {
+    public init(text: String, speaker: String? = nil, box: CGRect = .zero, lines: Int = 1, background: RGB? = nil, foreground: RGB? = nil) {
         self.text = text
         self.speaker = speaker
         self.box = box
         self.lines = lines
+        self.background = background
+        self.foreground = foreground
     }
 }
 
 public struct Subtitle: Equatable, Sendable {
+    /// A copy whose items carry colours sampled from the frame they were read in.
+    public func colored(by sampler: FrameSampler) -> Subtitle {
+        var s = self
+        s.items = items.map { i in
+            var i = i
+            if i.box.width > 0, let c = sampler.textColors(in: i.box) { i.background = c.background; i.foreground = c.text }
+            return i
+        }
+        return s
+    }
+
     /// All items as one line (history, reports, the TV's plain-text fallback).
     public let text: String
     public let speaker: String?
@@ -28,7 +44,7 @@ public struct Subtitle: Equatable, Sendable {
     public let entryId: Int64
     public let packageId: String
     /// Each translated piece with its position: one for a subtitle, one per known label for a menu.
-    public let items: [SubtitleItem]
+    public var items: [SubtitleItem]
 
     public init(text: String, speaker: String?, source: String, score: Double, entryId: Int64 = 0, packageId: String = "", items: [SubtitleItem]? = nil) {
         self.text = text

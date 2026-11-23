@@ -291,6 +291,7 @@ final class AppModel: ObservableObject {
     }
 
     func stop() async {
+        gameRect = nil
         heartbeat?.invalidate()
         heartbeat = nil
         await capture.stop()
@@ -328,22 +329,39 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// Each translated piece placed where its English is on the TV: the capture area's fractions of the game picture,
-    /// times the piece's fractions of the capture area.
+    /// Where the game picture is within the captured frame (whole-window mode), as fractions; nil = fills it.
+    private var gameRect: CGRect?
+    private var contentCheckedAt = Date.distantPast
+
+    /// Each translated piece placed where its English is on the TV, as fractions of the full game picture.
+    /// Whole-window mode maps through the detected picture rect (so black bars and the title bar don't shift it);
+    /// other modes through the capture area's place in the picture.
     private func tvItems(_ sub: Subtitle) -> [TVSender.Item] {
-        guard let a = pictureArea else { return [] }
-        return sub.items.filter { $0.box.width > 0 }.map { i in
-            TVSender.Item(text: i.text, speaker: i.speaker,
-                          x: a.minX + i.box.minX * a.width, y: a.minY + i.box.minY * a.height,
-                          w: i.box.width * a.width, h: i.box.height * a.height, lines: i.lines)
+        let boxes: [CGRect]
+        if let g = gameRect, g.width > 0, g.height > 0 {
+            boxes = sub.items.map { CGRect(x: ($0.box.minX - g.minX) / g.width, y: ($0.box.minY - g.minY) / g.height,
+                                           width: $0.box.width / g.width, height: $0.box.height / g.height) }
+        } else if let a = pictureArea {
+            boxes = sub.items.map { CGRect(x: a.minX + $0.box.minX * a.width, y: a.minY + $0.box.minY * a.height,
+                                           width: $0.box.width * a.width, height: $0.box.height * a.height) }
+        } else { return [] }
+        return zip(sub.items, boxes).filter { $0.0.box.width > 0 }.map { i, b in
+            TVSender.Item(text: i.text, speaker: i.speaker, x: b.minX, y: b.minY, w: b.width, h: b.height, lines: i.lines,
+                          background: i.background?.hex, foreground: i.foreground?.hex)
         }
+    }
+
+    /// Re-send the look to the TV after a text option changes, and redraw the current line.
+    func textOptionsChanged() async {
+        await pushStyleToTV()
+        if let s = subtitle { await mirrorToTV(s) }
     }
 
     func pushStyleToTV() async {
         guard let tv else { return }
         let a = pictureArea ?? CGRect(x: 0.08, y: 0.78, width: 0.84, height: 0.16)
         try? await tv.setStyle(fontScale: settings.fontSize / 30, positionY: Double(a.midY), bgOpacity: settings.backgroundOpacity,
-                               maxWidth: Double(min(max(a.width, 0.5), 0.9)))
+                               maxWidth: Double(min(max(a.width, 0.5), 0.9)), mode: settings.textStyle, textColor: settings.textColor)
     }
 
     private func process(_ image: CGImage) async {
@@ -353,8 +371,14 @@ final class AppModel: ObservableObject {
         let t0 = Date()
         let lines = (try? await ocr.recognizeLines(image)) ?? []
         lastRead = lines.map(\.text).joined(separator: " · ")
+        // Where the game picture is inside the window (black bars, title bar), re-checked every few seconds.
+        if settings.captureAppBundleID != nil, settings.windowArea == AppSettings.wholeWindowArea, Date().timeIntervalSince(contentCheckedAt) > 3 {
+            contentCheckedAt = Date()
+            gameRect = FrameSampler(image, maxWidth: 480)?.contentRect()
+        }
         if await pipeline.ingest(ocr: lines) {
-            subtitle = pipeline.current
+            // Native style: each piece in the game's own colours, read from this frame.
+            subtitle = pipeline.current.map { s in FrameSampler(image).map { s.colored(by: $0) } ?? s }
             history = pipeline.history
             if settings.showOnMac { overlay.update(subtitle) }
             await mirrorToTV(subtitle)

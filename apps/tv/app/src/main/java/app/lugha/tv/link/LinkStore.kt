@@ -19,6 +19,10 @@ data class OverlayStyle(
     val positionY: Float = 0.86f,
     val bgOpacity: Float = 0.8f,
     val maxWidth: Float = 0.8f,
+    /** "native" (the game's own colours), "box" (dark plate) or "outline" (no plate). */
+    val mode: String = "native",
+    /** Text colour for box/outline: "white" or "yellow". */
+    val textColor: String = "white",
 ) {
     val positionBottom get() = positionY >= 0.5f
 }
