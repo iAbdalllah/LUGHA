@@ -37,8 +37,7 @@ public final class CaptureService: NSObject, SCStreamOutput, SCStreamDelegate, @
 
         let config = SCStreamConfiguration()
         config.sourceRect = region
-        config.width = max(Int(region.width * 2), 64)
-        config.height = max(Int(region.height * 2), 32)
+        (config.width, config.height) = Self.outputSize(region.size)
         config.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(max(fps, 1)))
         config.showsCursor = false
         config.queueDepth = 3
@@ -98,8 +97,7 @@ public final class CaptureService: NSObject, SCStreamOutput, SCStreamDelegate, @
 
         let config = SCStreamConfiguration()
         config.sourceRect = rect
-        config.width = max(Int(rect.width * 2), 64)
-        config.height = max(Int(rect.height * 2), 32)
+        (config.width, config.height) = Self.outputSize(rect.size)
         config.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(max(fps, 1)))
         config.showsCursor = false
         config.queueDepth = 3
@@ -111,6 +109,13 @@ public final class CaptureService: NSObject, SCStreamOutput, SCStreamDelegate, @
         self.stream = stream
         isRunning = true
         return AppWindow(id: window.windowID, bundleID: bundleID, appName: window.owningApplication?.applicationName ?? bundleID, title: window.title ?? "", frame: window.frame)
+    }
+
+    /// Frames at Retina resolution, but at most 2200 px wide: a whole 5K window is far more than OCR needs, and every
+    /// extra pixel costs capture, conversion and recognition time on each frame.
+    static func outputSize(_ points: CGSize, maxWidth: Double = 2200) -> (Int, Int) {
+        let scale = min(2, maxWidth / max(points.width, 1))
+        return (max(Int(points.width * scale), 64), max(Int(points.height * scale), 32))
     }
 
     public func stop() async {
