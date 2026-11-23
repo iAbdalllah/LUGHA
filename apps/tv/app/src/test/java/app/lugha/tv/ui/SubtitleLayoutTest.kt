@@ -71,4 +71,40 @@ class SubtitleLayoutTest {
         hold.update(listOf(a), 200)
         assertEquals(listOf(a to false), hold.visible(10_000))
     }
+
+    @Test
+    fun stackedDialogueBecomesOneBlockAndHudStaysApart() {
+        // Recorded prison scene: Prisoner line over Lucia's, a HUD word to the right.
+        val prisoner = SubItem("قلت لك ذاك الحقير الثاني، أنا ما سويت شيء.", "Prisoner", 0.308f, 0.702f, 0.384f, 0.013f, 1)
+        val lucia = SubItem("إيه", "Lucia", 0.464f, 0.725f, 0.071f, 0.012f, 1)
+        val hud = SubItem("تشغيل", null, 0.685f, 0.712f, 0.101f, 0.039f, 1)
+        val s = scene(listOf(lucia to false, prisoner to false, hud to false))
+        assertEquals(listOf(prisoner, lucia), s.block!!.lines.map { it.first })
+        assertEquals(0.308f, s.block!!.x, 0.001f)
+        assertEquals(0.737f, s.block!!.y + s.block!!.h, 0.001f)
+        assertEquals(listOf(hud), s.hud.map { it.first })
+    }
+
+    @Test
+    fun anEarlierLineSitsAtTheTopOfTheBlockAndTopTextIsNotDialogue() {
+        val old = item("السطر الأول من الحوار هنا", 0.8f)
+        val now = item("السطر الثاني من الحوار هنا", 0.8f)
+        val tip = SubItem("اضغط مطولاً لتخفيف السرعة أثناء الهبوط", null, 0.01f, 0.2f, 0.2f, 0.06f, 2)
+        val s = scene(listOf(now to false, old to true, tip to false))
+        assertEquals(listOf(old to true, now to false), s.block!!.lines)
+        assertEquals(listOf(tip), s.hud.map { it.first })
+    }
+
+    @Test
+    fun historyKeepsRecentDialogueOnceNewestLast() {
+        val h = History(max = 2)
+        val a = item("السطر الأول من الحوار هنا", 0.8f)
+        val b = item("السطر الثاني من الحوار هنا", 0.8f)
+        val c = item("السطر الثالث من الحوار هنا", 0.8f)
+        h.add(listOf(a, SubItem("هدد", null, 0.9f, 0.7f, 0.05f, 0.03f, 1)), 1)
+        h.add(listOf(a, b), 2)
+        h.add(listOf(c), 3)
+        assertEquals(listOf(b, c), h.items)
+        assertEquals(3L, h.changedAt)
+    }
 }

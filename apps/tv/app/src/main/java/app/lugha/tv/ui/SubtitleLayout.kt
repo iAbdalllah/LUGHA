@@ -18,11 +18,12 @@ data class Rect(val left: Int, val top: Int, val width: Int, val height: Int) {
  * @param wanted each bubble centred where its English is
  * @param old true for a line kept up for reading after its English left the screen
  */
-fun arrange(wanted: List<Rect>, old: List<Boolean>, screenW: Int, screenH: Int, gap: Int): List<Rect> {
+fun arrange(wanted: List<Rect>, old: List<Boolean>, screenW: Int, screenH: Int, gap: Int, fixed: Int = 0): List<Rect> {
     val clamp = { r: Rect ->
         r.copy(left = r.left.coerceIn(0, (screenW - r.width).coerceAtLeast(0)), top = r.top.coerceIn(0, (screenH - r.height).coerceAtLeast(0)))
     }
-    val order = wanted.indices.sortedWith(compareBy({ old[it] }, { wanted[it].top }))
+    // The first [fixed] rects (the subtitle block) stay where they are; the rest make way for them.
+    val order = (0 until fixed).toList() + (fixed until wanted.size).sortedWith(compareBy({ old[it] }, { wanted[it].top }))
     val placed = mutableListOf<Rect>()
     val out = arrayOfNulls<Rect>(wanted.size)
     for (k in order) {
@@ -38,7 +39,7 @@ fun arrange(wanted: List<Rect>, old: List<Boolean>, screenW: Int, screenH: Int, 
             }
             return null
         }
-        val r = slide(down = !old[k]) ?: slide(down = old[k]) ?: start
+        val r = if (k < fixed) start else slide(down = !old[k]) ?: slide(down = old[k]) ?: start
         out[k] = r
         placed += r
     }
@@ -91,4 +92,51 @@ class ReadingHold(private val maxOld: Int = 1) {
     fun nextExpiry(): Long? = entries.values.filter { it.goneAt != null }.minOfOrNull { it.since + readMillis(it.item.text) }
 
     fun clear() = entries.clear()
+}
+
+/** A dialogue line: spoken text (a speaker, or a sentence) in the lower half, where games draw subtitles. */
+fun isDialogue(i: SubItem) = (i.speaker != null || i.text.length >= 14) && i.y + i.h / 2f >= 0.5f
+
+/** The subtitle block: every dialogue line on one plate over the English subtitle area. */
+data class Block(val lines: List<Pair<SubItem, Boolean>>, val x: Float, val y: Float, val w: Float, val h: Float) {
+    /** One English line's height (fraction of the screen), to size the Arabic like the game's text. */
+    val lineH: Float get() = lines.filter { !it.second }.map { it.first.h / it.first.lines.coerceAtLeast(1) }.sorted().let { if (it.isEmpty()) h else it[it.size / 2] }
+}
+
+/** What to draw: the subtitle block (or null) and the other pieces (HUD prompts, menus, signs), each over its English. */
+data class Scene(val block: Block?, val hud: List<Pair<SubItem, Boolean>>)
+
+/** Splits what is shown into the subtitle block and the rest. Lines in the block keep screen order; earlier lines first. */
+fun scene(shown: List<Pair<SubItem, Boolean>>): Scene {
+    val (talk, hud) = shown.partition { isDialogue(it.first) }
+    if (talk.isEmpty()) return Scene(null, hud)
+    val current = talk.filter { !it.second }.ifEmpty { talk }
+    val left = current.minOf { it.first.x }
+    val top = current.minOf { it.first.y }
+    val right = current.maxOf { it.first.x + it.first.w }
+    val bottom = current.maxOf { it.first.y + it.first.h }
+    val ordered = talk.filter { it.second } + talk.filter { !it.second }.sortedBy { it.first.y }
+    return Scene(Block(ordered, left, top, right - left, bottom - top), hud)
+}
+
+/**
+ * Recent dialogue for the side panel: newest last, each line once, at most [max]. Only lines the game showed long
+ * enough to be real (not a one-frame misread) are kept by the caller.
+ */
+class History(private val max: Int = 6) {
+    private val lines = ArrayDeque<SubItem>()
+    var changedAt = 0L
+        private set
+
+    fun add(items: List<SubItem>, now: Long) {
+        for (i in items.filter(::isDialogue)) {
+            if (lines.any { it.text == i.text }) continue
+            lines.addLast(i)
+            while (lines.size > max) lines.removeFirst()
+            changedAt = now
+        }
+    }
+
+    val items: List<SubItem> get() = lines.toList()
+    fun clear() = lines.clear()
 }

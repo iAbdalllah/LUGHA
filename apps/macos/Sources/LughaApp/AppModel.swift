@@ -285,6 +285,8 @@ final class AppModel: ObservableObject {
                 pictureArea = CGRect(x: region.minX / origin.width, y: region.minY / origin.height, width: region.width / origin.width, height: region.height / origin.height)
             }
             if settings.showOnMac { overlay.show() }
+            pipeline.stableFor = settings.stableMs / 1000
+            pipeline.removeAfter = settings.goneAfterMs / 1000
             running = true
             status = ""
             await pushStyleToTV()
@@ -397,6 +399,8 @@ final class AppModel: ObservableObject {
 
     /// Re-send the look to the TV after a text option changes, and redraw the current line.
     func textOptionsChanged() async {
+        pipeline.stableFor = settings.stableMs / 1000
+        pipeline.removeAfter = settings.goneAfterMs / 1000
         await pushStyleToTV()
         if let s = subtitle { await mirrorToTV(s) }
     }
@@ -406,7 +410,8 @@ final class AppModel: ObservableObject {
         let a = pictureArea ?? CGRect(x: 0.08, y: 0.78, width: 0.84, height: 0.16)
         try? await tv.setStyle(fontScale: settings.fontSize / 30, positionY: Double(a.midY), bgOpacity: settings.backgroundOpacity,
                                maxWidth: Double(min(max(a.width, 0.5), 0.9)), mode: settings.textStyle, textColor: settings.textColor,
-                               font: settings.fontName)
+                               font: settings.fontName, display: settings.displayMode, history: settings.historySide,
+                               fadeMs: Int(settings.fadeMs), readHold: settings.readHold)
     }
 
     private func process(_ image: CGImage) async {

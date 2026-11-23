@@ -36,4 +36,17 @@ final class OverlayLayoutTests: XCTestCase {
         XCTAssertEqual(hold.visible(at: t0.addingTimeInterval(0.6)).map(\.item.text), [c.text, b.text], "only the newest earlier line stays")
         XCTAssertEqual(hold.visible(at: t0.addingTimeInterval(10)).map(\.item.text), [c.text])
     }
+
+    func testStackedDialogueIsOneBlockAndHudStaysApart() {
+        let prisoner = SubtitleItem(text: "قلت لك ذاك الحقير الثاني، أنا ما سويت شيء.", speaker: "Prisoner", box: CGRect(x: 0.308, y: 0.702, width: 0.384, height: 0.013))
+        let lucia = SubtitleItem(text: "إيه", speaker: "Lucia", box: CGRect(x: 0.464, y: 0.725, width: 0.071, height: 0.012))
+        let hud = SubtitleItem(text: "تشغيل", box: CGRect(x: 0.685, y: 0.712, width: 0.101, height: 0.039))
+        let s = OverlayLayout.scene([(lucia, false), (prisoner, false), (hud, false)])
+        XCTAssertEqual(s.block?.lines.map(\.item.text), [prisoner.text, lucia.text])
+        XCTAssertEqual(s.block!.area.maxY, 0.737, accuracy: 0.001)
+        XCTAssertEqual(s.hud.map(\.item.text), [hud.text])
+        let r = RecentDialogue(max: 2)
+        r.add([prisoner, hud]); r.add([lucia]); r.add([prisoner])
+        XCTAssertEqual(r.items.map(\.text), [prisoner.text, lucia.text])
+    }
 }

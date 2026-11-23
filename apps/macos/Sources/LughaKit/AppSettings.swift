@@ -40,6 +40,19 @@ public final class AppSettings: ObservableObject, @unchecked Sendable {
     /// Arabic font id shared with the TV: "", naskh, kufi, cairo, tajawal, amiri ("" = system).
     @Published public var fontName: String = "" { didSet { d.set(fontName, forKey: "fontName") } }
 
+    /// "over": the Arabic hides the English on a plate; "above": the Arabic sits just above the English, which stays.
+    @Published public var displayMode: String = "over" { didSet { d.set(displayMode, forKey: "displayMode") } }
+    /// Side panel with the recent dialogue: "off", "left" or "right".
+    @Published public var historySide: String = "off" { didSet { d.set(historySide, forKey: "historySide") } }
+    /// Fade-in of a new line, ms (0 = at once).
+    @Published public var fadeMs: Double = 150 { didSet { d.set(fadeMs, forKey: "fadeMs") } }
+    /// Keep a replaced dialogue line up (dimmed, above the new one) until it could be read.
+    @Published public var readHold: Bool = true { didSet { d.set(readHold, forKey: "readHold") } }
+    /// Show text only once it has been read this long, ms (avoids half-drawn lines; adds that much delay).
+    @Published public var stableMs: Double = 0 { didSet { d.set(stableMs, forKey: "stableMs") } }
+    /// Treat the English as gone after it is missing this long, ms (ignores OCR missing a frame).
+    @Published public var goneAfterMs: Double = 400 { didSet { d.set(goneAfterMs, forKey: "goneAfterMs") } }
+
     /// Where most games put dialogue: the lower band, centred.
     public static let defaultWindowArea = CGRect(x: 0.08, y: 0.70, width: 0.84, height: 0.26)
     /// The whole window: menus, HUD and subtitles. The title bar and black bars are trimmed by finding the 16:9 game
@@ -61,6 +74,12 @@ public final class AppSettings: ObservableObject, @unchecked Sendable {
         if d.object(forKey: "showOnMac") != nil { showOnMac = d.bool(forKey: "showOnMac") }
         if let s = d.string(forKey: "textStyle") { textStyle = s }
         if let s = d.string(forKey: "textColor") { textColor = s }
+        if let s = d.string(forKey: "displayMode"), ["over", "above"].contains(s) { displayMode = s }
+        if let s = d.string(forKey: "historySide"), ["off", "left", "right"].contains(s) { historySide = s }
+        if d.object(forKey: "fadeMs") != nil { fadeMs = d.double(forKey: "fadeMs") }
+        if d.object(forKey: "readHold") != nil { readHold = d.bool(forKey: "readHold") }
+        if d.object(forKey: "stableMs") != nil { stableMs = d.double(forKey: "stableMs") }
+        if d.object(forKey: "goneAfterMs") != nil { goneAfterMs = d.double(forKey: "goneAfterMs") }
         if let s = d.string(forKey: "fontName"), ["", "naskh", "kufi", "cairo", "tajawal", "amiri"].contains(s) { fontName = s }
     }
 }

@@ -61,6 +61,8 @@ struct MenuPanelView: View {
                 Slider(value: $settings.verticalPosition, in: 0.05 ... 0.95)
             }
 
+            DisplayOptions(settings: settings).environmentObject(app)
+
             TVSection().environmentObject(app)
 
             if !app.history.isEmpty {
@@ -287,6 +289,60 @@ struct SourcePicker: View {
             }
         }
         .task { await app.refreshWindows() }
+    }
+}
+
+/// Where the Arabic goes, the history panel and timing.
+struct DisplayOptions: View {
+    @EnvironmentObject var app: AppModel
+    @ObservedObject var settings: AppSettings
+
+    private func bind<T>(_ k: ReferenceWritableKeyPath<AppSettings, T>) -> Binding<T> {
+        Binding(get: { settings[keyPath: k] }, set: { settings[keyPath: k] = $0; Task { await app.textOptionsChanged() } })
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(L.t("Display")).font(.caption).foregroundColor(.secondary)
+            Picker("", selection: bind(\.displayMode)) {
+                Text(L.t("Over the English")).tag("over")
+                Text(L.t("Above the English")).tag("above")
+            }
+            .pickerStyle(.segmented).labelsHidden()
+            Text(settings.displayMode == "over" ? L.t("The Arabic hides the English.") : L.t("The Arabic sits just above the English, which stays visible."))
+                .font(.caption2).foregroundColor(.secondary)
+
+            Text(L.t("History panel")).font(.caption).foregroundColor(.secondary)
+            Picker("", selection: bind(\.historySide)) {
+                Text(L.t("Off")).tag("off")
+                Text(L.t("Left")).tag("left")
+                Text(L.t("Right")).tag("right")
+            }
+            .pickerStyle(.segmented).labelsHidden()
+            Text(L.t("Recent dialogue at the side of the game; it dims after a few seconds.")).font(.caption2).foregroundColor(.secondary)
+            Toggle(L.t("Keep a line until it can be read"), isOn: bind(\.readHold)).font(.caption)
+
+            DisclosureGroup(L.t("Timing")) {
+                VStack(alignment: .leading, spacing: 4) {
+                    slider(L.t("Wait for stable text (ms)"), \.stableMs, 0 ... 500, L.t("Avoids half-drawn lines; adds that much delay."))
+                    slider(L.t("English gone after (ms)"), \.goneAfterMs, 100 ... 1500, L.t("Ignores short OCR blinks; the Arabic leaves this long after the English."))
+                    slider(L.t("Fade in (ms)"), \.fadeMs, 0 ... 500, nil)
+                }
+            }
+            .font(.caption)
+        }
+    }
+
+    private func slider(_ title: String, _ k: ReferenceWritableKeyPath<AppSettings, Double>, _ range: ClosedRange<Double>, _ note: String?) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack {
+                Text(title)
+                Spacer()
+                Text("\(Int(settings[keyPath: k]))").monospacedDigit().foregroundColor(.secondary)
+            }
+            Slider(value: bind(k), in: range, step: 10)
+            if let note { Text(note).font(.caption2).foregroundColor(.secondary) }
+        }
     }
 }
 

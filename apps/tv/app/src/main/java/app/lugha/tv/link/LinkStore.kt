@@ -25,6 +25,14 @@ data class OverlayStyle(
     val textColor: String = "white",
     /** Arabic font id, same as the Mac: "" (system), naskh, kufi, cairo, tajawal, amiri — bundled in res/font. */
     val font: String = "",
+    /** "over": the Arabic hides the English on a plate; "above": the Arabic sits just above the English, which stays. */
+    val display: String = "over",
+    /** Side panel with the recent dialogue: "off", "left" or "right". */
+    val history: String = "off",
+    /** Fade-in of a new line, ms (0 = appear at once). */
+    val fadeMs: Int = 150,
+    /** Keep a replaced dialogue line up (dimmed, above the new one) until it could be read. */
+    val readHold: Boolean = true,
 ) {
     val positionBottom get() = positionY >= 0.5f
 }

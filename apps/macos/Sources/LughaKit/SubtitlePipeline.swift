@@ -73,6 +73,8 @@ public final class SubtitlePipeline: @unchecked Sendable {
     public var removeAfter: TimeInterval = 0.4
     /// The same for one- and two-word pieces (HUD prompts), which OCR misses more often.
     public var shortRemoveAfter: TimeInterval = 1.0
+    /// A piece is shown only after it has been read for this long (0 = at once): avoids half-drawn text.
+    public var stableFor: TimeInterval = 0
     public private(set) var current: Subtitle?
     public private(set) var history: [Subtitle] = []
     public var historyLimit = 50
@@ -82,6 +84,7 @@ public final class SubtitlePipeline: @unchecked Sendable {
         var hit: Hit
         var source: String
         var seen: Int
+        var firstSeen: Date
         var lastSeen: Date
         var missing: Bool
         var order: Int
@@ -108,7 +111,7 @@ public final class SubtitlePipeline: @unchecked Sendable {
     /// Feed one frame's OCR lines with positions. Returns true when `current` changed.
     @discardableResult
     public func ingest(ocr: [OCRLine], at now: Date = Date()) async -> Bool {
-        let lines = ocr.map { OCRLine(text: $0.text.trimmingCharacters(in: .whitespaces), box: $0.box) }.filter { !$0.text.isEmpty }
+        let lines = ocr.map { OCRLine(text: Self.plain($0.text).trimmingCharacters(in: .whitespaces), box: $0.box) }.filter { !$0.text.isEmpty }
         lastFrameEmpty = lines.isEmpty
         var found: [(SubtitleItem, Hit, String)] = []
         if !lines.isEmpty {
@@ -131,7 +134,7 @@ public final class SubtitlePipeline: @unchecked Sendable {
                 t.item = item; t.hit = hit; t.source = source; t.seen += 1; t.lastSeen = now; t.missing = false
                 tracks[item.text] = t
             } else {
-                tracks[item.text] = Track(item: item, hit: hit, source: source, seen: 1, lastSeen: now, missing: false, order: nextOrder + n)
+                tracks[item.text] = Track(item: item, hit: hit, source: source, seen: 1, firstSeen: now, lastSeen: now, missing: false, order: nextOrder + n)
             }
         }
         return publish(at: now)
@@ -156,11 +159,12 @@ public final class SubtitlePipeline: @unchecked Sendable {
     private func publish(at now: Date) -> Bool {
         tracks = tracks.filter { _, t in
             // A button prompt or HUD word ("THREATEN", "STORE") is read on and off by OCR: it gets longer to come back.
-            let short = t.source.split(whereSeparator: { $0.isWhitespace }).count <= 2
+            let short = t.item.speaker == nil && Self.splitSpeaker(t.source).speaker == nil
+                && t.source.split(whereSeparator: { $0.isWhitespace }).count <= 2
             let hold = lastFrameEmpty ? hideAfter : (short ? max(removeAfter, shortRemoveAfter) : removeAfter)
             return !(t.missing && now.timeIntervalSince(t.lastSeen) >= hold)
         }
-        let shown = tracks.values.filter { $0.seen >= stableFrames }
+        let shown = tracks.values.filter { $0.seen >= stableFrames && now.timeIntervalSince($0.firstSeen) >= stableFor }
             .sorted { a, b in
                 // Screen order: rows top to bottom (1% bands, so tiny OCR jitter can't swap them), then left to right,
                 // then the order they were first seen.
@@ -211,6 +215,15 @@ public final class SubtitlePipeline: @unchecked Sendable {
         return h
     }
 
+    /// Typographic punctuation OCR reads from game fonts ("Okay…", "don’t", “quotes”) as plain ASCII, as the package has it.
+    public static func plain(_ text: String) -> String {
+        var t = text
+        for (a, b) in [("…", "..."), ("’", "'"), ("‘", "'"), ("`", "'"), ("“", "\""), ("”", "\""), ("–", "-"), ("—", "-")] {
+            t = t.replacingOccurrences(of: a, with: b)
+        }
+        return t
+    }
+
     /// "Clerk: Rent's just…" → ("Clerk", "Rent's just…"). Games put the speaker's name before the line; the package
     /// has the line alone.
     public static func splitSpeaker(_ text: String) -> (speaker: String?, text: String) {
@@ -219,7 +232,9 @@ public final class SubtitlePipeline: @unchecked Sendable {
         let rest = text[text.index(after: colon)...].trimmingCharacters(in: .whitespaces)
         let words = name.split(separator: " ")
         guard !rest.isEmpty, (1...3).contains(words.count), name.count <= 24,
-              words.allSatisfy({ w in w.first.map { $0.isUppercase || $0.isNumber } ?? false }),
+              // "CO Wilson", "Officer Diaz"; OCR sometimes reads a short title in lower case ("co Wilson").
+              words.last?.first.map({ $0.isUppercase || $0.isNumber }) ?? false,
+              words.dropLast().allSatisfy({ w in w.first.map { $0.isUppercase || $0.isNumber } ?? false || w.count <= 3 }),
               name.allSatisfy({ $0.isLetter || $0.isNumber || " .'-#".contains($0) }) else { return (nil, text) }
         return (name, rest)
     }

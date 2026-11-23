@@ -227,4 +227,35 @@ final class PipelineTests: XCTestCase {
         p.tick(at: t0.addingTimeInterval(1.1))
         XCTAssertNil(p.current)
     }
+
+    func testTypographicPunctuationAndLowercaseTitlesFromTheLog() async {
+        XCTAssertEqual(SubtitlePipeline.plain("CO Wilson: Okay…"), "CO Wilson: Okay...")
+        XCTAssertEqual(SubtitlePipeline.plain("don’t “go”"), "don't \"go\"")
+        XCTAssertEqual(SubtitlePipeline.splitSpeaker("co Wilson: keep it straight, don't fuck around.").speaker, "co Wilson")
+        XCTAssertEqual(SubtitlePipeline.splitSpeaker("CO Wilson: Nah, nah, we're good.").text, "Nah, nah, we're good.")
+        let p = SubtitlePipeline(stableFrames: 1, lookup: lookupTable(["Okay...": "تمام..."]))
+        await p.ingest(ocr: [OCRLine(text: "CO Wilson: Okay…", box: box([0.4, 0.72, 0.2, 0.013]))])
+        XCTAssertEqual(p.current?.items.first?.text, "تمام...")
+        XCTAssertEqual(p.current?.items.first?.speaker, "CO Wilson")
+    }
+
+    func testAShortSpokenLineGoesOnTimeLikeOtherDialogue() async {
+        let p = SubtitlePipeline(stableFrames: 1, lookup: lookupTable(["Yeah.": "إيه"]))
+        let t0 = Date(timeIntervalSince1970: 0)
+        await p.ingest(ocr: [OCRLine(text: "Lucia: Yeah.", box: box([0.464, 0.725, 0.071, 0.012]))], at: t0)
+        await p.ingest(ocr: [OCRLine(text: "Unknown words here now", box: box([0.3, 0.725, 0.3, 0.012]))], at: t0.addingTimeInterval(0.1))
+        p.tick(at: t0.addingTimeInterval(0.6))
+        XCTAssertNil(p.current, "Lucia's 'Yeah.' is dialogue, not a flickering HUD word")
+    }
+
+    func testStableForDelaysUntilTheTextHeld() async {
+        let p = SubtitlePipeline(stableFrames: 1, lookup: lookupTable(["Hold your horses! I'm going.": "اصبر شوي! أنا رايح."]))
+        p.stableFor = 0.2
+        let t0 = Date(timeIntervalSince1970: 0)
+        let line = OCRLine(text: "Hold your horses! I'm going.", box: box([0.35, 0.85, 0.3, 0.03]))
+        await p.ingest(ocr: [line], at: t0)
+        XCTAssertNil(p.current)
+        p.tick(at: t0.addingTimeInterval(0.25))
+        XCTAssertEqual(p.current?.items.count, 1)
+    }
 }
