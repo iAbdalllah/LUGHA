@@ -23,6 +23,8 @@ class MakeUserCommandTest extends TestCase
 
         $u = User::where('email', 'owner@example.com')->firstOrFail();
         $this->assertTrue($u->hasRole('super_admin'));
+        $this->assertTrue((bool) $u->is_staff);
+        $this->assertTrue($u->canAccessPanel(filament()->getPanel('admin')));
         $this->assertNotNull($u->email_verified_at);
         $this->assertTrue(Hash::check('a-long-password-1', $u->password));
     }

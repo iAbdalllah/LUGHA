@@ -56,6 +56,9 @@ class MakeUser extends Command
             'locale' => $this->option('locale') ?: 'ar',
         ]);
         $user->email_verified_at ??= now();
+        if ($roles) {
+            $user->is_staff = true; // the admin panel only admits staff (User::canAccessPanel)
+        }
         $user->save();
         foreach ($roles as $role) {
             $user->assignRole($role);
