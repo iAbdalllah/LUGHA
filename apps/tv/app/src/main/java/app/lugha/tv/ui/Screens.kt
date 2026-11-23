@@ -17,6 +17,9 @@ import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.BiasAlignment
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalConfiguration
@@ -172,12 +175,12 @@ fun arabicFont(id: String): androidx.compose.ui.text.font.FontFamily? = when (id
 }
 
 @Composable
-fun SubtitleBubble(text: String, speaker: String?, fontScale: Float, bgOpacity: Float, modifier: Modifier = Modifier, maxWidth: androidx.compose.ui.unit.Dp = 1150.dp) {
+fun SubtitleBubble(text: String, speaker: String?, fontScale: Float, bgOpacity: Float, modifier: Modifier = Modifier, maxWidth: androidx.compose.ui.unit.Dp = 1150.dp, minWidth: androidx.compose.ui.unit.Dp = 0.dp) {
     // Broadcast style: white semibold Arabic with a soft shadow on a dark plate that hides the English underneath;
     // the speaker's name sits above in amber.
     val shadow = Shadow(Color.Black.copy(alpha = 0.85f), Offset(0f, 2f), 4f)
     Column(
-        modifier.widthIn(max = maxWidth).background(Color.Black.copy(alpha = bgOpacity), RoundedCornerShape((18 * fontScale).dp))
+        modifier.widthIn(min = minWidth, max = maxWidth).background(Color.Black.copy(alpha = bgOpacity), RoundedCornerShape((18 * fontScale).dp))
             .padding(horizontal = (40 * fontScale).dp, vertical = (16 * fontScale).dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -217,33 +220,65 @@ private fun LiveScreen(state: HubState, onSettings: () -> Unit) {
                 SubtitleBubble(s.text, s.speaker, state.style.fontScale, state.style.bgOpacity,
                     Modifier.align(BiasAlignment(0f, state.style.positionY * 2f - 1f)).padding(vertical = 24.dp),
                     maxWidth = maxWidth * state.style.maxWidth)
-            } else {
-                // Each piece exactly over its English, text sized to one English line.
-                val sw = maxWidth
-                val sh = maxHeight
-                s.items.forEach { i ->
-                    val lineH = sh * (i.h / i.lines.coerceAtLeast(1))
-                    val scale = (lineH.value * 0.9f / 48f * state.style.fontScale).coerceIn(0.35f, 1.6f)
-                    // absoluteOffset: the TV may run right-to-left, and offset() would mirror the position.
-                    androidx.compose.foundation.layout.Box(
-                        Modifier.absoluteOffset(x = sw * i.x, y = sh * i.y).size(sw * i.w, sh * i.h),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        if (state.style.mode == "native") {
-                            // The game's own colours on a plate that covers the English.
-                            Text(i.text, color = i.fg?.let { Color(it) } ?: Color.White, fontSize = (48 * scale).sp, fontWeight = FontWeight.SemiBold,
-                                fontFamily = arabicFont(state.style.font),
-                                textAlign = TextAlign.Center, maxLines = 2,
-                                style = MaterialTheme.typography.bodyLarge.copy(textDirection = TextDirection.Rtl),
-                                modifier = Modifier.wrapContentSize(unbounded = true)
-                                    .background(i.bg?.let { Color(it) } ?: Color.Black.copy(alpha = state.style.bgOpacity), RoundedCornerShape(4.dp))
-                                    .sizeIn(minWidth = sw * i.w + 4.dp, minHeight = sh * i.h + 2.dp)
-                                    .padding(horizontal = (12 * scale).dp))
-                        } else {
-                            SubtitleBubble(i.text, i.speaker, scale, if (state.style.mode == "outline") 0f else state.style.bgOpacity,
-                                Modifier.wrapContentSize(unbounded = true), maxWidth = (sw * i.w * 1.6f).coerceAtLeast(sw * 0.25f))
+            }
+        }
+        // Each piece over its English, never on top of another; a line the game already replaced stays a moment so it
+        // can be read (see ReadingHold).
+        val positioned = state.subtitle?.items.orEmpty()
+        val hold = remember { ReadingHold() }
+        var now by remember { mutableStateOf(System.currentTimeMillis()) }
+        LaunchedEffect(state.subtitle?.sid, positioned.isEmpty()) {
+            now = System.currentTimeMillis()
+            hold.update(positioned, now)
+            while (true) {
+                val next = hold.nextExpiry() ?: break
+                kotlinx.coroutines.delay((next - System.currentTimeMillis()).coerceIn(50, 5000))
+                now = System.currentTimeMillis()
+            }
+        }
+        val shown = hold.visible(now)
+        if (shown.isNotEmpty() && (state.subtitle == null || positioned.isNotEmpty())) {
+            val sw = maxWidth
+            val sh = maxHeight
+            val gap = with(LocalDensity.current) { 6.dp.roundToPx() }
+            Layout(
+                modifier = Modifier.fillMaxSize(),
+                content = {
+                    shown.forEach { (i, old) ->
+                        val lineH = sh * (i.h / i.lines.coerceAtLeast(1))
+                        val scale = (lineH.value * 0.9f / 48f * state.style.fontScale).coerceIn(0.35f, 1.6f)
+                        val cover = sw * i.w + 8.dp
+                        Box(Modifier.alpha(if (old) 0.72f else 1f)) {
+                            if (state.style.mode == "native") {
+                                // The game's own colours on a plate that covers the English.
+                                Text(i.text, color = i.fg?.let { Color(it) } ?: Color.White, fontSize = (48 * scale).sp, fontWeight = FontWeight.SemiBold,
+                                    fontFamily = arabicFont(state.style.font),
+                                    textAlign = TextAlign.Center, maxLines = 2,
+                                    style = MaterialTheme.typography.bodyLarge.copy(textDirection = TextDirection.Rtl),
+                                    modifier = Modifier
+                                        .background(i.bg?.let { Color(it) } ?: Color.Black.copy(alpha = state.style.bgOpacity), RoundedCornerShape(4.dp))
+                                        .sizeIn(minWidth = cover, minHeight = sh * i.h + 2.dp)
+                                        .padding(horizontal = (12 * scale).dp))
+                            } else {
+                                val max = (sw * i.w * 1.6f).coerceAtLeast(sw * 0.25f).coerceAtMost(sw * 0.9f)
+                                SubtitleBubble(i.text, i.speaker, scale, if (state.style.mode == "outline") 0f else state.style.bgOpacity,
+                                    maxWidth = max, minWidth = if (state.style.mode == "outline") 0.dp else cover.coerceAtMost(max))
+                            }
                         }
                     }
+                },
+            ) { measurables, c ->
+                val ps = measurables.map { it.measure(Constraints(maxWidth = c.maxWidth, maxHeight = c.maxHeight)) }
+                val wanted = shown.mapIndexed { n, (i, _) ->
+                    val p = ps[n]
+                    val cx = ((i.x + i.w / 2f) * c.maxWidth).toInt()
+                    val cy = ((i.y + i.h / 2f) * c.maxHeight).toInt()
+                    Rect(cx - p.width / 2, cy - p.height / 2, p.width, p.height)
+                }
+                val rects = arrange(wanted, shown.map { it.second }, c.maxWidth, c.maxHeight, gap)
+                layout(c.maxWidth, c.maxHeight) {
+                    // placeRelative would mirror on a right-to-left TV.
+                    ps.forEachIndexed { n, p -> p.place(rects[n].left, rects[n].top) }
                 }
             }
         }

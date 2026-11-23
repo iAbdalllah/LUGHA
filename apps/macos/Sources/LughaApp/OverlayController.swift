@@ -43,17 +43,59 @@ final class OverlayController {
         panel?.orderFrontRegardless()
     }
 
-    func hide() { panel?.orderOut(nil) }
+    /// Hides the panel and forgets lines kept up for reading.
+    func hide() { panel?.orderOut(nil); hold.clear(); expiry?.invalidate(); model.shown = [] }
+
+    private let hold = ReadingHold()
+    private var expiry: Timer?
 
     func update(_ subtitle: Subtitle?) {
+        hold.update(subtitle?.items ?? [])
         withAnimation(.easeOut(duration: 0.12)) { model.subtitle = subtitle }
+        refresh()
+    }
+
+    /// Shows what the hold says, then comes back when an earlier line's reading time is up.
+    private func refresh() {
+        let shown = hold.visible()
+        withAnimation(.easeOut(duration: 0.15)) { model.shown = shown }
+        expiry?.invalidate()
+        if let next = hold.nextExpiry {
+            expiry = Timer.scheduledTimer(withTimeInterval: max(next.timeIntervalSinceNow, 0.05), repeats: false) { [weak self] _ in
+                Task { @MainActor in self?.refresh() }
+            }
+        }
     }
 }
 
 @MainActor
 final class OverlayModel: ObservableObject {
     @Published var subtitle: Subtitle?
+    /// Pieces to draw: the current ones and at most one earlier line still being read (old = true).
+    @Published var shown: [(item: SubtitleItem, old: Bool)] = []
     @Published var anchor: CGRect?
+}
+
+/// Places each piece at its wanted centre, moving pieces so none covers another (OverlayLayout.arrange).
+private struct NoOverlapLayout: Layout {
+    struct Spot: LayoutValueKey { static let defaultValue = CGPoint.zero }
+    struct Old: LayoutValueKey { static let defaultValue = false }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        proposal.replacingUnspecifiedDimensions()
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+        let wanted = zip(subviews, sizes).map { v, s in
+            let c = v[Spot.self]
+            return CGRect(x: c.x - s.width / 2, y: c.y - s.height / 2, width: s.width, height: s.height)
+        }
+        let rects = OverlayLayout.arrange(wanted, old: subviews.map { $0[Old.self] }, in: bounds.size, gap: 4)
+        for (v, r) in zip(subviews, rects) {
+            v.place(at: CGPoint(x: bounds.minX + r.minX, y: bounds.minY + r.minY), proposal: ProposedViewSize(r.size))
+        }
+    }
 }
 
 /// Broadcast-style subtitles drawn exactly over the English: each translated piece is centred on the box where OCR
@@ -65,30 +107,36 @@ struct SubtitleOverlayView: View {
 
     var body: some View {
         GeometryReader { geo in
-            ZStack {
-                if let s = model.subtitle {
-                    // Keyed by text: a label that stays is never redrawn; only labels that come or go fade.
-                    ForEach(placed(s, in: geo.size), id: \.item.text) { p in
-                        SubtitlePlate(item: p.item, fontSize: p.font, settings: settings, cover: p.cover)
-                            .frame(maxWidth: p.maxWidth)
-                            .position(p.center)
-                            .transition(.opacity)
-                    }
+            NoOverlapLayout {
+                // Keyed by text: a label that stays is never redrawn; only labels that come or go fade.
+                ForEach(placed(model.shown, in: geo.size), id: \.item.text) { p in
+                    SubtitlePlate(item: p.item, fontSize: p.font, settings: settings, cover: p.cover)
+                        .frame(maxWidth: p.maxWidth)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .opacity(p.old ? 0.72 : 1)
+                        .layoutValue(key: NoOverlapLayout.Spot.self, value: p.center)
+                        .layoutValue(key: NoOverlapLayout.Old.self, value: p.old)
+                        .transition(.opacity)
                 }
             }
-            .animation(.easeInOut(duration: 0.15), value: model.subtitle?.items.map(\.text))
+            .animation(.easeInOut(duration: 0.15), value: model.shown.map(\.item.text))
         }
     }
 
-    private struct Placed { let item: SubtitleItem; let center: CGPoint; let font: Double; let minWidth: CGFloat; let maxWidth: CGFloat; var cover: CGSize = .zero }
+    private struct Placed { let item: SubtitleItem; let center: CGPoint; let font: Double; let minWidth: CGFloat; let maxWidth: CGFloat; var cover: CGSize = .zero; var old = false }
 
-    private func placed(_ s: Subtitle, in size: CGSize) -> [Placed] {
+    private func placed(_ shown: [(item: SubtitleItem, old: Bool)], in size: CGSize) -> [Placed] {
         let scale = settings.fontSize / 30
+        let oldTexts = Set(shown.filter(\.old).map(\.item.text))
+        return place(shown.map(\.item), scale: scale, in: size).map { p in var p = p; p.old = oldTexts.contains(p.item.text); return p }
+    }
+
+    private func place(_ items: [SubtitleItem], scale: Double, in size: CGSize) -> [Placed] {
         guard let a = model.anchor else {
-            return s.items.prefix(1).map { Placed(item: $0, center: CGPoint(x: size.width / 2, y: size.height * settings.verticalPosition),
+            return items.prefix(1).map { Placed(item: $0, center: CGPoint(x: size.width / 2, y: size.height * settings.verticalPosition),
                                                   font: settings.fontSize, minWidth: 0, maxWidth: size.width * 0.7) }
         }
-        return s.items.map { i in
+        return items.map { i in
             guard i.box.width > 0 else {
                 return Placed(item: i, center: CGPoint(x: a.midX, y: a.midY), font: settings.fontSize, minWidth: 0, maxWidth: max(a.width, 480))
             }
