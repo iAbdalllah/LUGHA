@@ -141,7 +141,7 @@ final class BuildPackageVersion
             // As seen on screen: control codes out of the English, drawable Arabic, and a line the game shows as several
             // timed subtitles split into one entry each.
             foreach (GameMarkup::segments($t->source_text, (string) $t->target_text) as $n => [$source, $target]) {
-                if ($source === '' || $target === '') {
+                if (TextNormalizer::normalize($source) === '' || $target === '') {
                     continue;
                 }
                 // Lines that only differed by a code are one line on screen: keep the first.
