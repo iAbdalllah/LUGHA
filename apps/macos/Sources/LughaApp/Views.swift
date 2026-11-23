@@ -30,7 +30,8 @@ struct MenuPanelView: View {
                 Text("OCR + lookup: \(ms) ms").font(.caption2).foregroundColor(.secondary)
             }
 
-            Button(L.t("Select capture region")) { app.pickRegion() }
+            SourcePicker(settings: settings).environmentObject(app)
+            Button(settings.captureAppBundleID == nil ? L.t("Select capture region") : L.t("Select subtitle area in the window")) { app.pickRegion() }
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(L.t("Font size")).font(.caption).foregroundColor(.secondary)
@@ -228,5 +229,34 @@ struct ReportForm: View {
         }
         .padding(10)
         .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.06)))
+    }
+}
+
+/// Where subtitles are read from: a screen area, or an app's window (PS Remote Play), which keeps working while the
+/// window is covered — so the player can play on the TV.
+struct SourcePicker: View {
+    @EnvironmentObject var app: AppModel
+    @ObservedObject var settings: AppSettings
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Picker(L.t("Read from"), selection: Binding(get: { settings.captureAppBundleID ?? "" },
+                                                       set: { v in Task { await app.setSource(v.isEmpty ? nil : v) } })) {
+                Text(L.t("An area of the screen")).tag("")
+                ForEach(app.windows) { w in
+                    Text(CaptureService.isRemotePlay(w) ? "\(w.appName) ★" : w.appName).tag(w.bundleID)
+                }
+                // Keep the saved choice visible while that app is closed.
+                if let id = settings.captureAppBundleID, !app.windows.contains(where: { $0.bundleID == id }) {
+                    Text(L.t("%@ (not open)", id)).tag(id)
+                }
+            }
+            if settings.captureAppBundleID != nil {
+                Text(L.t("Keeps reading while the window is behind others. Don't minimise it.")).font(.caption2).foregroundColor(.secondary)
+                Toggle(L.t("Show subtitles on this Mac too"), isOn: Binding(get: { settings.showOnMac }, set: { app.setShowOnMac($0) }))
+                    .font(.caption)
+            }
+        }
+        .task { await app.refreshWindows() }
     }
 }

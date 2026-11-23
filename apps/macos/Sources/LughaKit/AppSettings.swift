@@ -24,6 +24,17 @@ public final class AppSettings: ObservableObject, @unchecked Sendable {
     @Published public var displayID: UInt32? { didSet { d.set(displayID, forKey: "displayID") } }
     @Published public var interfaceLanguage: String = "ar" { didSet { d.set(interfaceLanguage, forKey: "interfaceLanguage") } }
 
+    /// Window mode: read subtitles from one app's window (e.g. PS Remote Play) instead of a screen region. Works while
+    /// the window is covered by others, so the player can play on the TV. nil = screen-region mode.
+    @Published public var captureAppBundleID: String? { didSet { d.set(captureAppBundleID, forKey: "captureAppBundleID") } }
+    /// Subtitle area inside that window, as fractions of its size (origin top-left), so resizing the window keeps it.
+    @Published public var windowArea: CGRect = AppSettings.defaultWindowArea { didSet { d.set(NSStringFromRect(windowArea), forKey: "windowArea") } }
+    /// Also draw subtitles on this Mac (off is typical in window mode: they go to the TV).
+    @Published public var showOnMac: Bool = true { didSet { d.set(showOnMac, forKey: "showOnMac") } }
+
+    /// Where most games put dialogue: the lower band, centred.
+    public static let defaultWindowArea = CGRect(x: 0.08, y: 0.70, width: 0.84, height: 0.26)
+
     public func load() {
         if let s = d.string(forKey: "apiBaseURL"), let u = URL(string: s) { apiBaseURL = u }
         if d.object(forKey: "fontSize") != nil { fontSize = d.double(forKey: "fontSize") }
@@ -32,5 +43,8 @@ public final class AppSettings: ObservableObject, @unchecked Sendable {
         if let r = d.string(forKey: "captureRegion") { captureRegion = NSRectFromString(r) }
         if let id = d.object(forKey: "displayID") as? UInt32 { displayID = id }
         if let l = d.string(forKey: "interfaceLanguage") { interfaceLanguage = l }
+        captureAppBundleID = d.string(forKey: "captureAppBundleID")
+        if let a = d.string(forKey: "windowArea") { windowArea = NSRectFromString(a) }
+        if d.object(forKey: "showOnMac") != nil { showOnMac = d.bool(forKey: "showOnMac") }
     }
 }

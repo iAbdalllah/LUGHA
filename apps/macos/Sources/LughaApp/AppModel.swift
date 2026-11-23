@@ -204,21 +204,53 @@ final class AppModel: ObservableObject {
     }
 
     func start() async {
-        guard let region = settings.captureRegion else { status = L.t("Choose a region first"); return }
         guard CaptureService.hasPermission() || CaptureService.requestPermission() else {
             status = L.t("Screen Recording permission is needed to read subtitles.")
             return
         }
-        overlay.show()
+        let handler: CaptureService.FrameHandler = { [weak self] image in Task { @MainActor in await self?.process(image) } }
         do {
-            try await capture.start(displayID: settings.displayID, region: region, excludingWindowIDs: overlay.windowIDs) { [weak self] image in
-                Task { @MainActor in await self?.process(image) }
+            if let bundleID = settings.captureAppBundleID {
+                // Window mode: the game can be played on the TV while its Remote Play window sits behind other windows.
+                let w = try await capture.startWindow(bundleID: bundleID, area: settings.windowArea, onFrame: handler)
+                captureWindow = w
+            } else {
+                guard let region = settings.captureRegion else { status = L.t("Choose a region first"); return }
+                try await capture.start(displayID: settings.displayID, region: region, excludingWindowIDs: overlay.windowIDs, onFrame: handler)
             }
+            if settings.showOnMac { overlay.show() }
             running = true
             status = ""
+        } catch let e as NSError where e.localizedDescription == "window_not_found" {
+            status = L.t("Open PS Remote Play and connect to your PS5 first.")
         } catch {
             status = error.localizedDescription
         }
+    }
+
+    // MARK: Window mode (PS Remote Play and the like)
+
+    @Published var windows: [CaptureService.AppWindow] = []
+    @Published var captureWindow: CaptureService.AppWindow?
+
+    /// One entry per app, Remote Play first.
+    func refreshWindows() async {
+        let all = (try? await CaptureService.appWindows()) ?? []
+        var seen = Set<String>()
+        windows = all.filter { seen.insert($0.bundleID).inserted }
+            .sorted { (CaptureService.isRemotePlay($0) ? 0 : 1, $0.appName) < (CaptureService.isRemotePlay($1) ? 0 : 1, $1.appName) }
+    }
+
+    func setSource(_ bundleID: String?) async {
+        settings.captureAppBundleID = bundleID
+        if bundleID != nil, settings.windowArea == .zero { settings.windowArea = AppSettings.defaultWindowArea }
+        if running { await stop(); await start() }
+    }
+
+    func setShowOnMac(_ on: Bool) {
+        settings.showOnMac = on
+        guard running else { return }
+        if on { overlay.show(); overlay.update(subtitle) } else { overlay.update(nil); overlay.hide() }
     }
 
     func stop() async {
@@ -239,7 +271,7 @@ final class AppModel: ObservableObject {
         if await pipeline.ingest(lines: lines) {
             subtitle = pipeline.current
             history = pipeline.history
-            overlay.update(subtitle)
+            if settings.showOnMac { overlay.update(subtitle) }
             await mirrorToTV(subtitle)
         }
         lastLatencyMs = Int(Date().timeIntervalSince(t0) * 1000)
@@ -259,6 +291,25 @@ final class AppModel: ObservableObject {
     func pickRegion() {
         RegionPicker.pick { [weak self] rect, displayID in
             guard let self, let rect else { return }
+            if let bundleID = self.settings.captureAppBundleID {
+                // Window mode: store the area as fractions of the window so it survives moving and resizing it.
+                Task { @MainActor in
+                    guard let w = (try? await CaptureService.appWindows())?.first(where: { $0.bundleID == bundleID }) else {
+                        self.status = L.t("Open PS Remote Play and connect to your PS5 first.")
+                        return
+                    }
+                    let origin = CGDisplayBounds(displayID ?? CGMainDisplayID()).origin
+                    let global = rect.offsetBy(dx: origin.x, dy: origin.y)
+                    let f = w.frame
+                    let a = CGRect(x: (global.minX - f.minX) / f.width, y: (global.minY - f.minY) / f.height,
+                                   width: global.width / f.width, height: global.height / f.height)
+                        .intersection(CGRect(x: 0, y: 0, width: 1, height: 1))
+                    guard !a.isNull, a.width > 0.02, a.height > 0.02 else { self.status = L.t("Select the area inside the window."); return }
+                    self.settings.windowArea = a
+                    if self.running { await self.stop(); await self.start() }
+                }
+                return
+            }
             self.settings.captureRegion = rect
             self.settings.displayID = displayID
             if self.running { Task { await self.stop(); await self.start() } }

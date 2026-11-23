@@ -51,6 +51,65 @@ public final class CaptureService: NSObject, SCStreamOutput, SCStreamDelegate, @
         isRunning = true
     }
 
+    /// An app window LUGHA can read from.
+    public struct AppWindow: Identifiable, Hashable, Sendable {
+        public let id: CGWindowID
+        public let bundleID: String
+        public let appName: String
+        public let title: String
+        /// In screen points, origin top-left.
+        public let frame: CGRect
+    }
+
+    /// Normal-level windows of other apps, largest first (one per app is what the picker shows).
+    public static func appWindows() async throws -> [AppWindow] {
+        let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: false)
+        let mine = Bundle.main.bundleIdentifier
+        return content.windows
+            .filter { $0.windowLayer == 0 && $0.frame.width >= 320 && $0.frame.height >= 180 }
+            .compactMap { w -> AppWindow? in
+                guard let app = w.owningApplication, app.bundleIdentifier != mine, !app.bundleIdentifier.isEmpty else { return nil }
+                return AppWindow(id: w.windowID, bundleID: app.bundleIdentifier, appName: app.applicationName, title: w.title ?? "", frame: w.frame)
+            }
+            .sorted { $0.frame.width * $0.frame.height > $1.frame.width * $1.frame.height }
+    }
+
+    /// PS Remote Play for Mac, matched by bundle id or name so a renamed build still matches.
+    public static func isRemotePlay(_ w: AppWindow) -> Bool {
+        w.bundleID.lowercased().contains("remoteplay") || w.appName.lowercased().contains("remote play")
+    }
+
+    /// Window mode: captures `area` (fractions of the window, origin top-left) of the largest window of `bundleID`.
+    /// The window may be covered by other windows (not minimised); only its pixels are captured, never our overlay.
+    @discardableResult
+    public func startWindow(bundleID: String, area: CGRect, fps: Int = 8, onFrame: @escaping FrameHandler) async throws -> AppWindow {
+        await stop()
+        let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: false)
+        let candidates = content.windows.filter { $0.owningApplication?.bundleIdentifier == bundleID && $0.windowLayer == 0 && $0.frame.width >= 320 }
+        guard let window = candidates.max(by: { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height }) else {
+            throw NSError(domain: "LUGHA", code: 2, userInfo: [NSLocalizedDescriptionKey: "window_not_found"])
+        }
+        let size = window.frame.size
+        let a = area.intersection(CGRect(x: 0, y: 0, width: 1, height: 1))
+        let rect = CGRect(x: a.minX * size.width, y: a.minY * size.height, width: a.width * size.width, height: a.height * size.height).integral
+
+        let config = SCStreamConfiguration()
+        config.sourceRect = rect
+        config.width = max(Int(rect.width * 2), 64)
+        config.height = max(Int(rect.height * 2), 32)
+        config.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(max(fps, 1)))
+        config.showsCursor = false
+        config.queueDepth = 3
+
+        self.onFrame = onFrame
+        let stream = SCStream(filter: SCContentFilter(desktopIndependentWindow: window), configuration: config, delegate: self)
+        try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: queue)
+        try await stream.startCapture()
+        self.stream = stream
+        isRunning = true
+        return AppWindow(id: window.windowID, bundleID: bundleID, appName: window.owningApplication?.applicationName ?? bundleID, title: window.title ?? "", frame: window.frame)
+    }
+
     public func stop() async {
         if let stream { try? await stream.stopCapture() }
         stream = nil
