@@ -42,8 +42,10 @@ public final class AppSettings: ObservableObject, @unchecked Sendable {
 
     /// Where most games put dialogue: the lower band, centred.
     public static let defaultWindowArea = CGRect(x: 0.08, y: 0.70, width: 0.84, height: 0.26)
-    /// Everything except the title bar: menus, HUD and subtitles.
-    public static let wholeWindowArea = CGRect(x: 0, y: 0.04, width: 1, height: 0.96)
+    /// The whole window: menus, HUD and subtitles. The title bar and black bars are trimmed by finding the 16:9 game
+    /// picture inside the frame (FrameSampler.gameRect), so positions line up with the full TV picture.
+    public static let wholeWindowArea = CGRect(x: 0, y: 0, width: 1, height: 1)
+    private static let oldWholeWindowArea = CGRect(x: 0, y: 0.04, width: 1, height: 0.96)
 
     public func load() {
         if let s = d.string(forKey: "apiBaseURL"), let u = URL(string: s) { apiBaseURL = u }
@@ -55,6 +57,7 @@ public final class AppSettings: ObservableObject, @unchecked Sendable {
         if let l = d.string(forKey: "interfaceLanguage") { interfaceLanguage = l }
         captureAppBundleID = d.string(forKey: "captureAppBundleID")
         if let a = d.string(forKey: "windowArea") { windowArea = NSRectFromString(a) }
+        if windowArea == Self.oldWholeWindowArea { windowArea = Self.wholeWindowArea }
         if d.object(forKey: "showOnMac") != nil { showOnMac = d.bool(forKey: "showOnMac") }
         if let s = d.string(forKey: "textStyle") { textStyle = s }
         if let s = d.string(forKey: "textColor") { textColor = s }

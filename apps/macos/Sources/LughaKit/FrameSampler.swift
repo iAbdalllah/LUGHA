@@ -59,6 +59,24 @@ public struct FrameSampler {
         return (bg, fg)
     }
 
+    /// The console's picture inside a window: trims black bars, then — the picture being `aspect` (16:9) — trims what
+    /// is left over at the top (the window's title bar). Fractions of the frame, origin top-left.
+    public func gameRect(aspect: Double = 16.0 / 9.0) -> CGRect {
+        var r = contentRect()
+        let w = r.width * Double(width), h = r.height * Double(height)
+        let wanted = w / aspect
+        if wanted < h - 1 {
+            // Taller than 16:9: the extra rows are the title bar above the picture.
+            let extra = (h - wanted) / Double(height)
+            r = CGRect(x: r.minX, y: r.minY + extra, width: r.width, height: r.height - extra)
+        } else if wanted > h + 1 {
+            // Wider than 16:9 without black bars: the picture is cropped left/right; centre it.
+            let keepW = h * aspect / Double(width)
+            r = CGRect(x: r.midX - keepW / 2, y: r.minY, width: keepW, height: r.height)
+        }
+        return r
+    }
+
     /// The game picture inside the frame: trims near-black bars (letterboxing) on all sides.
     public func contentRect(threshold: Double = 0.045) -> CGRect {
         func rowDark(_ y: Int) -> Bool { stride(from: 0, to: width, by: 4).allSatisfy { at($0, y).luma < threshold } }

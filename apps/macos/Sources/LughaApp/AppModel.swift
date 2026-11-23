@@ -374,7 +374,7 @@ final class AppModel: ObservableObject {
         // Where the game picture is inside the window (black bars, title bar), re-checked every few seconds.
         if settings.captureAppBundleID != nil, settings.windowArea == AppSettings.wholeWindowArea, Date().timeIntervalSince(contentCheckedAt) > 3 {
             contentCheckedAt = Date()
-            gameRect = FrameSampler(image, maxWidth: 480)?.contentRect()
+            gameRect = FrameSampler(image, maxWidth: 640)?.gameRect()
         }
         if await pipeline.ingest(ocr: lines) {
             // Native style: each piece in the game's own colours, read from this frame.

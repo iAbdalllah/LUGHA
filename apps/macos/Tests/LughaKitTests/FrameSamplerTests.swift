@@ -28,4 +28,15 @@ final class FrameSamplerTests: XCTestCase {
         XCTAssertEqual(r.width, 0.8, accuracy: 0.02)
         XCTAssertEqual(r.height, 1, accuracy: 0.02)
     }
+
+    func testFindsThe16by9PictureBelowATitleBar() throws {
+        // 320×200 window: a grey 20 px title bar over a 320×180 (16:9) purple picture.
+        let ctx = CGContext(data: nil, width: 320, height: 200, bitsPerComponent: 8, bytesPerRow: 0,
+                            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+        ctx.setFillColor(CGColor(srgbRed: 0.3, green: 0.2, blue: 0.55, alpha: 1)); ctx.fill(CGRect(x: 0, y: 0, width: 320, height: 180))
+        ctx.setFillColor(CGColor(srgbRed: 0.24, green: 0.24, blue: 0.24, alpha: 1)); ctx.fill(CGRect(x: 0, y: 180, width: 320, height: 20))
+        let r = try XCTUnwrap(FrameSampler(ctx.makeImage()!)).gameRect()
+        XCTAssertEqual(r.minY, 0.1, accuracy: 0.01, "picture starts below the 20 px title bar")
+        XCTAssertEqual(r.height, 0.9, accuracy: 0.01)
+    }
 }
