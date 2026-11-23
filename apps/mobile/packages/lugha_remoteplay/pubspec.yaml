@@ -1,0 +1,27 @@
+name: lugha_remoteplay
+description: >-
+  PS5 Remote Play for LUGHA (reads the game's subtitles from the console's stream so they can be translated on the TV).
+  Built on chiaki-ng (AGPL-3.0); this package and the app that includes it are distributed under the AGPL-3.0.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ">=3.6.0 <4.0.0"
+  flutter: ">=3.27.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: app.lugha.remoteplay
+        pluginClass: LughaRemotePlayPlugin
+      ios:
+        pluginClass: LughaRemotePlayPlugin

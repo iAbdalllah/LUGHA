@@ -1,0 +1,75 @@
+// LUGHA Remote Play: chiaki-ng (AGPL-3.0, git submodule) built from source with the NDK, plus a small Kotlin plugin.
+// chiaki-ng's own Kotlin binding (lib/Chiaki.kt) and JNI layer are compiled straight from the submodule, unmodified.
+group 'app.lugha.remoteplay'
+version '0.1.0'
+
+buildscript {
+    repositories { google(); mavenCentral() }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.7.3'
+        classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:2.3.20'
+    }
+}
+
+rootProject.allprojects { repositories { google(); mavenCentral() } }
+
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+apply plugin: 'kotlin-parcelize'
+
+def chiaki = file("${projectDir}/../../../third_party/chiaki-ng")
+
+android {
+    namespace 'app.lugha.remoteplay'
+    compileSdk 35
+    ndkVersion '28.2.13676358'
+
+    defaultConfig {
+        minSdk 26
+        consumerProguardFiles 'proguard-rules.pro'
+        externalNativeBuild {
+            cmake {
+                // LAN Remote Play only: no audio decoding, no internet (RUDP) play, no GUI/CLI/tests.
+                arguments '-DCHIAKI_ENABLE_TESTS=OFF', '-DCHIAKI_ENABLE_CLI=OFF', '-DCHIAKI_ENABLE_GUI=OFF',
+                        '-DCHIAKI_ENABLE_SETSU=OFF', '-DCHIAKI_ENABLE_ANDROID=ON', '-DCHIAKI_ENABLE_FFMPEG_DECODER=OFF',
+                        '-DCHIAKI_ENABLE_PI_DECODER=OFF', '-DCHIAKI_LIB_ENABLE_OPUS=OFF',
+                        '-DCHIAKI_LIB_OPENSSL_EXTERNAL_PROJECT=ON', '-DCHIAKI_LIB_JSONC_EXTERNAL_PROJECT=ON',
+                        '-DCHIAKI_LIB_MINIUPNPC_EXTERNAL_PROJECT=ON', '-DCHIAKI_ENABLE_STEAM_SHORTCUT=OFF',
+                        '-DCHIAKI_ENABLE_STEAMDECK_NATIVE=OFF', '-DANDROID_STL=c++_shared',
+                        '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON',
+                        '-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384'
+                abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86_64'
+            }
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            version '3.22.1'
+            path "${chiaki}/CMakeLists.txt"
+        }
+    }
+
+    buildFeatures { prefab true }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = '17'
+        freeCompilerArgs += '-opt-in=kotlin.ExperimentalUnsignedTypes'
+    }
+
+    sourceSets {
+        main {
+            java.srcDirs += ["${chiaki}/android/app/src/main/java/com/metallic/chiaki/lib"]
+        }
+    }
+}
+
+dependencies {
+    implementation 'com.google.oboe:oboe:1.10.0'
+    // On-device text recognition with the model bundled in the app (works without Google Play services).
+    implementation 'com.google.mlkit:text-recognition:16.0.1'
+}
