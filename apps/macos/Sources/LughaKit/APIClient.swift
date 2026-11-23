@@ -145,17 +145,26 @@ public final class APIClient: @unchecked Sendable {
     }
 
     /// Downloads to a temp file (signed URL, no bearer token) and returns its location.
-    /// Package downloads: fail after 60 s without data (instead of hanging forever) and allow 30 min in all.
-    private static let downloads: URLSession = {
-        let c = URLSessionConfiguration.default
+    /// Package downloads: fail after 60 s without data (instead of hanging forever); a large package on a slow line may
+    /// take long, so the whole download may run up to 3 h.
+    ///
+    /// A fresh ephemeral session per download: the host advertises HTTP/3 (alt-svc h3), and a session that has seen
+    /// that switches to QUIC, which Hostinger delivers at ~150 KB/s against 10+ MB/s over HTTP/2. A new ephemeral
+    /// session has no alt-svc memory, so its single request stays on HTTP/2.
+    private static func downloadSession() -> URLSession {
+        let c = URLSessionConfiguration.ephemeral
         c.timeoutIntervalForRequest = 60
-        c.timeoutIntervalForResource = 30 * 60
+        c.timeoutIntervalForResource = 3 * 60 * 60
         c.waitsForConnectivity = false
         return URLSession(configuration: c)
-    }()
+    }
 
     public func fetch(_ url: URL) async throws -> URL {
-        let (tmp, response) = try await Self.downloads.download(from: url)
+        let session = Self.downloadSession()
+        defer { session.finishTasksAndInvalidate() }
+        var request = URLRequest(url: url)
+        request.assumesHTTP3Capable = false
+        let (tmp, response) = try await session.download(for: request)
         guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw APIError(status: (response as? HTTPURLResponse)?.statusCode ?? 0, code: "download_failed", detail: nil) }
         let dest = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".lpk")
         try FileManager.default.moveItem(at: tmp, to: dest)

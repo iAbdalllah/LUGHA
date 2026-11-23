@@ -27,7 +27,19 @@ final class AppModel: ObservableObject {
     lazy var overlay = OverlayController(settings: settings)
 
     @Published var userName: String?
-    @Published var running = false
+    @Published var running = false {
+        didSet {
+            // Translating is latency-critical while the game is in front: without this, App Nap throttles LUGHA as a
+            // background app (timers, capture callbacks, the TV link).
+            if running, liveActivity == nil {
+                liveActivity = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .latencyCritical], reason: "Translating game text")
+            } else if !running, let a = liveActivity {
+                ProcessInfo.processInfo.endActivity(a)
+                liveActivity = nil
+            }
+        }
+    }
+    private var liveActivity: NSObjectProtocol?
     @Published var subtitle: Subtitle?
     @Published var history: [Subtitle] = []
     @Published var library: [APIClient.LibraryItem] = []
@@ -222,7 +234,9 @@ final class AppModel: ObservableObject {
     func sync() async {
         guard !syncing, let deviceId = keychain.get("device_id") else { return }
         syncing = true
-        defer { syncing = false }
+        // A package download runs while the game is in front; App Nap would throttle it to a crawl (~80 KB/s).
+        let activity = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .idleSystemSleepDisabled], reason: "Downloading packages")
+        defer { syncing = false; ProcessInfo.processInfo.endActivity(activity) }
         status = L.t("Syncing… large packages can take a few minutes.")
         // Show the account's packages right away, not only after downloads finish.
         library = (try? await api.library()) ?? library
