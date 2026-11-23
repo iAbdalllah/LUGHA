@@ -100,7 +100,7 @@ class TranslationWorkflowTest extends TestCase
             $path = $transfer->export($game, $format);
             $this->assertFileExists($path);
             $again = $transfer->import($path, $format, $game, $style);
-            $this->assertSame(['created' => 0, 'updated' => 0, 'unchanged' => 2], array_diff_key($again, ['errors' => 0]), $format);
+            $this->assertSame(['created' => 0, 'updated' => 0, 'unchanged' => 2], array_diff_key($again, ['errors' => 0, 'duplicates' => 0]), $format);
         }
     }
 
@@ -115,12 +115,16 @@ class TranslationWorkflowTest extends TestCase
             $csv .= "BIG_$i,dialogues,Line number $i,سطر $i\n";
         }
         $csv .= "BIG_1,dialogues,Line number 1,سطر واحد\n"; // the same key again later in the file updates, not duplicates
+        $csv .= "OTHER_KEY,dialogues,Line number 2,سطر ٢\n"; // another key with the same English shares that line
+        $csv .= ",dialogues,Line number 3,سطر ٣\n"; // an unkeyed row with known English updates it
         Storage::disk('local')->put('imports/big.csv', $csv);
 
         ImportTranslationsJob::dispatchSync('imports/big.csv', $game, $style, $user);
 
         $this->assertSame($rows, Translation::where('game_id', $game->id)->count());
         $this->assertSame('سطر واحد', Translation::where('string_key', 'BIG_1')->value('target_text'));
+        $this->assertSame('سطر ٣', Translation::where('string_key', 'BIG_3')->value('target_text'));
+        $this->assertNull(Translation::where('string_key', 'OTHER_KEY')->first());
         $this->assertSame($user->id, Translation::where('string_key', 'BIG_9')->value('translator_id'));
         Storage::disk('local')->assertMissing('imports/big.csv');
         $note = $user->notifications()->first();

@@ -53,6 +53,9 @@ class ImportTranslationsJob implements ShouldQueue
         }
 
         $body = $this->game->title.': '.__(':c created, :u updated, :n unchanged', ['c' => $stats['created'], 'u' => $stats['updated'], 'n' => $stats['unchanged']]);
+        if ($stats['duplicates']) {
+            $body .= "\n".__(':d rows repeat the English of another row and share its line', ['d' => $stats['duplicates']]);
+        }
         if ($stats['errors']) {
             $body .= "\n".collect($stats['errors'])->take(10)->map(fn ($m, $line) => __('Line :l: :m', ['l' => $line, 'm' => $m]))->implode("\n");
         }

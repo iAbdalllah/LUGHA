@@ -32,7 +32,7 @@ final class TranslationTransfer
      * Rows are read as a stream, so file size is bounded by disk, not memory.
      *
      * @param  (callable(int $rowsDone): void)|null  $progress
-     * @return array{created:int, updated:int, unchanged:int, errors:array<int,string>}
+     * @return array{created:int, updated:int, unchanged:int, duplicates:int, errors:array<int,string>}
      */
     public function import(string $path, string $format, Game $game, LocalizationStyle $style, string $locale = 'ar-SA', ?callable $progress = null): array
     {
@@ -43,7 +43,7 @@ final class TranslationTransfer
         };
 
         $categories = TranslationCategory::pluck('id', 'slug');
-        $stats = ['created' => 0, 'updated' => 0, 'unchanged' => 0, 'errors' => []];
+        $stats = ['created' => 0, 'updated' => 0, 'unchanged' => 0, 'duplicates' => 0, 'errors' => []];
         $chunk = [];
         $done = 0;
         foreach ($rows as $i => $row) {
@@ -77,6 +77,15 @@ final class TranslationTransfer
             // One query for the chunk's keyed lines instead of one per row.
             $keys = array_values(array_unique(array_filter(array_map(fn ($r) => trim((string) ($r['string_key'] ?? '')), $rows))));
             $byKey = $keys ? $scope()->whereIn('string_key', $keys)->get()->keyBy('string_key') : collect();
+            // A line is one English text per category (the apps look lines up by the English they read), so a file
+            // that repeats the same text under several keys maps all of them to one line.
+            $hashes = [];
+            foreach ($rows as $r) {
+                if (($src = trim((string) ($r['source_text'] ?? ''))) !== '') {
+                    $hashes[TextNormalizer::hash($src)] = true;
+                }
+            }
+            $byText = $hashes ? $scope()->whereIn('source_hash', array_keys($hashes))->get()->keyBy(fn ($t) => $t->source_hash.'|'.$t->category_id) : collect();
 
             foreach ($rows as $i => $row) {
                 $line = $i + 2; // header is line 1
@@ -98,9 +107,17 @@ final class TranslationTransfer
                 }
 
                 $key = trim((string) ($row['string_key'] ?? '')) ?: null;
-                $existing = $key
-                    ? $byKey->get($key)
-                    : $scope()->where('source_hash', TextNormalizer::hash($source))->where('category_id', $catId)->first();
+                $textId = TextNormalizer::hash($source).'|'.$catId;
+                $existing = $key ? $byKey->get($key) : null;
+                if (! $existing && ($same = $byText->get($textId))) {
+                    if ($key && $same->string_key && $same->string_key !== $key) {
+                        // Same English as another key: one line already covers it.
+                        $stats['duplicates']++;
+
+                        continue;
+                    }
+                    $existing = $same;
+                }
 
                 $attrs = [
                     'string_key' => $key, 'category_id' => $catId, 'source_text' => $source,
@@ -115,12 +132,21 @@ final class TranslationTransfer
                     if ($key) {
                         $byKey->put($key, $created); // a key repeated later in the file updates this line
                     }
+                    $byText->put($textId, $created);
                     $stats['created']++;
 
                     continue;
                 }
 
-                $existing->fill($attrs);
+                if ($existing->source_hash.'|'.$existing->category_id !== $textId && $byText->has($textId)) {
+                    // The key's English changed to a text another line already has.
+                    $stats['duplicates']++;
+
+                    continue;
+                }
+                $byText->forget($existing->source_hash.'|'.$existing->category_id);
+                $existing->fill($key ? $attrs : array_diff_key($attrs, ['string_key' => 0])); // a row without a key keeps the line's key
+                $byText->put($textId, $existing);
                 if (! $existing->isDirty()) {
                     $stats['unchanged']++;
 
