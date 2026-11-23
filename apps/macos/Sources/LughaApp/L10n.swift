@@ -24,6 +24,7 @@ enum L {
         "Sign out": "تسجيل الخروج",
         "Your packages": "باقاتك",
         "Sync now": "مزامنة الآن",
+        "Syncing… large packages can take a few minutes.": "جارٍ المزامنة… الباقات الكبيرة قد تأخذ بضع دقائق.",
         "Installed %@": "مثبّتة %@",
         "No packages yet. Buy one in the LUGHA store.": "لا توجد باقات بعد. اشترِ باقة من متجر لغة.",
         "Screen Recording permission is needed to read subtitles.": "يلزم إذن «تسجيل الشاشة» لقراءة الترجمة.",

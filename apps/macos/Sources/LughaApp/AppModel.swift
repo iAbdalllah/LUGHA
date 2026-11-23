@@ -27,6 +27,8 @@ final class AppModel: ObservableObject {
     @Published var status: String = ""
     @Published var deviceCode: APIClient.DeviceCodeStart?
     @Published var lastSync: Date?
+    /// One sync at a time: each would download the same (possibly 100+ MB) package again.
+    @Published var syncing = false
     @Published var lastLatencyMs: Int?
 
     // Send to TV (LUGHA Link)
@@ -208,8 +210,12 @@ final class AppModel: ObservableObject {
     }
 
     func sync() async {
-        guard let deviceId = keychain.get("device_id") else { return }
-        status = "…"
+        guard !syncing, let deviceId = keychain.get("device_id") else { return }
+        syncing = true
+        defer { syncing = false }
+        status = L.t("Syncing… large packages can take a few minutes.")
+        // Show the account's packages right away, not only after downloads finish.
+        library = (try? await api.library()) ?? library
         let sync = SyncService(api: api, engine: engine, store: store, appVersion: Self.appVersion)
         let report = await sync.sync(deviceId: deviceId)
         library = (try? await api.library()) ?? library

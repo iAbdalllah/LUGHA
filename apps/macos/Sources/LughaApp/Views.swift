@@ -101,7 +101,7 @@ struct MainWindowView: View {
                 HStack {
                     Text(L.t("Signed in as %@", app.userName ?? "…")).font(.headline)
                     Spacer()
-                    Button(L.t("Sync now")) { Task { await app.sync() } }
+                    Button(L.t("Sync now")) { Task { await app.sync() } }.disabled(app.syncing)
                     Button(L.t("Sign out")) { app.signOut() }
                 }
                 if let d = app.lastSync { Text("\(L.t("Last sync")): \(d.formatted(date: .omitted, time: .shortened))").font(.caption).foregroundColor(.secondary) }
