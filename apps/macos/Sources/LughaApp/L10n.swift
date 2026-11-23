@@ -37,7 +37,7 @@ enum L {
         "Send to TV": "إرسال إلى التلفاز", "Disconnect": "قطع الاتصال", "Reconnect": "إعادة الاتصال", "TV": "التلفاز",
 "Read from": "اقرأ من", "Text style": "شكل النص", "Native": "أصلي", "Box": "صندوق", "Outline": "محدد",
         "In the game's own colours, as if the game drew it.": "بألوان اللعبة نفسها، كأن اللعبة كتبته.", "Colour": "اللون", "White": "أبيض", "Yellow": "أصفر", "Font": "الخط", "Area": "المنطقة", "Subtitles (bottom)": "الترجمة (أسفل)", "Whole window (menus)": "النافذة كاملة (القوائم)",
-        "Custom area": "منطقة مخصصة", "Reading:": "يقرأ الآن:", "(no text in the area)": "(لا يوجد نص في المنطقة)", "An area of the screen": "منطقة من الشاشة", "%@ (not open)": "%@ (غير مفتوح)",
+        "Custom area": "منطقة مخصصة", "Reading:": "يقرأ الآن:", "Picture:": "الصورة:", "(no text in the area)": "(لا يوجد نص في المنطقة)", "An area of the screen": "منطقة من الشاشة", "%@ (not open)": "%@ (غير مفتوح)",
         "Select subtitle area in the window": "تحديد منطقة الترجمة داخل النافذة",
         "Keeps reading while the window is behind others. Don't minimise it.": "تستمر القراءة والنافذة خلف النوافذ الأخرى. لا تصغّرها إلى الـDock.",
         "Show subtitles on this Mac too": "اعرض الترجمة على هذا الـMac أيضًا",

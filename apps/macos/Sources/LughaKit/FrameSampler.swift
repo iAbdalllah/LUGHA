@@ -79,8 +79,11 @@ public struct FrameSampler {
 
     /// The game picture inside the frame: trims near-black bars (letterboxing) on all sides.
     public func contentRect(threshold: Double = 0.045) -> CGRect {
-        func rowDark(_ y: Int) -> Bool { stride(from: 0, to: width, by: 4).allSatisfy { at($0, y).luma < threshold } }
-        func colDark(_ x: Int) -> Bool { stride(from: 0, to: height, by: 4).allSatisfy { at(x, $0).luma < threshold } }
+        // "Dark" = at least 90% of the row/column is near-black: Remote Play draws small icons (mic, speaker,
+        // controller) inside its black bars, which must not stop the trim.
+        func mostlyDark(_ samples: [RGB]) -> Bool { Double(samples.filter { $0.luma < threshold }.count) >= Double(samples.count) * 0.9 }
+        func rowDark(_ y: Int) -> Bool { mostlyDark(stride(from: 0, to: width, by: 4).map { at($0, y) }) }
+        func colDark(_ x: Int) -> Bool { mostlyDark(stride(from: 0, to: height, by: 4).map { at(x, $0) }) }
         var top = 0, bottom = height - 1, left = 0, right = width - 1
         while top < bottom, rowDark(top) { top += 1 }
         while bottom > top, rowDark(bottom) { bottom -= 1 }

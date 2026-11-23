@@ -330,7 +330,7 @@ final class AppModel: ObservableObject {
     }
 
     /// Where the game picture is within the captured frame (whole-window mode), as fractions; nil = fills it.
-    private var gameRect: CGRect?
+    @Published private(set) var gameRect: CGRect?
     private var contentCheckedAt = Date.distantPast
 
     /// Each translated piece placed where its English is on the TV, as fractions of the full game picture.

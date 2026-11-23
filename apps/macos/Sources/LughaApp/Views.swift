@@ -37,6 +37,12 @@ struct MenuPanelView: View {
                         .font(.caption.monospaced()).lineLimit(3)
                         .environment(\.layoutDirection, .leftToRight)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                    if let g = app.gameRect {
+                        // Where LUGHA found the game picture in the window (TV positions are measured from it).
+                        Text(String(format: "%@ x %.0f%%  y %.0f%%  w %.0f%%  h %.0f%%", L.t("Picture:"), g.minX * 100, g.minY * 100, g.width * 100, g.height * 100))
+                            .font(.caption2.monospaced()).foregroundColor(.secondary)
+                            .environment(\.layoutDirection, .leftToRight)
+                    }
                 }
                 .padding(8).background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.06)))
             }

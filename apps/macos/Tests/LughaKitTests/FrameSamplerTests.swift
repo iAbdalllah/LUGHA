@@ -39,4 +39,15 @@ final class FrameSamplerTests: XCTestCase {
         XCTAssertEqual(r.minY, 0.1, accuracy: 0.01, "picture starts below the 20 px title bar")
         XCTAssertEqual(r.height, 0.9, accuracy: 0.01)
     }
+
+    func testIconsInsideTheBlackBarsDoNotStopTheTrim() throws {
+        // 400×200: black bars of 40 px left/right; a small white "mic icon" in the right bar near the bottom.
+        let ctx = CGContext(data: nil, width: 400, height: 200, bitsPerComponent: 8, bytesPerRow: 0,
+                            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+        ctx.setFillColor(CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 1)); ctx.fill(CGRect(x: 0, y: 0, width: 400, height: 200))
+        ctx.setFillColor(CGColor(srgbRed: 0.3, green: 0.2, blue: 0.55, alpha: 1)); ctx.fill(CGRect(x: 40, y: 0, width: 320, height: 200))
+        ctx.setFillColor(CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 1)); ctx.fill(CGRect(x: 375, y: 6, width: 10, height: 10))
+        let r = try XCTUnwrap(FrameSampler(ctx.makeImage()!)).contentRect()
+        XCTAssertEqual(r.maxX, 0.9, accuracy: 0.02, "the icon in the bar must not count as picture")
+    }
 }
