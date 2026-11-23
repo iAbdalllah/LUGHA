@@ -7,10 +7,12 @@ use App\Domain\Localization\TranslationTransfer;
 use App\Domain\Localization\TranslationWorkflow;
 use App\Enums\RightsStatus;
 use App\Enums\TranslationStatus;
+use App\Jobs\ImportTranslationsJob;
 use App\Models\LocalizationStyle;
 use App\Models\Translation;
 use App\Models\TranslationCategory;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Tests\Concerns\BuildsCatalog;
 use Tests\TestCase;
@@ -100,6 +102,36 @@ class TranslationWorkflowTest extends TestCase
             $again = $transfer->import($path, $format, $game, $style);
             $this->assertSame(['created' => 0, 'updated' => 0, 'unchanged' => 2], array_diff_key($again, ['errors' => 0]), $format);
         }
+    }
+
+    public function test_a_large_file_imports_in_the_background_and_notifies_the_uploader(): void
+    {
+        $user = $this->staff('translator');
+        $game = $this->game();
+        $style = LocalizationStyle::first();
+        $rows = TranslationTransfer::CHUNK * 2 + 7; // spans several chunks
+        $csv = "string_key,category,source_text,target_text\n";
+        for ($i = 1; $i <= $rows; $i++) {
+            $csv .= "BIG_$i,dialogues,Line number $i,سطر $i\n";
+        }
+        $csv .= "BIG_1,dialogues,Line number 1,سطر واحد\n"; // the same key again later in the file updates, not duplicates
+        Storage::disk('local')->put('imports/big.csv', $csv);
+
+        ImportTranslationsJob::dispatchSync('imports/big.csv', $game, $style, $user);
+
+        $this->assertSame($rows, Translation::where('game_id', $game->id)->count());
+        $this->assertSame('سطر واحد', Translation::where('string_key', 'BIG_1')->value('target_text'));
+        $this->assertSame($user->id, Translation::where('string_key', 'BIG_9')->value('translator_id'));
+        Storage::disk('local')->assertMissing('imports/big.csv');
+        $note = $user->notifications()->first();
+        $this->assertNotNull($note, 'the uploader is told when it is done');
+        $this->assertStringContainsString((string) $rows, json_encode($note->data, JSON_UNESCAPED_UNICODE));
+    }
+
+    public function test_uploads_allow_whole_game_files(): void
+    {
+        $this->assertContains('max:204800', config('livewire.temporary_file_upload.rules'));
+        $this->assertSame(204800, config('lugha.max_upload_kb'));
     }
 
     public function test_import_that_changes_published_text_sends_it_back_to_review(): void

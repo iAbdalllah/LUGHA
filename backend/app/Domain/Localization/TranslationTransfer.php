@@ -22,8 +22,19 @@ final class TranslationTransfer
 {
     public const COLUMNS = ['string_key', 'category', 'source_text', 'target_text', 'speaker', 'context', 'scene_ref', 'sequence_no', 'status'];
 
-    /** @return array{created:int, updated:int, unchanged:int, errors:array<int,string>} */
-    public function import(string $path, string $format, Game $game, LocalizationStyle $style, string $locale = 'ar-SA'): array
+    /** Rows saved per database transaction: big files commit as they go instead of holding one huge transaction. */
+    public const CHUNK = 500;
+
+    /** Errors kept in the stats (a broken file must not fill memory with messages). */
+    public const MAX_ERRORS = 200;
+
+    /**
+     * Rows are read as a stream, so file size is bounded by disk, not memory.
+     *
+     * @param  (callable(int $rowsDone): void)|null  $progress
+     * @return array{created:int, updated:int, unchanged:int, errors:array<int,string>}
+     */
+    public function import(string $path, string $format, Game $game, LocalizationStyle $style, string $locale = 'ar-SA', ?callable $progress = null): array
     {
         $rows = match ($format) {
             'json' => $this->readJson($path),
@@ -33,19 +44,51 @@ final class TranslationTransfer
 
         $categories = TranslationCategory::pluck('id', 'slug');
         $stats = ['created' => 0, 'updated' => 0, 'unchanged' => 0, 'errors' => []];
+        $chunk = [];
+        $done = 0;
+        foreach ($rows as $i => $row) {
+            $chunk[$i] = $row;
+            if (count($chunk) >= self::CHUNK) {
+                $this->importChunk($chunk, $categories, $game, $style, $locale, $stats);
+                $done += count($chunk);
+                $chunk = [];
+                $progress && $progress($done);
+            }
+        }
+        if ($chunk) {
+            $this->importChunk($chunk, $categories, $game, $style, $locale, $stats);
+            $progress && $progress($done + count($chunk));
+        }
 
-        DB::transaction(function () use ($rows, $categories, $game, $style, $locale, &$stats) {
+        return $stats;
+    }
+
+    /** @param array<int, array<string, mixed>> $rows */
+    private function importChunk(array $rows, $categories, Game $game, LocalizationStyle $style, string $locale, array &$stats): void
+    {
+        $error = function (int $line, string $message) use (&$stats) {
+            if (count($stats['errors']) < self::MAX_ERRORS) {
+                $stats['errors'][$line] = $message;
+            }
+        };
+        $scope = fn () => Translation::query()->where('game_id', $game->id)->where('style_id', $style->id)->where('locale', $locale);
+
+        DB::transaction(function () use ($rows, $categories, $game, $style, $locale, &$stats, $error, $scope) {
+            // One query for the chunk's keyed lines instead of one per row.
+            $keys = array_values(array_unique(array_filter(array_map(fn ($r) => trim((string) ($r['string_key'] ?? '')), $rows))));
+            $byKey = $keys ? $scope()->whereIn('string_key', $keys)->get()->keyBy('string_key') : collect();
+
             foreach ($rows as $i => $row) {
                 $line = $i + 2; // header is line 1
                 $source = trim((string) ($row['source_text'] ?? ''));
                 $catId = $categories[trim((string) ($row['category'] ?? ''))] ?? null;
                 if ($source === '') {
-                    $stats['errors'][$line] = __('Missing source_text');
+                    $error($line, __('Missing source_text'));
 
                     continue;
                 }
                 if (! $catId) {
-                    $stats['errors'][$line] = __('Unknown category ":c"', ['c' => $row['category'] ?? '']);
+                    $error($line, __('Unknown category ":c"', ['c' => $row['category'] ?? '']));
 
                     continue;
                 }
@@ -55,10 +98,9 @@ final class TranslationTransfer
                 }
 
                 $key = trim((string) ($row['string_key'] ?? '')) ?: null;
-                $existing = Translation::query()->where('game_id', $game->id)->where('style_id', $style->id)->where('locale', $locale)
-                    ->when($key, fn ($q) => $q->where('string_key', $key),
-                        fn ($q) => $q->where('source_hash', TextNormalizer::hash($source))->where('category_id', $catId))
-                    ->first();
+                $existing = $key
+                    ? $byKey->get($key)
+                    : $scope()->where('source_hash', TextNormalizer::hash($source))->where('category_id', $catId)->first();
 
                 $attrs = [
                     'string_key' => $key, 'category_id' => $catId, 'source_text' => $source,
@@ -69,7 +111,10 @@ final class TranslationTransfer
                 ];
 
                 if (! $existing) {
-                    Translation::create($attrs + ['game_id' => $game->id, 'style_id' => $style->id, 'locale' => $locale, 'status' => $status, 'translator_id' => auth()->id()]);
+                    $created = Translation::create($attrs + ['game_id' => $game->id, 'style_id' => $style->id, 'locale' => $locale, 'status' => $status, 'translator_id' => auth()->id()]);
+                    if ($key) {
+                        $byKey->put($key, $created); // a key repeated later in the file updates this line
+                    }
                     $stats['created']++;
 
                     continue;
@@ -89,8 +134,6 @@ final class TranslationTransfer
                 $stats['updated']++;
             }
         });
-
-        return $stats;
     }
 
     /** Writes the game's lines to a temp file and returns its path. */
@@ -133,21 +176,24 @@ final class TranslationTransfer
         return $path;
     }
 
-    private function readJson(string $path): array
+    private function readJson(string $path): iterable
     {
         $data = json_decode((string) file_get_contents($path), true);
         if (! is_array($data)) {
             throw new \InvalidArgumentException(__('The file is not a JSON array of lines.'));
         }
 
-        return array_values(array_filter($data, 'is_array'));
+        foreach (array_values(array_filter($data, 'is_array')) as $i => $row) {
+            yield $i => $row;
+        }
     }
 
-    private function readSheet(string $path, string $format): array
+    /** Streams the first sheet's rows as column => value, keyed by their order (header excluded). */
+    private function readSheet(string $path, string $format): \Generator
     {
         $reader = $format === 'xlsx' ? new XlsxReader : new CsvReader;
         $reader->open($path);
-        $rows = [];
+        $n = 0;
         $header = null;
         foreach ($reader->getSheetIterator() as $sheet) {
             foreach ($sheet->getRowIterator() as $row) {
@@ -160,12 +206,10 @@ final class TranslationTransfer
                 if (array_filter($values, fn ($v) => $v !== null && $v !== '') === []) {
                     continue;
                 }
-                $rows[] = array_combine($header, array_pad(array_slice($values, 0, count($header)), count($header), null));
+                yield $n++ => array_combine($header, array_pad(array_slice($values, 0, count($header)), count($header), null));
             }
             break; // first sheet only
         }
         $reader->close();
-
-        return $rows;
     }
 }

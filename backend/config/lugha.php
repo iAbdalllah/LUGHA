@@ -13,6 +13,10 @@ return [
     'pkg_binary' => env('LUGHA_PKG_BINARY', base_path('../engine/target/release/lugha-pkg')),
     // Staff must enrol an authenticator app before using the admin. Only turn off on a developer machine.
     'admin_mfa_required' => (bool) env('ADMIN_MFA_REQUIRED', true),
+
+    // Largest admin upload (translation import files), in KB. Must stay under PHP's upload_max_filesize.
+    'max_upload_kb' => (int) env('LUGHA_MAX_UPLOAD_KB', 204800),
+
     // Saudi VAT in basis points (1500 = 15%). Store prices are VAT-inclusive.
     'vat_rate_bps' => (int) env('LUGHA_VAT_RATE_BPS', 1500),
     'seller' => [
