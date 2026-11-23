@@ -12,6 +12,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -78,6 +81,12 @@ fun LughaTv() {
     }
     BackHandler(enabled = screen != Screen.Live && LinkHub.store.senders.isNotEmpty()) { screen = Screen.Live }
 
+    // TVs report very different dp sizes for the same 1080p panel (960 dp at xhdpi, 1440 dp at tvdpi). The screens
+    // are laid out for a 1440 dp-wide canvas, so scale density to make every TV present exactly that width;
+    // the user's font-size setting (fontScale) is kept.
+    val base = LocalDensity.current
+    val widthPx = LocalConfiguration.current.screenWidthDp * base.density
+    CompositionLocalProvider(LocalDensity provides Density(widthPx / DESIGN_WIDTH_DP, base.fontScale)) {
     MaterialTheme(colorScheme = darkColorScheme(primary = Amber, background = Ground, surface = Surface2)) {
         // Layout follows the TV's language (RTL for Arabic); subtitle text is always RTL (SubtitleBubble).
         Box(Modifier.fillMaxSize().background(Ground)) {
@@ -89,7 +98,11 @@ fun LughaTv() {
             }
         }
     }
+    }
 }
+
+/** Width of the canvas the TV screens are designed on (a 1080p panel at tvdpi). */
+private const val DESIGN_WIDTH_DP = 1440f
 
 private fun qr(content: String, size: Int = 512): Bitmap {
     val m = QRCodeWriter().encode(content, BarcodeFormat.QR_CODE, size, size)
