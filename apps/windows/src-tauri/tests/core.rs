@@ -5,16 +5,33 @@ use std::net::{TcpListener, TcpStream};
 use std::time::{Duration, Instant};
 
 use lugha_link::{frame, Message, ReceiverPairing, Session, StaticKeys};
-use lugha_windows::pipeline::Pipeline;
+use lugha_windows::pipeline::{Found, Pipeline};
 use lugha_windows::store::PackageStore;
 use lugha_windows::tv::{TvError, TvSender};
 
-fn lookup(text: &str) -> Option<(String, Option<String>)> {
+fn found(id: i64, text: &str, speaker: Option<&str>) -> Option<Found> {
+    Some(Found { text: text.into(), speaker: speaker.map(Into::into), entry_id: id, package_id: "p".into() })
+}
+
+fn lookup(text: &str) -> Option<Found> {
     match text {
-        "Hello there." => Some(("أهلاً بك.".into(), Some("Jack".into()))),
-        "Let's go." => Some(("يلا نمشي.".into(), None)),
+        "Hello there." => found(1, "أهلاً بك.", Some("Jack")),
+        "Let's go." => found(2, "يلا نمشي.", None),
+        "Map" => found(3, "الخريطة", None),
+        "Settings" => found(4, "الإعدادات", None),
         _ => None,
     }
+}
+
+#[test]
+fn menus_are_looked_up_line_by_line() {
+    let mut p = Pipeline::default();
+    p.stable_frames = 1;
+    let lines: Vec<String> = ["Map", "Game", "Settings"].iter().map(|s| s.to_string()).collect();
+    assert!(p.ingest(&lines, Instant::now(), lookup));
+    let sub = p.current.as_ref().unwrap();
+    assert_eq!(sub.text, "الخريطة  ·  الإعدادات");
+    assert_eq!(sub.entry_id, 3);
 }
 
 #[test]

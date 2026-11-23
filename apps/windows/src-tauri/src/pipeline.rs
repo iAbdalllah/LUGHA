@@ -66,7 +66,20 @@ impl Pipeline {
         }
         self.count = 0;
         self.shown_source = Some(text.clone());
-        match lookup(&text) {
+        let found = lookup(&text).or_else(|| {
+            // A menu or list: each line is its own entry. Show the known ones, in screen order.
+            let lines: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).take(12).collect();
+            if lines.len() < 2 {
+                return None;
+            }
+            let hits: Vec<Found> = lines.iter().filter_map(|l| lookup(l.trim())).collect();
+            let first = hits.first()?;
+            let (entry_id, package_id) = (first.entry_id, first.package_id.clone());
+            let mut seen = std::collections::HashSet::new();
+            let text = hits.iter().map(|h| h.text.clone()).filter(|t| seen.insert(t.clone())).collect::<Vec<_>>().join("  ·  ");
+            Some(Found { text, speaker: None, entry_id, package_id })
+        });
+        match found {
             None => {
                 let changed = self.current.is_some();
                 self.current = None;

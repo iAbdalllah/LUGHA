@@ -38,4 +38,15 @@ final class PipelineTests: XCTestCase {
         _ = await p.ingest(lines: ["Some HUD text"])
         XCTAssertNil(p.current)
     }
+
+    func testMenusAreLookedUpLineByLine() async {
+        let known: [String: (Int64, String)] = ["Map": (10, "الخريطة"), "Settings": (11, "الإعدادات")]
+        let p = SubtitlePipeline(stableFrames: 1) { text in
+            known[text].map { Hit(entryId: $0.0, packageId: "p", target: $0.1, speaker: nil, category: "menus", score: 1, method: "exact", providerId: "package", machineGenerated: false) }
+        }
+        _ = await p.ingest(lines: ["Map", "Game", "Settings"])
+        XCTAssertEqual(p.current?.text, "الخريطة  ·  الإعدادات")
+        _ = await p.ingest(lines: ["Nothing", "Known"])
+        XCTAssertNil(p.current)
+    }
 }

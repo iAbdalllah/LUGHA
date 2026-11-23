@@ -45,7 +45,8 @@ public final class SubtitlePipeline: @unchecked Sendable {
     /// Feed one frame's OCR lines. Returns true when `current` changed.
     @discardableResult
     public func ingest(lines: [String], at now: Date = Date()) async -> Bool {
-        let text = lines.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.joined(separator: "\n")
+        let cleaned = lines.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        let text = cleaned.joined(separator: "\n")
         guard !text.isEmpty else {
             candidate = nil
             candidateCount = 0
@@ -63,13 +64,19 @@ public final class SubtitlePipeline: @unchecked Sendable {
 
         candidateCount = 0
         shownSource = text
-        guard let hit = await lookup(text) else {
+        let sub: Subtitle
+        if let hit = await lookup(text) {
+            // A subtitle: the lines together are one sentence.
+            sub = Subtitle(text: hit.target, speaker: hit.speaker, source: text, score: hit.score, entryId: hit.entryId, packageId: hit.packageId)
+        } else if cleaned.count > 1, let menu = await lookupEachLine(cleaned) {
+            // A menu or list: each line is its own entry. Show the ones we know, in screen order.
+            sub = menu
+        } else {
             // Text we have no translation for: hide rather than show a stale line.
             let changed = current != nil
             current = nil
             return changed
         }
-        let sub = Subtitle(text: hit.target, speaker: hit.speaker, source: text, score: hit.score, entryId: hit.entryId, packageId: hit.packageId)
         if sub != current {
             current = sub
             history.insert(sub, at: 0)
@@ -77,6 +84,18 @@ public final class SubtitlePipeline: @unchecked Sendable {
             return true
         }
         return false
+    }
+
+    /// Looks up each OCR line on its own (menus, option lists). nil when none is known.
+    private func lookupEachLine(_ lines: [String]) async -> Subtitle? {
+        var hits: [(String, Hit)] = []
+        for line in lines.prefix(12) {
+            if let h = await lookup(line), !hits.contains(where: { $0.1.entryId == h.entryId }) { hits.append((line, h)) }
+        }
+        guard let first = hits.first else { return nil }
+        return Subtitle(text: hits.map(\.1.target).joined(separator: "  ·  "), speaker: nil,
+                        source: hits.map(\.0).joined(separator: "\n"), score: hits.map(\.1.score).min() ?? first.1.score,
+                        entryId: first.1.entryId, packageId: first.1.packageId)
     }
 
     public func clear() {

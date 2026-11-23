@@ -408,13 +408,19 @@ class AppState extends ChangeNotifier {
     if (text == rpLastSource) return;
     rpLastSource = text;
     final hit = engine?.lookup(text);
-    if (hit == null) {
+    if (hit != null) {
+      history.insert(0, Line(text, hit.target, hit.speaker, DateTime.now(), entryId: hit.entryId, packageId: hit.packageId));
+      if (history.length > 50) history.removeLast();
+      tv?.show(hit.target, speaker: hit.speaker);
+      return;
+    }
+    // A menu or list: each line is its own entry. Show the known ones in screen order.
+    final known = lines.take(12).map((l) => engine?.lookup(l.trim())).whereType<Hit>().toList();
+    if (known.isEmpty) {
       tv?.clear();
       return;
     }
-    history.insert(0, Line(text, hit.target, hit.speaker, DateTime.now(), entryId: hit.entryId, packageId: hit.packageId));
-    if (history.length > 50) history.removeLast();
-    tv?.show(hit.target, speaker: hit.speaker);
+    tv?.show(known.map((h) => h.target).toSet().join('  ·  '));
   }
 
   Future<void> sendTestLine() async {
