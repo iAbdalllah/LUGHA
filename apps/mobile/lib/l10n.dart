@@ -18,6 +18,12 @@ class L {
     'Connected to %s': 'متصل بـ %s', 'Disconnect': 'قطع الاتصال', 'Reconnect': 'إعادة الاتصال',
     'TV remote': 'التحكم بالتلفاز', 'Font size': 'حجم الخط', 'Position': 'الموضع', 'Top': 'أعلى', 'Bottom': 'أسفل', 'Background': 'الخلفية',
     'Send a test line': 'إرسال سطر تجريبي', 'Clear the TV': 'مسح التلفاز',
+    'Display': 'طريقة العرض', 'Over the English': 'فوق الإنجليزي', 'Above the English': 'أعلى الإنجليزي',
+    'History panel': 'لوحة السجل', 'Off': 'مغلقة', 'Left': 'يسار', 'Right': 'يمين',
+    'Recent dialogue at the side of the game; it dims after a few seconds.': 'آخر الحوارات بجانب اللعبة، وتخفت بعد ثوانٍ.',
+    'Keep a line until it can be read': 'إبقاء السطر حتى تقرأه', 'Timing': 'التوقيت',
+    'Wait for stable text': 'انتظار ثبات النص', 'English gone after': 'اعتبار الإنجليزي اختفى بعد', 'Fade in': 'ظهور تدريجي', 'ms': 'ملي ثانية',
+    'Recent lines': 'آخر الترجمات',
     'On iPhone, LUGHA can’t read other apps’ screens. Use it to manage packages and control your TV; subtitles come from LUGHA on your Mac or PC.':
         'على iPhone لا يمكن للغة قراءة شاشات التطبيقات الأخرى. استخدمه لإدارة الباقات والتحكم بالتلفاز؛ الترجمة تأتي من لغة على جهاز Mac أو الكمبيوتر.',
     'Report this line': 'الإبلاغ عن هذه الترجمة', 'Wrong translation? Report it': 'الترجمة خاطئة؟ أبلغ عنها',

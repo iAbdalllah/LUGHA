@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../display.dart';
 import '../l10n.dart';
 import '../state.dart';
 
@@ -44,6 +45,9 @@ class _TvScreenState extends State<TvScreen> {
             onSelectionChanged: (s) => app.setTvStyle(bottom: s.first),
           ),
         ),
+        const Divider(),
+        _DisplayOptions(app: app),
+        const SizedBox(height: 8),
         Row(children: [
           Expanded(child: FilledButton(key: const Key('tvtest'), onPressed: app.sendTestLine, child: Text(L.t('Send a test line')))),
           const SizedBox(width: 8),
@@ -69,5 +73,50 @@ class _TvScreenState extends State<TvScreen> {
     if (parts.first.isEmpty || _code.text.length != 6) return;
     final found = widget.app.found.where((f) => f.host == parts.first).firstOrNull;
     widget.app.pairTv(parts.first, parts.length > 1 ? int.tryParse(parts[1]) ?? 47800 : 47800, _code.text, found?.name ?? parts.first);
+  }
+}
+
+/// Where the Arabic goes on the TV, the history panel and the reader's timing (same options as the Mac and PC).
+class _DisplayOptions extends StatelessWidget {
+  const _DisplayOptions({required this.app});
+  final AppState app;
+
+  @override
+  Widget build(BuildContext context) {
+    final d = app.display;
+    final t = Theme.of(context).textTheme;
+    Widget slider(String title, int value, int min, int max, DisplayPrefs Function(int) set) => ListTile(
+          title: Text('${L.t(title)} · $value ${L.t('ms')}'),
+          subtitle: Slider(value: value.toDouble().clamp(min.toDouble(), max.toDouble()), min: min.toDouble(), max: max.toDouble(), divisions: (max - min) ~/ 50,
+              onChanged: (v) => app.setDisplay(set(v.round()))),
+        );
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Text(L.t('Display'), style: t.titleMedium),
+      const SizedBox(height: 6),
+      SegmentedButton<String>(
+        segments: [ButtonSegment(value: 'over', label: Text(L.t('Over the English'))), ButtonSegment(value: 'above', label: Text(L.t('Above the English')))],
+        selected: {d.display},
+        onSelectionChanged: (s) => app.setDisplay(d.copyWith(display: s.first)),
+      ),
+      const SizedBox(height: 12),
+      Text(L.t('History panel'), style: t.titleMedium),
+      const SizedBox(height: 6),
+      SegmentedButton<String>(
+        segments: [
+          ButtonSegment(value: 'off', label: Text(L.t('Off'))),
+          ButtonSegment(value: 'right', label: Text(L.t('Right'))),
+          ButtonSegment(value: 'left', label: Text(L.t('Left'))),
+        ],
+        selected: {d.history},
+        onSelectionChanged: (s) => app.setDisplay(d.copyWith(history: s.first)),
+      ),
+      Padding(padding: const EdgeInsets.only(top: 4), child: Text(L.t('Recent dialogue at the side of the game; it dims after a few seconds.'), style: t.bodySmall)),
+      SwitchListTile(title: Text(L.t('Keep a line until it can be read')), value: d.readHold, onChanged: (v) => app.setDisplay(d.copyWith(readHold: v))),
+      ExpansionTile(title: Text(L.t('Timing')), children: [
+        slider('Wait for stable text', d.stableMs, 0, 500, (v) => d.copyWith(stableMs: v)),
+        slider('English gone after', d.goneAfterMs, 200, 2000, (v) => d.copyWith(goneAfterMs: v)),
+        slider('Fade in', d.fadeMs, 0, 500, (v) => d.copyWith(fadeMs: v)),
+      ]),
+    ]);
   }
 }

@@ -87,9 +87,16 @@ class _PlayScreenState extends State<PlayScreen> {
         if (app.rpRunning) Padding(padding: const EdgeInsets.only(top: 4), child: Text(L.t('Keep this phone on and LUGHA open while you play.'), style: t.bodySmall)),
         if (app.rpRunning && app.history.isNotEmpty) ...[
           const Divider(),
-          Text(L.t('Last line'), style: t.labelMedium),
-          Text(app.history.first.target ?? '', textDirection: TextDirection.rtl, style: t.titleMedium),
-          Text(app.history.first.source, textDirection: TextDirection.ltr, style: t.bodySmall),
+          // The phone doubles as a history screen: the latest line first, a few earlier ones under it.
+          Text(L.t('Recent lines'), style: t.labelMedium),
+          for (final (n, l) in app.history.take(6).indexed)
+            Opacity(
+              opacity: n == 0 ? 1 : 0.75 - n * 0.08,
+              child: Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Text('${l.speaker != null ? '${l.speaker}: ' : ''}${l.target ?? ''}', textDirection: TextDirection.rtl, style: n == 0 ? t.titleMedium : t.bodyLarge),
+                Text(l.source, textDirection: TextDirection.ltr, style: t.bodySmall),
+              ])),
+            ),
         ],
       ]))),
       if (app.rpStatus.isNotEmpty && app.ps5 == null) Text(app.rpStatus, style: const TextStyle(color: Colors.orange)),

@@ -9,6 +9,7 @@ import 'package:lugha_remoteplay/lugha_remoteplay.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'api.dart';
+import 'display.dart';
 import 'l10n.dart';
 import 'sync.dart';
 import 'tv_link.dart';
@@ -55,6 +56,8 @@ class AppState extends ChangeNotifier {
   double tvFontScale = 1.0;
   bool tvBottom = true;
   double tvBgOpacity = 0.75;
+  DisplayPrefs display = const DisplayPrefs();
+  late final StableGate _gate = StableGate(_onStableText);
 
   bool get signedIn => api.token != null;
   String get deviceKind => Platform.isIOS ? 'ios' : 'android';
@@ -69,6 +72,8 @@ class AppState extends ChangeNotifier {
     L.lang = await _secure.read(key: 'lang') ?? 'ar';
     api = ApiClient(baseUrl: server != null ? Uri.parse(server) : defaultServer(), token: await _secure.read(key: 'token'), language: L.lang);
     await loadRemotePlay();
+    final d = await _secure.read(key: 'display');
+    if (d != null) display = DisplayPrefs.fromJson(jsonDecode(d) as Map<String, dynamic>);
     final tvs = await _secure.read(key: 'paired_tvs');
     if (tvs != null) pairedTvs = (jsonDecode(tvs) as List).map((e) => PairedTv.fromJson(e as Map<String, dynamic>)).toList();
     store = PackageStore(Directory('${(await getApplicationSupportDirectory()).path}/packages'));
@@ -291,7 +296,15 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _pushStyle() => tv?.setStyle(fontScale: tvFontScale, bottom: tvBottom, bgOpacity: tvBgOpacity);
+  void _pushStyle() => tv?.setStyle(fontScale: tvFontScale, bottom: tvBottom, bgOpacity: tvBgOpacity, extra: display.tvStyle());
+
+  /// Display options (TV look, history panel, timing): saved on the phone and sent to the TV.
+  Future<void> setDisplay(DisplayPrefs p) async {
+    display = p;
+    _pushStyle();
+    notifyListeners();
+    await _secure.write(key: 'display', value: jsonEncode(p.toJson()));
+  }
 
   // ── PS5 Remote Play (play on the TV; this phone reads the subtitles from the console's stream) ──
 
@@ -413,7 +426,8 @@ class AppState extends ChangeNotifier {
   void _onSubtitleText(List<String> lines) {
     final text = lines.join(' ').trim();
     if (text.isEmpty) {
-      _rpHide ??= Timer(const Duration(milliseconds: 1200), () {
+      _gate.cancel();
+      _rpHide ??= Timer(Duration(milliseconds: display.goneAfterMs), () {
         _rpHide = null;
         rpLastSource = null;
         tv?.clear();
@@ -423,7 +437,16 @@ class AppState extends ChangeNotifier {
     _rpHide?.cancel();
     _rpHide = null;
     if (text == rpLastSource) return;
+    _gate.hold = Duration(milliseconds: display.stableMs);
+    _gate.feed(lines);
+  }
+
+  /// Text that held for the "wait for stable text" time.
+  void _onStableText(List<String> lines) {
+    final text = lines.join(' ').trim();
+    if (text == rpLastSource) return;
     rpLastSource = text;
+    notifyListeners();
     final hit = engine?.lookup(text);
     if (hit != null) {
       history.insert(0, Line(text, hit.target, hit.speaker, DateTime.now(), entryId: hit.entryId, packageId: hit.packageId));

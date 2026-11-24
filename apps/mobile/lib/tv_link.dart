@@ -180,8 +180,9 @@ class TvSender {
 
   void clear() => _send({'t': 'sub.clear', 'id': _id++});
 
-  void setStyle({required double fontScale, required bool bottom, required double bgOpacity}) =>
-      _send({'t': 'style.set', 'font_scale': fontScale, 'position_y': bottom ? 0.9 : 0.1, 'bg_opacity': bgOpacity});
+  /// [extra]: display/history/fade_ms/read_hold (DisplayPrefs.tvStyle); older TVs ignore them.
+  void setStyle({required double fontScale, required bool bottom, required double bgOpacity, Map<String, dynamic> extra = const {}}) =>
+      _send({'t': 'style.set', 'font_scale': fontScale, 'position_y': bottom ? 0.9 : 0.1, 'bg_opacity': bgOpacity, ...extra});
 
   /// LUGHA TV drops a link that is silent for 20 s; senders call this every few seconds between subtitles.
   void keepAlive() => _send({'t': 'ping', 'id': _id++});
