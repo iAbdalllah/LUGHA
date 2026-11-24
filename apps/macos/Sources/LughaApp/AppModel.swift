@@ -271,9 +271,12 @@ final class AppModel: ObservableObject {
         do {
             if let bundleID = settings.captureAppBundleID {
                 // Window mode: the game can be played on the TV while its Remote Play window sits behind other windows.
-                let w = try await capture.startWindow(bundleID: bundleID, area: settings.windowArea, onFrame: handler)
+                // The whole window is captured so the game picture (inside the title bar and black bars) is found and
+                // positions match the TV picture exactly; a smaller subtitle area chosen in the window only filters
+                // which text is read (see `readFilter`).
+                let w = try await capture.startWindow(bundleID: bundleID, area: AppSettings.wholeWindowArea, onFrame: handler)
                 captureWindow = w
-                let a = settings.windowArea, f = w.frame
+                let a = AppSettings.wholeWindowArea, f = w.frame
                 // The Arabic sits exactly over the English: the subtitle area, in global screen points.
                 overlay.anchor = CGRect(x: f.minX + a.minX * f.width, y: f.minY + a.minY * f.height, width: a.width * f.width, height: a.height * f.height)
                 pictureArea = a
@@ -423,11 +426,11 @@ final class AppModel: ObservableObject {
         let t0 = Date()
         let read = (try? await ocr.recognizeLines(image)) ?? []
         // Reading areas: only text inside the boxes the user drew (the PS5's own menus, signs elsewhere are skipped).
-        let lines = ReadingArea.keep(read, in: settings.readingAreas)
+        let lines = ReadingArea.keep(read, in: readFilter)
         let ocrMs = Int(Date().timeIntervalSince(t0) * 1000)
         lastRead = lines.map(\.text).joined(separator: " · ")
         // Where the game picture is inside the window (black bars, title bar), re-checked every few seconds.
-        if settings.captureAppBundleID != nil, settings.windowArea == AppSettings.wholeWindowArea, Date().timeIntervalSince(contentCheckedAt) > 3 {
+        if settings.captureAppBundleID != nil, Date().timeIntervalSince(contentCheckedAt) > 3 {
             contentCheckedAt = Date()
             gameRect = FrameSampler(image, maxWidth: 640)?.gameRect()
         }
@@ -461,12 +464,21 @@ final class AppModel: ObservableObject {
 
     // MARK: Reading areas
 
+    /// The boxes text is read from: the user's reading areas, or — window mode with a smaller subtitle area chosen in
+    /// the window and no reading areas — that area.
+    private var readFilter: [ReadingArea] {
+        if settings.readingAreas.contains(where: \.enabled) { return settings.readingAreas }
+        if settings.captureAppBundleID != nil, settings.windowArea != AppSettings.wholeWindowArea {
+            return [ReadingArea(name: "", rect: settings.windowArea)]
+        }
+        return []
+    }
+
     /// The captured picture in global screen points (what OCR box fractions refer to), running or not.
     func captureAreaGlobal() async -> CGRect? {
         if let bundleID = settings.captureAppBundleID {
-            guard let w = (try? await CaptureService.appWindows())?.first(where: { $0.bundleID == bundleID }) else { return nil }
-            let a = settings.windowArea, f = w.frame
-            return CGRect(x: f.minX + a.minX * f.width, y: f.minY + a.minY * f.height, width: a.width * f.width, height: a.height * f.height)
+            // Window mode captures the whole window (reading areas are fractions of it).
+            return (try? await CaptureService.appWindows())?.first(where: { $0.bundleID == bundleID })?.frame
         }
         guard let region = settings.captureRegion else { return nil }
         let origin = CGDisplayBounds(settings.displayID ?? CGMainDisplayID())
