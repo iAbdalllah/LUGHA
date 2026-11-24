@@ -174,7 +174,7 @@ struct SubtitleOverlayView: View {
                             .transition(.opacity)
                     }
                 }
-                if settings.historySide != "off", !model.recent.isEmpty {
+                if settings.effectiveHistorySide != "off", !model.recent.isEmpty {
                     historyPanel(in: geo.size)
                 }
                 if let a = model.anchor {
@@ -199,6 +199,8 @@ struct SubtitleOverlayView: View {
     }
 
     private func pieces(in size: CGSize) -> [Piece] {
+        // History only: nothing over the game, just the side panel.
+        if settings.displayMode == "history" { return [] }
         let scale = settings.fontSize / 30
         guard let a = model.anchor else {
             return model.shown.prefix(1).map { s in
@@ -242,7 +244,7 @@ struct SubtitleOverlayView: View {
         return VStack(alignment: .trailing, spacing: f * 0.5) {
             ForEach(Array(items.enumerated()), id: \.element.text) { n, i in
                 (Text(i.speaker.map { "\($0): " } ?? "").foregroundColor(SubtitlePlate.amber).font(.system(size: f * 0.82, weight: .bold))
-                    + Text(i.text).foregroundColor(.white).font(ArabicFonts.family(settings.fontName).map { .custom($0, size: f) } ?? .system(size: f, weight: .medium)))
+                    + Text(i.text).foregroundColor(SubtitlePlate.plateTextColor(settings)).font(ArabicFonts.family(settings.fontName).map { .custom($0, size: f) } ?? .system(size: f, weight: .medium)))
                     .multilineTextAlignment(.trailing)
                     .frame(maxWidth: .infinity, alignment: .trailing)
                     .opacity(0.45 + 0.55 * Double(n + 1) / Double(items.count))
@@ -251,9 +253,9 @@ struct SubtitleOverlayView: View {
         .environment(\.layoutDirection, .rightToLeft)
         .padding(f * 0.8)
         .frame(width: w)
-        .background(RoundedRectangle(cornerRadius: f * 0.6, style: .continuous).fill(Color(white: 0.04).opacity(0.6)))
-        .opacity(model.recentFresh ? 0.92 : 0.38)
-        .position(x: settings.historySide == "left" ? a.minX + a.width * 0.015 + w / 2 : a.maxX - a.width * 0.015 - w / 2, y: a.minY + a.height * 0.45)
+        .background(RoundedRectangle(cornerRadius: f * 0.6, style: .continuous).fill(SubtitlePlate.plate(settings).opacity(min(max(settings.backgroundOpacity, 0.35), 0.9) * 0.8)))
+        .opacity(model.recentFresh || settings.displayMode == "history" ? 0.92 : 0.38)
+        .position(x: settings.effectiveHistorySide == "left" ? a.minX + a.width * 0.015 + w / 2 : a.maxX - a.width * 0.015 - w / 2, y: a.minY + a.height * 0.45)
         .animation(.easeOut(duration: 0.4), value: model.recentFresh)
     }
 }
@@ -265,6 +267,15 @@ struct SubtitleOverlayView: View {
 /// - Outline: no plate, outlined text like film subtitles. Display "above" with Native uses this too (nothing to cover).
 struct SubtitlePlate: View {
     static let amber = Color(red: 0.91, green: 0.71, blue: 0.30)
+    /// The chosen box colour (Background slider sets its opacity).
+    static func plate(_ s: AppSettings) -> Color {
+        let c = RGB(hex: s.plateColor) ?? RGB(r: 0, g: 0, b: 0)
+        return Color(.sRGB, red: c.r, green: c.g, blue: c.b)
+    }
+    /// Text on a box of that colour: dark on light colours, else white.
+    static func plateTextColor(_ s: AppSettings) -> Color {
+        (RGB(hex: s.plateColor)?.isLight ?? false) ? Color(red: 0.07, green: 0.07, blue: 0.09) : .white
+    }
     let lines: [(item: SubtitleItem, old: Bool)]
     let fontSize: Double
     @ObservedObject var settings: AppSettings
@@ -301,7 +312,7 @@ struct SubtitlePlate: View {
     }
 
     private var native: some View {
-        let bg = color(main?.background) ?? Color.black.opacity(settings.backgroundOpacity)
+        let bg = color(main?.background) ?? Self.plate(settings).opacity(settings.backgroundOpacity)
         return text(nil)
             .padding(.horizontal, fontSize * 0.3)
             .padding(.vertical, lines.count > 1 ? fontSize * 0.15 : 0)
@@ -310,12 +321,13 @@ struct SubtitlePlate: View {
     }
 
     private var box: some View {
-        text(chosenColor)
-            .shadow(color: .black.opacity(0.85), radius: 2, x: 0, y: 1)
+        let light = RGB(hex: settings.plateColor)?.isLight ?? false
+        return text(light ? Self.plateTextColor(settings) : chosenColor)
+            .shadow(color: .black.opacity(light ? 0 : 0.85), radius: 2, x: 0, y: 1)
             .padding(.horizontal, fontSize * 0.7)
             .padding(.vertical, fontSize * 0.3)
             .frame(minWidth: cover.width, minHeight: cover.height)
-            .background(RoundedRectangle(cornerRadius: fontSize * 0.35, style: .continuous).fill(Color.black.opacity(settings.backgroundOpacity)))
+            .background(RoundedRectangle(cornerRadius: fontSize * 0.35, style: .continuous).fill(Self.plate(settings).opacity(settings.backgroundOpacity)))
     }
 
     /// How to draw over the picture where this text goes (sampled from the frame): text colour and backdrop.

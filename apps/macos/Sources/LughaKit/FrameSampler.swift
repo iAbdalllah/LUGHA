@@ -6,8 +6,16 @@ public struct RGB: Equatable, Sendable {
     public let r, g, b: Double
     public init(r: Double, g: Double, b: Double) { self.r = r; self.g = g; self.b = b }
     public var hex: String { String(format: "#%02X%02X%02X", Int(r * 255), Int(g * 255), Int(b * 255)) }
-    var luma: Double { 0.2126 * r + 0.7152 * g + 0.0722 * b }
+    public var luma: Double { 0.2126 * r + 0.7152 * g + 0.0722 * b }
     func distance(_ o: RGB) -> Double { abs(r - o.r) + abs(g - o.g) + abs(b - o.b) }
+    public var isLight: Bool { luma > 0.6 }
+
+    /// "#RRGGBB" → colour.
+    public init?(hex: String) {
+        let h = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
+        guard h.count == 6, let v = UInt32(h, radix: 16) else { return nil }
+        self.init(r: Double(v >> 16 & 0xFF) / 255, g: Double(v >> 8 & 0xFF) / 255, b: Double(v & 0xFF) / 255)
+    }
 }
 
 /// How to draw Arabic over a patch of the picture so it reads: text colour, and how strong a backdrop of the opposite

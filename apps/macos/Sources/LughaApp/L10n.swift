@@ -17,6 +17,8 @@ enum L {
         "Only text inside these boxes is translated. With none, everything in the capture is read.": "تُترجم النصوص داخل هذه المربعات فقط. بدونها تُقرأ الصورة كلها.",
         "Display": "طريقة العرض", "Over the English": "فوق النص الإنجليزي", "Above the English": "أعلى النص الإنجليزي",
         "The Arabic hides the English.": "العربي يغطي النص الإنجليزي.", "The Arabic sits just above the English, which stays visible.": "العربي فوق النص الإنجليزي مباشرة، والإنجليزي يبقى ظاهرًا.",
+        "History only": "السجل فقط", "Nothing over the game; the lines appear only in the history panel.": "لا شيء فوق اللعبة؛ الترجمة تظهر في لوحة السجل فقط.",
+        "Box colour": "لون المربع",
         "History panel": "لوحة السجل", "Off": "مغلقة", "Left": "يسار", "Right": "يمين",
         "Recent dialogue at the side of the game; it dims after a few seconds.": "آخر الحوارات بجانب اللعبة، وتخفت بعد ثوانٍ.",
         "Keep a line until it can be read": "إبقاء السطر حتى تقرأه",

@@ -117,6 +117,7 @@ async function refresh() {
   const disp = state.display || {};
   $('d-display').value = disp.display || 'over';
   $('d-history').value = disp.history || 'off';
+  $('d-plate').value = disp.plate_color || '#000000';
   $('d-hold').checked = disp.read_hold !== false;
   $('d-stable').value = disp.stable_ms ?? 200;
   $('d-gone').value = disp.gone_after_ms ?? 1200;
@@ -231,7 +232,7 @@ $('areas-save').onclick = async () => { await call('set_areas', { areas: readAre
 $('display-save').onclick = async () => {
   const n = (id, def) => Number.isFinite(+$(id).value) && $(id).value !== '' ? Math.round(+$(id).value) : def;
   await call('set_display', { display: {
-    display: $('d-display').value, history: $('d-history').value, read_hold: $('d-hold').checked,
+    display: $('d-display').value, history: $('d-history').value, plate_color: $('d-plate').value, read_hold: $('d-hold').checked,
     stable_ms: n('d-stable', 200), gone_after_ms: n('d-gone', 1200), fade_ms: n('d-fade', 150),
   } });
   toast('حُفظت طريقة العرض');
@@ -332,7 +333,7 @@ function mockInvoke(cmd, args) {
     packages: [['sandline-sa-full', '1.1.0']], region: { x: 192, y: 810, w: 1536, h: 243 }, capturing: false,
     tv: '192.168.1.20:47800', tv_paired: true, tv_connected: true, ocr_language: 'en-US', windows: true, last_error: null,
     capture_window: null, window_area: [0.08, 0.7, 0.84, 0.26], show_on_pc: true,
-    display: { display: 'over', history: 'off', fade_ms: 150, read_hold: true, stable_ms: 200, gone_after_ms: 1200 },
+    display: { display: 'over', plate_color: '#000000', history: 'off', fade_ms: 150, read_hold: true, stable_ms: 200, gone_after_ms: 1200 },
     areas: [{ name: 'الترجمة', x: 0.1, y: 0.8, w: 0.8, h: 0.118, enabled: true }],
   });
   const lines = { 'water costs more than gold out here': { text: 'الماء هنا أغلى من الذهب.', speaker: 'سالم', source: 'Water costs more than gold out here', entry_id: 6, package_id: 'sandline-sa-full' } };

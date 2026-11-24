@@ -25,7 +25,10 @@ data class OverlayStyle(
     val textColor: String = "white",
     /** Arabic font id, same as the Mac: "" (system), naskh, kufi, cairo, tajawal, amiri — bundled in res/font. */
     val font: String = "",
-    /** "over": the Arabic hides the English on a plate; "above": the Arabic sits just above the English, which stays. */
+    /**
+     * "over": the Arabic hides the English on a plate; "above": just above the English, which stays; "history": no
+     * line over the game at all — only the history panel.
+     */
     val display: String = "over",
     /** Side panel with the recent dialogue: "off", "left" or "right". */
     val history: String = "off",
@@ -33,7 +36,12 @@ data class OverlayStyle(
     val fadeMs: Int = 150,
     /** Keep a replaced dialogue line up (dimmed, above the new one) until it could be read. */
     val readHold: Boolean = true,
+    /** Colour of the text boxes and the history panel (#RRGGBB; its opacity is [bgOpacity]). */
+    val plateColor: String = "#000000",
 ) {
+    /** The history panel's side: in history-only display it is always shown (right unless left was chosen). */
+    val historySide get() = if (display == "history" && history == "off") "right" else history
+    val plateRgb: Int get() = runCatching { android.graphics.Color.parseColor(plateColor) }.getOrDefault(android.graphics.Color.BLACK)
     val positionBottom get() = positionY >= 0.5f
 }
 

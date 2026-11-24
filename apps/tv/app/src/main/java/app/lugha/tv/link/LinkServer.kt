@@ -174,10 +174,11 @@ class LinkServer(private val scope: CoroutineScope, private val hub: LinkHub = L
                     mode = m["mode"]?.jsonPrimitive?.content ?: "native",
                     textColor = m["text_color"]?.jsonPrimitive?.content ?: "white",
                     font = m["font"]?.jsonPrimitive?.content ?: "",
-                    display = m["display"]?.jsonPrimitive?.content?.takeIf { it == "above" } ?: "over",
+                    display = m["display"]?.jsonPrimitive?.content?.takeIf { it == "above" || it == "history" } ?: "over",
                     history = m["history"]?.jsonPrimitive?.content?.takeIf { it == "left" || it == "right" } ?: "off",
                     fadeMs = (m["fade_ms"]?.jsonPrimitive?.content?.toIntOrNull() ?: 150).coerceIn(0, 1000),
-                    readHold = m["read_hold"]?.jsonPrimitive?.boolean ?: true))
+                    readHold = m["read_hold"]?.jsonPrimitive?.boolean ?: true,
+                    plateColor = m["plate_color"]?.jsonPrimitive?.content?.takeIf { Regex("#[0-9A-Fa-f]{6}").matches(it) } ?: "#000000"))
                 "ping" -> send(buildJsonObject { put("t", "pong"); put("id", m["id"]!!.jsonPrimitive.long) })
                 "bye" -> return
             }

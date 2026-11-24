@@ -132,13 +132,14 @@ impl TvSender {
     }
 
     /// The look on the TV: display "over"/"above", history panel "off"/"left"/"right", fade-in, read-hold.
-    pub fn set_style(&mut self, display: &str, history: &str, fade_ms: u32, read_hold: bool) -> Result<(), TvError> {
+    pub fn set_style(&mut self, display: &str, history: &str, plate_color: &str, fade_ms: u32, read_hold: bool) -> Result<(), TvError> {
         self.send(&Message::Style {
             font_scale: 1.0,
             position_y: 0.86,
             bg_opacity: 0.8,
             display: Some(display.into()),
             history: Some(history.into()),
+            plate_color: Some(plate_color.into()),
             fade_ms: Some(fade_ms),
             read_hold: Some(read_hold),
         })

@@ -338,10 +338,32 @@ struct DisplayOptions: View {
             Picker("", selection: bind(\.displayMode)) {
                 Text(L.t("Over the English")).tag("over")
                 Text(L.t("Above the English")).tag("above")
+                Text(L.t("History only")).tag("history")
             }
             .pickerStyle(.segmented).labelsHidden()
-            Text(settings.displayMode == "over" ? L.t("The Arabic hides the English.") : L.t("The Arabic sits just above the English, which stays visible."))
+            Text(settings.displayMode == "over" ? L.t("The Arabic hides the English.")
+                 : settings.displayMode == "above" ? L.t("The Arabic sits just above the English, which stays visible.")
+                 : L.t("Nothing over the game; the lines appear only in the history panel."))
                 .font(.caption2).foregroundColor(.secondary)
+
+            HStack(spacing: 6) {
+                Text(L.t("Box colour")).font(.caption).foregroundColor(.secondary)
+                Spacer()
+                // Presets, then any colour.
+                ForEach(["#000000", "#1B2A4A", "#3A1F4D", "#1F3D2B", "#5A1E1E", "#FFFFFF"], id: \.self) { hex in
+                    let c = RGB(hex: hex)!
+                    Circle().fill(Color(.sRGB, red: c.r, green: c.g, blue: c.b)).frame(width: 18, height: 18)
+                        .overlay(Circle().stroke(settings.plateColor == hex ? Color.accentColor : Color.secondary.opacity(0.5), lineWidth: settings.plateColor == hex ? 2.5 : 1))
+                        .onTapGesture { settings.plateColor = hex; Task { await app.textOptionsChanged() } }
+                }
+                ColorPicker("", selection: Binding(
+                    get: { SubtitlePlate.plate(settings) },
+                    set: { c in
+                        guard let rgb = NSColor(c).usingColorSpace(.sRGB) else { return }
+                        settings.plateColor = String(format: "#%02X%02X%02X", Int(rgb.redComponent * 255), Int(rgb.greenComponent * 255), Int(rgb.blueComponent * 255))
+                        Task { await app.textOptionsChanged() }
+                    }), supportsOpacity: false).labelsHidden()
+            }
 
             Text(L.t("History panel")).font(.caption).foregroundColor(.secondary)
             Picker("", selection: bind(\.historySide)) {

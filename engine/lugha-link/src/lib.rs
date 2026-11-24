@@ -271,12 +271,16 @@ pub enum Message {
         font_scale: f32,
         position_y: f32,
         bg_opacity: f32,
-        /// "over" (the Arabic hides the English) or "above" (just above it). Older TVs ignore the optional keys.
+        /// "over" (the Arabic hides the English), "above" (just above it) or "history" (only the history panel).
+        /// Older TVs ignore the optional keys.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         display: Option<String>,
         /// Side panel with the recent dialogue: "off", "left" or "right".
         #[serde(default, skip_serializing_if = "Option::is_none")]
         history: Option<String>,
+        /// Colour of the text boxes and the history panel, #RRGGBB.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        plate_color: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         fade_ms: Option<u32>,
         /// Keep a replaced dialogue line up (dimmed) until it could be read.

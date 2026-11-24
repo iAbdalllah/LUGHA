@@ -8,7 +8,11 @@ void main() {
     expect(DisplayPrefs.fromJson(p.toJson()).toJson(), p.toJson());
     final bad = DisplayPrefs.fromJson({'display': 'sideways', 'history': 'top', 'gone_after_ms': 99999});
     expect([bad.display, bad.history, bad.goneAfterMs], ['over', 'off', 3000]);
-    expect(p.tvStyle(), {'display': 'above', 'history': 'left', 'fade_ms': 200, 'read_hold': false});
+    expect(p.tvStyle(), {'display': 'above', 'history': 'left', 'plate_color': '#000000', 'fade_ms': 200, 'read_hold': false});
+    const h = DisplayPrefs(display: 'history', plateColor: '#1B2A4A');
+    expect(h.tvStyle()['history'], 'right', reason: 'history only always shows the panel');
+    expect(DisplayPrefs.fromJson(h.toJson()).plateColor, '#1B2A4A');
+    expect(DisplayPrefs.fromJson({'plate_color': 'red'}).plateColor, '#000000');
   });
 
   test('stable gate waits for the text to hold and restarts on a change', () {

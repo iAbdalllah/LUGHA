@@ -71,4 +71,16 @@ final class OverlayLayoutTests: XCTestCase {
         var off = subs; off.enabled = false
         XCTAssertEqual(ReadingArea.keep([sub, menu], in: [off]).count, 2, "disabled areas don't filter")
     }
+
+    func testBoxColourAndHistoryOnly() {
+        XCTAssertEqual(RGB(hex: "#1B2A4A")?.hex, "#1B2A4A")
+        XCTAssertNil(RGB(hex: "blue"))
+        XCTAssertTrue(RGB(hex: "#FFFFFF")!.isLight)
+        XCTAssertFalse(RGB(hex: "#1B2A4A")!.isLight)
+        let s = AppSettings(defaults: UserDefaults(suiteName: "lugha-test-\(UUID())")!)
+        s.displayMode = "history"
+        XCTAssertEqual(s.effectiveHistorySide, "right", "history only always shows the panel")
+        s.historySide = "left"
+        XCTAssertEqual(s.effectiveHistorySide, "left")
+    }
 }

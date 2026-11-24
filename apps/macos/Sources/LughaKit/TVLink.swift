@@ -267,10 +267,11 @@ public final class TVSender: @unchecked Sendable {
     /// draws its English subtitle so the Arabic covers it. `maxWidth`: fraction of the picture width the line may use.
     /// `display` "over"/"above", `history` "off"/"left"/"right", `fadeMs`, `readHold`: see AppSettings (older TVs ignore them).
     public func setStyle(fontScale: Double, positionY: Double, bgOpacity: Double, maxWidth: Double? = nil, mode: String? = nil, textColor: String? = nil, font: String? = nil,
-                         display: String? = nil, history: String? = nil, fadeMs: Int? = nil, readHold: Bool? = nil) async throws {
+                         display: String? = nil, history: String? = nil, plateColor: String? = nil, fadeMs: Int? = nil, readHold: Bool? = nil) async throws {
         var m: [String: Any] = ["t": "style.set", "font_scale": fontScale, "position_y": positionY, "bg_opacity": bgOpacity]
         if let display { m["display"] = display }
         if let history { m["history"] = history }
+        if let plateColor { m["plate_color"] = plateColor }
         if let fadeMs { m["fade_ms"] = fadeMs }
         if let readHold { m["read_hold"] = readHold }
         if let maxWidth { m["max_width"] = maxWidth }

@@ -19,6 +19,8 @@ class L {
     'TV remote': 'التحكم بالتلفاز', 'Font size': 'حجم الخط', 'Position': 'الموضع', 'Top': 'أعلى', 'Bottom': 'أسفل', 'Background': 'الخلفية',
     'Send a test line': 'إرسال سطر تجريبي', 'Clear the TV': 'مسح التلفاز',
     'Display': 'طريقة العرض', 'Over the English': 'فوق الإنجليزي', 'Above the English': 'أعلى الإنجليزي',
+    'History only': 'السجل فقط', 'Nothing over the game; the lines appear only in the history panel.': 'لا شيء فوق اللعبة؛ الترجمة تظهر في لوحة السجل فقط.',
+    'Box colour': 'لون المربع',
     'History panel': 'لوحة السجل', 'Off': 'مغلقة', 'Left': 'يسار', 'Right': 'يمين',
     'Recent dialogue at the side of the game; it dims after a few seconds.': 'آخر الحوارات بجانب اللعبة، وتخفت بعد ثوانٍ.',
     'Keep a line until it can be read': 'إبقاء السطر حتى تقرأه', 'Timing': 'التوقيت',

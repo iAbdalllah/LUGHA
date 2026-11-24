@@ -98,8 +98,11 @@ fn yes() -> bool {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Display {
-    /// "over": the Arabic hides the English; "above": just above it, the English stays visible.
+    /// "over": the Arabic hides the English; "above": just above it, the English stays visible; "history": nothing
+    /// over the game, only the history panel.
     pub display: String,
+    /// Colour of the text box and the history panel, #RRGGBB.
+    pub plate_color: String,
     /// Side panel with the recent dialogue: "off", "left" or "right".
     pub history: String,
     pub fade_ms: u32,
@@ -113,7 +116,7 @@ pub struct Display {
 
 impl Default for Display {
     fn default() -> Self {
-        Self { display: "over".into(), history: "off".into(), fade_ms: 150, read_hold: true, stable_ms: 200, gone_after_ms: 1200 }
+        Self { display: "over".into(), plate_color: "#000000".into(), history: "off".into(), fade_ms: 150, read_hold: true, stable_ms: 200, gone_after_ms: 1200 }
     }
 }
 
@@ -513,7 +516,12 @@ fn overlay_ready(app: tauri::AppHandle, core: tauri::State<'_, Shared>) -> Cmd<(
 fn set_display(app: tauri::AppHandle, core: tauri::State<'_, Shared>, display: Display) -> Cmd<()> {
     let mut c = lock(&core);
     let d = Display {
-        display: if display.display == "above" { "above".into() } else { "over".into() },
+        display: if ["above", "history"].contains(&display.display.as_str()) { display.display } else { "over".into() },
+        plate_color: if display.plate_color.len() == 7 && display.plate_color.starts_with('#') && display.plate_color[1..].chars().all(|c| c.is_ascii_hexdigit()) {
+            display.plate_color
+        } else {
+            "#000000".into()
+        },
         history: if ["left", "right"].contains(&display.history.as_str()) { display.history } else { "off".into() },
         fade_ms: display.fade_ms.min(1000),
         read_hold: display.read_hold,
@@ -524,7 +532,7 @@ fn set_display(app: tauri::AppHandle, core: tauri::State<'_, Shared>, display: D
     c.settings.save();
     let region = c.settings.region.unwrap_or_else(default_region);
     if let Some(tv) = c.tv.as_mut() {
-        let _ = tv.set_style(&d.display, &d.history, d.fade_ms, d.read_hold);
+        let _ = tv.set_style(&d.display, &history_side(&d), &d.plate_color, d.fade_ms, d.read_hold);
     }
     drop(c);
     place_overlay(&app, region);
@@ -585,11 +593,16 @@ fn tv_connect(core: tauri::State<'_, Shared>, addr: Option<String>) -> Cmd<()> {
     Ok(())
 }
 
+/// The history panel's side: history-only display always shows it (right unless left was chosen).
+fn history_side(d: &Display) -> String {
+    if d.display == "history" && d.history == "off" { "right".into() } else { d.history.clone() }
+}
+
 /// Sends the display options to the connected TV (it keeps them until the next change).
 fn push_tv_style(c: &mut Core) {
     let d = c.settings.display.clone();
     if let Some(tv) = c.tv.as_mut() {
-        let _ = tv.set_style(&d.display, &d.history, d.fade_ms, d.read_hold);
+        let _ = tv.set_style(&d.display, &history_side(&d), &d.plate_color, d.fade_ms, d.read_hold);
     }
 }
 

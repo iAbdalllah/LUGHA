@@ -40,8 +40,13 @@ public final class AppSettings: ObservableObject, @unchecked Sendable {
     /// Arabic font id shared with the TV: "", naskh, kufi, cairo, tajawal, amiri ("" = system).
     @Published public var fontName: String = "" { didSet { d.set(fontName, forKey: "fontName") } }
 
-    /// "over": the Arabic hides the English on a plate; "above": the Arabic sits just above the English, which stays.
+    /// "over": the Arabic hides the English on a plate; "above": just above the English, which stays; "history":
+    /// nothing over the game — only the history panel (right unless left is chosen).
     @Published public var displayMode: String = "over" { didSet { d.set(displayMode, forKey: "displayMode") } }
+    /// Colour of the text boxes and the history panel, #RRGGBB (its opacity is the Background slider).
+    @Published public var plateColor: String = "#000000" { didSet { d.set(plateColor, forKey: "plateColor") } }
+    /// The history panel's side, taking history-only display into account.
+    public var effectiveHistorySide: String { displayMode == "history" && historySide == "off" ? "right" : historySide }
     /// Side panel with the recent dialogue: "off", "left" or "right".
     @Published public var historySide: String = "off" { didSet { d.set(historySide, forKey: "historySide") } }
     /// Fade-in of a new line, ms (0 = at once).
@@ -78,7 +83,8 @@ public final class AppSettings: ObservableObject, @unchecked Sendable {
         if let s = d.string(forKey: "textStyle") { textStyle = s }
         if let s = d.string(forKey: "textColor") { textColor = s }
         if let data = d.data(forKey: "readingAreas"), let a = try? JSONDecoder().decode([ReadingArea].self, from: data) { readingAreas = a }
-        if let s = d.string(forKey: "displayMode"), ["over", "above"].contains(s) { displayMode = s }
+        if let s = d.string(forKey: "displayMode"), ["over", "above", "history"].contains(s) { displayMode = s }
+        if let s = d.string(forKey: "plateColor"), RGB(hex: s) != nil { plateColor = s }
         if let s = d.string(forKey: "historySide"), ["off", "left", "right"].contains(s) { historySide = s }
         if d.object(forKey: "fadeMs") != nil { fadeMs = d.double(forKey: "fadeMs") }
         if d.object(forKey: "readHold") != nil { readHold = d.bool(forKey: "readHold") }

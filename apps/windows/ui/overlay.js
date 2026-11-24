@@ -5,7 +5,16 @@ const block = document.getElementById('block');
 const panel = document.getElementById('history');
 const hold = ReadingHold();
 const recent = Recent();
-let cfg = { region: { x: 192, y: 810, w: 1536, h: 243 }, display: 'over', history: 'off', fade_ms: 150, read_hold: true };
+let cfg = { region: { x: 192, y: 810, w: 1536, h: 243 }, display: 'over', history: 'off', plate_color: '#000000', fade_ms: 150, read_hold: true };
+
+/** '#RRGGBB' → 'r,g,b' and whether it is a light colour (then text is dark). */
+function plate() {
+  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(cfg.plate_color || '') || [0, '00', '00', '00'];
+  const [r, g, b] = [m[1], m[2], m[3]].map((h) => parseInt(h, 16));
+  return { rgb: `${r},${g},${b}`, light: (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 > 0.6 };
+}
+/** The history panel's side: history-only display always shows it (right unless left was chosen). */
+function historySide() { return cfg.display === 'history' && cfg.history === 'off' ? 'right' : cfg.history; }
 let current = null, timer = null, dimTimer = null;
 
 function el(line, cls) {
@@ -23,7 +32,9 @@ function render() {
   const dpr = window.devicePixelRatio || 1;
   const r = { x: cfg.region.x / dpr, y: cfg.region.y / dpr, w: cfg.region.w / dpr, h: cfg.region.h / dpr };
   document.body.style.setProperty('--fade', cfg.fade_ms + 'ms');
-  if (!shown.length) { block.hidden = true; block.replaceChildren(); }
+  const pl = plate();
+  // History only: nothing over the game, just the side panel.
+  if (!shown.length || cfg.display === 'history') { block.hidden = true; block.replaceChildren(); }
   else {
     const before = block.textContent;
     block.replaceChildren(...shown.map(s => el(s.line, 'line' + (s.old ? ' old' : ''))));
@@ -37,6 +48,11 @@ function render() {
       block.style.color = t.tone_fg;
       block.style.textShadow = `0 0 4px rgb(${edge}), 0 0 2px rgb(${edge}), 0 1px 3px rgba(${edge},.8)`;
       block.style.background = `rgba(${edge},${t.tone_shade || 0})`;
+    } else if (cfg.display !== 'above') {
+      // The chosen box colour; dark text on light colours.
+      block.style.background = `rgba(${pl.rgb},.78)`;
+      block.style.color = pl.light ? '#121217' : '';
+      block.style.textShadow = pl.light ? 'none' : '';
     } else { block.style.color = ''; block.style.textShadow = ''; block.style.background = ''; }
     block.style.left = (r.x + r.w / 2) + 'px';
     block.style.minWidth = cfg.display === 'above' ? '0' : Math.min(r.w, window.innerWidth * 0.92) + 'px';
@@ -45,15 +61,18 @@ function render() {
     if (block.hidden || before !== block.textContent) { block.classList.add('fade'); }
     block.hidden = false;
   }
-  if (cfg.history === 'off' || !recent.items.length) panel.hidden = true;
+  if (historySide() === 'off' || !recent.items.length) panel.hidden = true;
   else {
     const items = recent.items;
     panel.replaceChildren(...items.map((l, n) => { const d = el(l, 'item'); d.style.display = 'block'; d.style.opacity = 0.45 + 0.55 * (n + 1) / items.length; return d; }));
-    panel.className = cfg.history;
-    panel.style.opacity = now - recent.changedAt < 6000 ? 0.92 : 0.38;
+    panel.className = historySide();
+    panel.style.background = `rgba(${pl.rgb},.6)`;
+    panel.style.color = pl.light ? '#121217' : '#fff';
+    const fresh = now - recent.changedAt < 6000 || cfg.display === 'history';
+    panel.style.opacity = fresh ? 0.92 : 0.38;
     panel.hidden = false;
     clearTimeout(dimTimer);
-    if (now - recent.changedAt < 6000) dimTimer = setTimeout(render, recent.changedAt + 6000 - now + 20);
+    if (now - recent.changedAt < 6000 && cfg.display !== 'history') dimTimer = setTimeout(render, recent.changedAt + 6000 - now + 20);
   }
   const next = cfg.read_hold ? hold.nextExpiry() : null;
   if (next) timer = setTimeout(render, Math.max(next - now, 50));

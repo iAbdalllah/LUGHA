@@ -75,7 +75,8 @@ class OverlayRenderer(private val context: Context, private val layer: FrameLayo
             lastSid = sub?.sid
         }
         val shown = if (style.readHold) hold.visible(now) else items.map { it to false }
-        val sc = scene(shown)
+        // History only: nothing over the game, just the side panel.
+        val sc = if (style.display == "history") app.lugha.tv.ui.Scene(null, emptyList()) else scene(shown)
         val (sw, sh) = dm.widthPixels to dm.heightPixels
         val gap = (sh * 0.006f).toInt()
         val above = style.display == "above"
@@ -120,20 +121,21 @@ class OverlayRenderer(private val context: Context, private val layer: FrameLayo
         val rects = arrange(pieces.map { it.want }, pieces.map { false }, sw, sh, gap, fixed = if (sc.block != null) 1 else 0)
 
         // History panel.
-        if (style.history != "off" && history.items.isNotEmpty()) {
+        if (style.historySide != "off" && history.items.isNotEmpty()) {
             val v = (views["history"] as? LinearLayout) ?: LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
             fillHistory(v, style, sh)
             val w = (sw * 0.22f).toInt()
             v.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec((sh * 0.6f).toInt(), View.MeasureSpec.AT_MOST))
-            val left = if (style.history == "left") (sw * 0.015f).toInt() else sw - w - (sw * 0.015f).toInt()
+            val left = if (style.historySide == "left") (sw * 0.015f).toInt() else sw - w - (sw * 0.015f).toInt()
             val top = (sh * 0.45f - v.measuredHeight / 2f).toInt().coerceAtLeast((sh * 0.1f).toInt())
             // Bright for a few seconds after a new line, then it steps back so it doesn't pull the eye.
-            val fresh = now - history.changedAt < 6000
+            // Bright for a few seconds after a new line, then it steps back — unless it is the only thing shown.
+            val fresh = now - history.changedAt < 6000 || style.display == "history"
             put("history", v, Rect(left, top, w, v.measuredHeight), if (fresh) 0.92f else 0.38f, style.fadeMs * 2)
-            if (fresh) main.postDelayed(again, history.changedAt + 6000 - now + 20)
+            if (fresh && style.display != "history") main.postDelayed(again, history.changedAt + 6000 - now + 20)
         }
 
-        val keep = pieces.map { it.key }.toMutableSet().apply { if (style.history != "off" && history.items.isNotEmpty()) add("history") }
+        val keep = pieces.map { it.key }.toMutableSet().apply { if (style.historySide != "off" && history.items.isNotEmpty()) add("history") }
         views.keys.filter { it !in keep }.forEach { layer.removeView(views.remove(it)) }
         pieces.forEachIndexed { n, p -> put(p.key, p.view, rects[n], p.alpha, style.fadeMs) }
 
@@ -186,8 +188,15 @@ class OverlayRenderer(private val context: Context, private val layer: FrameLayo
     private fun textColor(style: OverlayStyle, i: SubItem?): Int = when {
         style.mode == "native" && style.display == "above" -> i?.toneFg ?: Color.WHITE
         style.mode == "native" -> i?.fg ?: Color.WHITE
+        // A light box colour: dark text so it reads (box style only; outline sits on the picture).
+        style.mode == "box" && lightPlate(style) -> Color.rgb(18, 18, 23)
         style.textColor == "yellow" -> Color.rgb(255, 219, 64)
         else -> Color.WHITE
+    }
+
+    private fun lightPlate(style: OverlayStyle): Boolean {
+        val p = style.plateRgb
+        return (0.2126 * Color.red(p) + 0.7152 * Color.green(p) + 0.0722 * Color.blue(p)) / 255 > 0.6
     }
 
     /** The outline/backdrop colour: the opposite of the text. */
@@ -203,7 +212,7 @@ class OverlayRenderer(private val context: Context, private val layer: FrameLayo
         setLineSpacing(0f, 1.08f)
         typeface = typeface(style.font)
         if (onPicture(style)) setShadowLayer(px * 0.16f, 0f, 0f, edge(textColor(style, i)))
-        else setShadowLayer(if (style.mode == "box") 4f else 0f, 0f, 2f, Color.argb(220, 0, 0, 0))
+        else setShadowLayer(if (style.mode == "box" && !lightPlate(style)) 4f else 0f, 0f, 2f, Color.argb(220, 0, 0, 0))
     }
 
     private fun background(style: OverlayStyle, i: SubItem?, px: Float) = if (onPicture(style)) {
@@ -215,7 +224,8 @@ class OverlayRenderer(private val context: Context, private val layer: FrameLayo
             cornerRadius = px * 0.3f
         }
     } else GradientDrawable().apply {
-        setColor(i?.bg.takeIf { style.mode == "native" } ?: Color.argb((style.bgOpacity * 255).toInt(), 0, 0, 0))
+        val p = style.plateRgb
+        setColor(i?.bg.takeIf { style.mode == "native" } ?: Color.argb((style.bgOpacity * 255).toInt(), Color.red(p), Color.green(p), Color.blue(p)))
         cornerRadius = if (style.mode == "native") 4f else px * 0.3f
     }
 
@@ -244,7 +254,8 @@ class OverlayRenderer(private val context: Context, private val layer: FrameLayo
 
     private fun fillHistory(v: LinearLayout, style: OverlayStyle, sh: Int) {
         v.removeAllViews()
-        v.background = GradientDrawable().apply { setColor(Color.argb(150, 10, 10, 14)); cornerRadius = sh * 0.012f }
+        val p = style.plateRgb
+        v.background = GradientDrawable().apply { setColor(Color.argb((style.bgOpacity.coerceIn(0.35f, 0.9f) * 200).toInt(), Color.red(p), Color.green(p), Color.blue(p))); cornerRadius = sh * 0.012f }
         val px = sh * 0.021f * style.fontScale.coerceIn(0.8f, 1.3f)
         v.setPadding((px * 0.8f).toInt(), (px * 0.6f).toInt(), (px * 0.8f).toInt(), (px * 0.6f).toInt())
         val items = history.items
@@ -256,7 +267,7 @@ class OverlayRenderer(private val context: Context, private val layer: FrameLayo
                 typeface = typeface(style.font)
                 setLineSpacing(0f, 1.05f)
                 text = line(i.text, i.speaker)
-                setTextColor(Color.WHITE)
+                setTextColor(if (lightPlate(style)) Color.rgb(18, 18, 23) else Color.WHITE)
                 // Older lines fade back; the newest is brightest.
                 alpha = 0.45f + 0.55f * (n + 1) / items.size
                 setPadding(0, (px * 0.25f).toInt(), 0, (px * 0.25f).toInt())

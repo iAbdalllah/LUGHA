@@ -415,7 +415,7 @@ final class AppModel: ObservableObject {
         let a = pictureArea ?? CGRect(x: 0.08, y: 0.78, width: 0.84, height: 0.16)
         try? await tv.setStyle(fontScale: settings.fontSize / 30, positionY: Double(a.midY), bgOpacity: settings.backgroundOpacity,
                                maxWidth: Double(min(max(a.width, 0.5), 0.9)), mode: settings.textStyle, textColor: settings.textColor,
-                               font: settings.fontName, display: settings.displayMode, history: settings.historySide,
+                               font: settings.fontName, display: settings.displayMode, history: settings.effectiveHistorySide, plateColor: settings.plateColor,
                                fadeMs: Int(settings.fadeMs), readHold: settings.readHold)
     }
 

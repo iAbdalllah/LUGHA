@@ -94,10 +94,35 @@ class _DisplayOptions extends StatelessWidget {
       Text(L.t('Display'), style: t.titleMedium),
       const SizedBox(height: 6),
       SegmentedButton<String>(
-        segments: [ButtonSegment(value: 'over', label: Text(L.t('Over the English'))), ButtonSegment(value: 'above', label: Text(L.t('Above the English')))],
+        segments: [
+          ButtonSegment(value: 'over', label: Text(L.t('Over the English'))),
+          ButtonSegment(value: 'above', label: Text(L.t('Above the English'))),
+          ButtonSegment(value: 'history', label: Text(L.t('History only'))),
+        ],
         selected: {d.display},
         onSelectionChanged: (s) => app.setDisplay(d.copyWith(display: s.first)),
       ),
+      if (d.display == 'history')
+        Padding(padding: const EdgeInsets.only(top: 4), child: Text(L.t('Nothing over the game; the lines appear only in the history panel.'), style: t.bodySmall)),
+      const SizedBox(height: 12),
+      Text(L.t('Box colour'), style: t.titleMedium),
+      const SizedBox(height: 6),
+      Wrap(spacing: 10, children: [
+        for (final hex in const ['#000000', '#1B2A4A', '#3A1F4D', '#1F3D2B', '#5A1E1E', '#4A4A4A', '#FFFFFF'])
+          GestureDetector(
+            key: Key('plate-$hex'),
+            onTap: () => app.setDisplay(d.copyWith(plateColor: hex)),
+            child: Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: Color(int.parse('FF${hex.substring(1)}', radix: 16)),
+                shape: BoxShape.circle,
+                border: Border.all(color: d.plateColor == hex ? Theme.of(context).colorScheme.primary : Colors.white38, width: d.plateColor == hex ? 3 : 1),
+              ),
+            ),
+          ),
+      ]),
       const SizedBox(height: 12),
       Text(L.t('History panel'), style: t.titleMedium),
       const SizedBox(height: 6),

@@ -20,13 +20,20 @@ class ReadingArea {
 }
 
 class DisplayPrefs {
-  const DisplayPrefs({this.display = 'over', this.history = 'off', this.readHold = true, this.fadeMs = 150, this.stableMs = 0, this.goneAfterMs = 1200, this.areas = const []});
+  const DisplayPrefs({this.display = 'over', this.plateColor = '#000000', this.history = 'off', this.readHold = true, this.fadeMs = 150, this.stableMs = 0, this.goneAfterMs = 1200, this.areas = const []});
 
   /// Reading areas for the PS5 reader (empty: the usual subtitle band).
   final List<ReadingArea> areas;
 
-  /// 'over': the Arabic hides the English; 'above': just above it, the English stays visible.
+  /// 'over': the Arabic hides the English; 'above': just above it, the English stays visible; 'history': nothing over
+  /// the game, only the history panel.
   final String display;
+
+  /// Colour of the text boxes and the history panel on the TV, #RRGGBB.
+  final String plateColor;
+
+  /// The history panel's side: history-only display always shows it (right unless left was chosen).
+  String get historySide => display == 'history' && history == 'off' ? 'right' : history;
 
   /// Side panel with the recent dialogue on the TV: 'off', 'left' or 'right'.
   final String history;
@@ -41,8 +48,9 @@ class DisplayPrefs {
   /// Clear the TV after the English has been gone this long.
   final int goneAfterMs;
 
-  DisplayPrefs copyWith({String? display, String? history, bool? readHold, int? fadeMs, int? stableMs, int? goneAfterMs, List<ReadingArea>? areas}) => DisplayPrefs(
+  DisplayPrefs copyWith({String? display, String? plateColor, String? history, bool? readHold, int? fadeMs, int? stableMs, int? goneAfterMs, List<ReadingArea>? areas}) => DisplayPrefs(
         areas: areas ?? this.areas,
+        plateColor: plateColor ?? this.plateColor,
         display: display ?? this.display,
         history: history ?? this.history,
         readHold: readHold ?? this.readHold,
@@ -51,13 +59,14 @@ class DisplayPrefs {
         goneAfterMs: goneAfterMs ?? this.goneAfterMs,
       );
 
-  Map<String, dynamic> toJson() => {'display': display, 'history': history, 'read_hold': readHold, 'fade_ms': fadeMs, 'stable_ms': stableMs, 'gone_after_ms': goneAfterMs,
+  Map<String, dynamic> toJson() => {'display': display, 'plate_color': plateColor, 'history': history, 'read_hold': readHold, 'fade_ms': fadeMs, 'stable_ms': stableMs, 'gone_after_ms': goneAfterMs,
         'areas': [for (final a in areas) a.toJson()]};
 
   factory DisplayPrefs.fromJson(Map<String, dynamic> j) {
     int ms(String k, int def, int lo, int hi) => ((j[k] as num?)?.toInt() ?? def).clamp(lo, hi);
     return DisplayPrefs(
-      display: j['display'] == 'above' ? 'above' : 'over',
+      display: const ['above', 'history'].contains(j['display']) ? j['display'] as String : 'over',
+      plateColor: RegExp(r'^#[0-9A-Fa-f]{6}$').hasMatch(j['plate_color'] as String? ?? '') ? j['plate_color'] as String : '#000000',
       history: const ['left', 'right'].contains(j['history']) ? j['history'] as String : 'off',
       readHold: j['read_hold'] as bool? ?? true,
       fadeMs: ms('fade_ms', 150, 0, 1000),
@@ -68,7 +77,7 @@ class DisplayPrefs {
   }
 
   /// The keys LUGHA TV reads from style.set.
-  Map<String, dynamic> tvStyle() => {'display': display, 'history': history, 'fade_ms': fadeMs, 'read_hold': readHold};
+  Map<String, dynamic> tvStyle() => {'display': display, 'history': historySide, 'plate_color': plateColor, 'fade_ms': fadeMs, 'read_hold': readHold};
 }
 
 /// Passes text on only after it stayed the same for [hold] (zero: at once). A different text restarts the wait.
