@@ -82,7 +82,7 @@ class LughaRemotePlayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Ev
                 }
                 "start" -> {
                     session?.stop()
-                    val area = areaOf(call.argument<Map<String, Double>>("area"))
+                    val area = areasOf(call)
                     session = SessionHost(
                         host = call.argument<String>("host")!!,
                         ps5 = call.argument<Boolean>("ps5") ?: true,
@@ -94,7 +94,7 @@ class LughaRemotePlayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Ev
                     ).also { it.start() }
                     result.success(null)
                 }
-                "setArea" -> { session?.area = areaOf(call.argument<Map<String, Double>>("area")); result.success(null) }
+                "setArea" -> { session?.area = areasOf(call); result.success(null) }
                 "setLoginPin" -> { session?.setLoginPin(call.argument<String>("pin") ?: ""); result.success(null) }
                 "stop" -> { session?.stop(); session = null; result.success(null) }
                 else -> result.notImplemented()
@@ -103,6 +103,11 @@ class LughaRemotePlayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Ev
             result.error("remoteplay_error", e.message ?: e.toString(), null)
         }
     }
+
+    /** "areas" (reading areas: text is read only inside them), else the single "area". */
+    private fun areasOf(call: MethodCall): List<FloatArray> =
+        call.argument<List<Map<String, Double>>>("areas")?.takeIf { it.isNotEmpty() }?.map { areaOf(it) }
+            ?: listOf(areaOf(call.argument<Map<String, Double>>("area")))
 
     private fun areaOf(m: Map<String, Double>?) =
         if (m == null) floatArrayOf(0.08f, 0.70f, 0.84f, 0.26f)
@@ -175,7 +180,7 @@ private class SessionHost(
     ps5: Boolean,
     registKey: ByteArray,
     morning: ByteArray,
-    @Volatile var area: FloatArray,
+    @Volatile var area: List<FloatArray>,
     fps: Int,
     private val emit: (Map<String, Any?>) -> Unit,
 ) {
@@ -215,13 +220,12 @@ private class SessionHost(
         busy = true
         lastRun = now
         val (w, h) = image.width to image.height
-        val a = area
-        val box = Rect((a[0] * w).toInt(), (a[1] * h).toInt(), ((a[0] + a[2]) * w).toInt(), ((a[1] + a[3]) * h).toInt())
+        val boxes = area.map { a -> Rect((a[0] * w).toInt(), (a[1] * h).toInt(), ((a[0] + a[2]) * w).toInt(), ((a[1] + a[3]) * h).toInt()) }
         recognizer.process(InputImage.fromMediaImage(image, 0))
             .addOnSuccessListener { text ->
-                // Lines whose centre falls inside the subtitle area, top to bottom.
+                // Lines whose centre falls inside a reading area, top to bottom.
                 val lines = text.textBlocks.flatMap { it.lines }
-                    .filter { l -> l.boundingBox?.let { box.contains(it.centerX(), it.centerY()) } == true }
+                    .filter { l -> l.boundingBox?.let { b -> boxes.any { it.contains(b.centerX(), b.centerY()) } } == true }
                     .sortedBy { it.boundingBox?.top ?: 0 }
                     .map { it.text.trim() }
                     .filter { it.isNotEmpty() }

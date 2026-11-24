@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:lugha_remoteplay/lugha_remoteplay.dart';
 
+import '../display.dart';
 import '../l10n.dart';
 import '../psn.dart';
 import '../state.dart';
@@ -100,6 +101,72 @@ class _PlayScreenState extends State<PlayScreen> {
         ],
       ]))),
       if (app.rpStatus.isNotEmpty && app.ps5 == null) Text(app.rpStatus, style: const TextStyle(color: Colors.orange)),
+      if (app.ps5 != null) _AreasEditor(app: app),
     ]);
+  }
+}
+
+/// Reading areas: boxes (in % of the picture) the PS5 reader reads text from; everything else is ignored.
+class _AreasEditor extends StatelessWidget {
+  const _AreasEditor({required this.app});
+  final AppState app;
+
+  @override
+  Widget build(BuildContext context) {
+    final areas = app.display.areas;
+    final t = Theme.of(context).textTheme;
+    void save(List<ReadingArea> a) => app.setDisplay(app.display.copyWith(areas: a));
+    Widget pct(String label, double v, ReadingArea Function(double) set, int i) => SizedBox(
+          width: 64,
+          child: TextFormField(
+            key: ValueKey('area-$i-$label-${areas.length}'),
+            initialValue: (v * 100).toStringAsFixed(1),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            textDirection: TextDirection.ltr,
+            decoration: InputDecoration(labelText: '$label %', isDense: true),
+            onFieldSubmitted: (s) {
+              final n = double.tryParse(s);
+              if (n == null) return;
+              save([for (final (j, a) in areas.indexed) j == i ? set((n / 100).clamp(0.0, 1.0)) : a]);
+            },
+          ),
+        );
+    return Card(
+      child: ExpansionTile(
+        title: Text(L.t('Reading areas')),
+        subtitle: Text(L.t('Only text inside these boxes is translated. With none, the usual subtitle band is read.'), style: t.bodySmall),
+        children: [
+          for (final (i, a) in areas.indexed)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: Wrap(spacing: 8, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                Switch(value: a.enabled, onChanged: (v) => save([for (final (j, b) in areas.indexed) j == i ? b.copyWith(enabled: v) : b])),
+                SizedBox(
+                  width: 110,
+                  child: TextFormField(
+                    key: ValueKey('area-$i-name-${areas.length}'),
+                    initialValue: a.name,
+                    decoration: InputDecoration(labelText: L.t('Name'), isDense: true),
+                    onFieldSubmitted: (v) => save([for (final (j, b) in areas.indexed) j == i ? b.copyWith(name: v) : b]),
+                  ),
+                ),
+                pct('X', a.x, (v) => a.copyWith(x: v), i),
+                pct('Y', a.y, (v) => a.copyWith(y: v), i),
+                pct('W', a.w, (v) => a.copyWith(w: v), i),
+                pct('H', a.h, (v) => a.copyWith(h: v), i),
+                IconButton(icon: const Icon(Icons.delete_outline), onPressed: () => save([...areas]..removeAt(i))),
+              ]),
+            ),
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: TextButton.icon(
+              icon: const Icon(Icons.add),
+              label: Text(L.t('Add area')),
+              onPressed: () => save([...areas, ReadingArea('${L.t('Area')} ${areas.length + 1}', 0.1, 0.8, 0.8, 0.12)]),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

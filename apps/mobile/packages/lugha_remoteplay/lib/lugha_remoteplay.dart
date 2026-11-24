@@ -150,16 +150,18 @@ class RemotePlay {
   static Future<void> wakeup(Registration r) => _call('wakeup', {'host': r.host, 'registKey': base64Encode(r.registKey), 'ps5': r.ps5});
 
   /// Open the Remote Play session and start reading [area] of each frame (no video is shown, no audio played).
-  static Future<void> start(Registration r, {Area area = Area.subtitles, int fps = 4}) => _call('start', {
+  /// [areas]: reading areas — text is read only inside them (empty: just [area]).
+  static Future<void> start(Registration r, {Area area = Area.subtitles, List<Area> areas = const [], int fps = 4}) => _call('start', {
         'host': r.host,
         'ps5': r.ps5,
         'registKey': base64Encode(r.registKey),
         'rpKey': base64Encode(r.rpKey),
         'area': area.toMap(),
+        'areas': [for (final a in areas) a.toMap()],
         'fps': fps,
       });
 
-  static Future<void> setArea(Area area) => _call('setArea', {'area': area.toMap()});
+  static Future<void> setArea(Area area, {List<Area> areas = const []}) => _call('setArea', {'area': area.toMap(), 'areas': [for (final a in areas) a.toMap()]});
   static Future<void> setLoginPin(String pin) => _call('setLoginPin', {'pin': pin});
   static Future<void> stop() => _call('stop');
 }

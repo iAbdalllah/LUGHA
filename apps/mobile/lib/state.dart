@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 
 import 'api.dart';
 import 'display.dart';
+import 'matching.dart';
 import 'l10n.dart';
 import 'sync.dart';
 import 'tv_link.dart';
@@ -298,10 +299,14 @@ class AppState extends ChangeNotifier {
 
   void _pushStyle() => tv?.setStyle(fontScale: tvFontScale, bottom: tvBottom, bgOpacity: tvBgOpacity, extra: display.tvStyle());
 
+  List<Area> _rpAreas() => [for (final a in display.areas.where((a) => a.enabled)) Area(a.x, a.y, a.w, a.h)];
+
   /// Display options (TV look, history panel, timing): saved on the phone and sent to the TV.
   Future<void> setDisplay(DisplayPrefs p) async {
+    final areasChanged = jsonEncode(p.toJson()['areas']) != jsonEncode(display.toJson()['areas']);
     display = p;
     _pushStyle();
+    if (areasChanged && rpRunning) await RemotePlay.setArea(Area.subtitles, areas: _rpAreas());
     notifyListeners();
     await _secure.write(key: 'display', value: jsonEncode(p.toJson()));
   }
@@ -385,7 +390,7 @@ class AppState extends ChangeNotifier {
         await Future<void>.delayed(const Duration(seconds: 12));
       }
       _rpSub ??= RemotePlay.events.listen(_onRp);
-      await RemotePlay.start(r, area: area);
+      await RemotePlay.start(r, area: area, areas: _rpAreas());
     } on RemotePlayException catch (e) {
       rpStatus = '$e';
     }
@@ -447,20 +452,26 @@ class AppState extends ChangeNotifier {
     if (text == rpLastSource) return;
     rpLastSource = text;
     notifyListeners();
-    final hit = engine?.lookup(text);
-    if (hit != null) {
-      history.insert(0, Line(text, hit.target, hit.speaker, DateTime.now(), entryId: hit.entryId, packageId: hit.packageId));
+    Hit? look(String q) => engine?.lookup(q);
+    final f = findLine(text, look);
+    if (f != null) {
+      final target = f.counter == null ? f.hit.target : '${f.hit.target} ${f.counter}';
+      final speaker = f.hit.speaker ?? f.speaker;
+      history.insert(0, Line(text, target, speaker, DateTime.now(), entryId: f.hit.entryId, packageId: f.hit.packageId));
       if (history.length > 50) history.removeLast();
-      tv?.show(hit.target, speaker: hit.speaker);
+      tv?.show(target, speaker: speaker);
       return;
     }
-    // A menu or list: each line is its own entry. Show the known ones in screen order.
-    final known = lines.take(12).map((l) => engine?.lookup(l.trim())).whereType<Hit>().toList();
+    // A menu or list: each line (and each prompt in a row joined by button icons) is its own entry.
+    final known = [
+      for (final l in lines.take(12))
+        for (final part in glyphParts(l).length > 1 ? glyphParts(l) : [l.trim()]) findLine(part, look),
+    ].whereType<Found<Hit>>().map((f) => f.counter == null ? f.hit.target : '${f.hit.target} ${f.counter}').toList();
     if (known.isEmpty) {
       tv?.clear();
       return;
     }
-    tv?.show(known.map((h) => h.target).toSet().join('  ·  '));
+    tv?.show(known.toSet().join('  ·  '));
   }
 
   Future<void> sendTestLine() async {

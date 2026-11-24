@@ -24,6 +24,8 @@ class L {
     'Keep a line until it can be read': 'إبقاء السطر حتى تقرأه', 'Timing': 'التوقيت',
     'Wait for stable text': 'انتظار ثبات النص', 'English gone after': 'اعتبار الإنجليزي اختفى بعد', 'Fade in': 'ظهور تدريجي', 'ms': 'ملي ثانية',
     'Recent lines': 'آخر الترجمات',
+    'Reading areas': 'مناطق القراءة', 'Add area': 'إضافة منطقة', 'Area': 'منطقة', 'Name': 'الاسم',
+    'Only text inside these boxes is translated. With none, the usual subtitle band is read.': 'تُترجم النصوص داخل هذه المربعات فقط. بدونها تُقرأ منطقة الترجمة المعتادة.',
     'On iPhone, LUGHA can’t read other apps’ screens. Use it to manage packages and control your TV; subtitles come from LUGHA on your Mac or PC.':
         'على iPhone لا يمكن للغة قراءة شاشات التطبيقات الأخرى. استخدمه لإدارة الباقات والتحكم بالتلفاز؛ الترجمة تأتي من لغة على جهاز Mac أو الكمبيوتر.',
     'Report this line': 'الإبلاغ عن هذه الترجمة', 'Wrong translation? Report it': 'الترجمة خاطئة؟ أبلغ عنها',
