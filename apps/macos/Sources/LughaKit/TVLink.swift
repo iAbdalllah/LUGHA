@@ -204,6 +204,8 @@ public final class TVSender: @unchecked Sendable {
                 if let s = i.speaker { d["speaker"] = s }
                 if let b = i.background { d["bg"] = b }
                 if let f = i.foreground { d["fg"] = f }
+                if let t = i.toneText { d["tone_fg"] = t }
+                if let t = i.toneShade { d["tone_shade"] = t }
                 return d
             }
         }
@@ -228,9 +230,13 @@ public final class TVSender: @unchecked Sendable {
         /// Native style: the game's background and text colours (#RRGGBB).
         public let background: String?
         public let foreground: String?
-        public init(text: String, speaker: String?, x: Double, y: Double, w: Double, h: Double, lines: Int, background: String? = nil, foreground: String? = nil) {
+        /// Readable text colour (#RRGGBB) and backdrop strength (0–1) for where the Arabic goes in the current display.
+        public let toneText: String?
+        public let toneShade: Double?
+        public init(text: String, speaker: String?, x: Double, y: Double, w: Double, h: Double, lines: Int, background: String? = nil, foreground: String? = nil,
+                    toneText: String? = nil, toneShade: Double? = nil) {
             self.text = text; self.speaker = speaker; self.x = x; self.y = y; self.w = w; self.h = h; self.lines = lines
-            self.background = background; self.foreground = foreground
+            self.background = background; self.foreground = foreground; self.toneText = toneText; self.toneShade = toneShade
         }
     }
 

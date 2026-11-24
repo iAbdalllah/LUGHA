@@ -13,6 +13,8 @@ enum L {
         "Select capture region": "تحديد منطقة الالتقاط",
         "Font size": "حجم الخط", "Background": "الخلفية", "Position": "الموضع",
         "Recent lines": "آخر الترجمات",
+        "Reading areas": "مناطق القراءة", "Add area": "إضافة منطقة", "Show": "إظهار", "Area %d": "منطقة %d",
+        "Only text inside these boxes is translated. With none, everything in the capture is read.": "تُترجم النصوص داخل هذه المربعات فقط. بدونها تُقرأ الصورة كلها.",
         "Display": "طريقة العرض", "Over the English": "فوق النص الإنجليزي", "Above the English": "أعلى النص الإنجليزي",
         "The Arabic hides the English.": "العربي يغطي النص الإنجليزي.", "The Arabic sits just above the English, which stays visible.": "العربي فوق النص الإنجليزي مباشرة، والإنجليزي يبقى ظاهرًا.",
         "History panel": "لوحة السجل", "Off": "مغلقة", "Left": "يسار", "Right": "يمين",

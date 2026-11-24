@@ -50,6 +50,8 @@ struct MenuPanelView: View {
             SourcePicker(settings: settings).environmentObject(app)
             Button(settings.captureAppBundleID == nil ? L.t("Select capture region") : L.t("Select subtitle area in the window")) { app.pickRegion() }
 
+            ReadingAreasSection(settings: settings).environmentObject(app)
+
             TextOptions(settings: settings).environmentObject(app)
 
             VStack(alignment: .leading, spacing: 6) {
@@ -289,6 +291,35 @@ struct SourcePicker: View {
             }
         }
         .task { await app.refreshWindows() }
+    }
+}
+
+/// Boxes to read from: only text inside them is translated (subtitles, a tutorial box…), so signs, the PS5's own
+/// menus and the HUD elsewhere are skipped.
+struct ReadingAreasSection: View {
+    @EnvironmentObject var app: AppModel
+    @ObservedObject var settings: AppSettings
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(L.t("Reading areas")).font(.caption).foregroundColor(.secondary)
+                Spacer()
+                if !settings.readingAreas.isEmpty { Button(L.t("Show")) { Task { await app.showReadingAreas() } }.controlSize(.small) }
+                Button(L.t("Add area")) { app.addReadingArea() }.controlSize(.small)
+            }
+            ForEach($settings.readingAreas) { $area in
+                HStack(spacing: 6) {
+                    Toggle("", isOn: $area.enabled).labelsHidden().toggleStyle(.checkbox)
+                    TextField("", text: $area.name).textFieldStyle(.roundedBorder).font(.caption)
+                    Text(String(format: "%.0f%% · %.0f%%", area.rect.minY * 100, area.rect.height * 100))
+                        .font(.caption2.monospaced()).foregroundColor(.secondary).environment(\.layoutDirection, .leftToRight)
+                    Button(role: .destructive) { settings.readingAreas.removeAll { $0.id == area.id } } label: { Image(systemName: "trash") }
+                        .buttonStyle(.borderless)
+                }
+            }
+            Text(L.t("Only text inside these boxes is translated. With none, everything in the capture is read.")).font(.caption2).foregroundColor(.secondary)
+        }
     }
 }
 

@@ -53,6 +53,9 @@ public final class AppSettings: ObservableObject, @unchecked Sendable {
     /// Treat the English as gone after it is missing this long, ms (ignores OCR missing a frame).
     @Published public var goneAfterMs: Double = 400 { didSet { d.set(goneAfterMs, forKey: "goneAfterMs") } }
 
+    /// Boxes to read text from (empty = everything in the capture). Only text inside an enabled box is translated.
+    @Published public var readingAreas: [ReadingArea] = [] { didSet { d.set(try? JSONEncoder().encode(readingAreas), forKey: "readingAreas") } }
+
     /// Where most games put dialogue: the lower band, centred.
     public static let defaultWindowArea = CGRect(x: 0.08, y: 0.70, width: 0.84, height: 0.26)
     /// The whole window: menus, HUD and subtitles. The title bar and black bars are trimmed by finding the 16:9 game
@@ -74,6 +77,7 @@ public final class AppSettings: ObservableObject, @unchecked Sendable {
         if d.object(forKey: "showOnMac") != nil { showOnMac = d.bool(forKey: "showOnMac") }
         if let s = d.string(forKey: "textStyle") { textStyle = s }
         if let s = d.string(forKey: "textColor") { textColor = s }
+        if let data = d.data(forKey: "readingAreas"), let a = try? JSONDecoder().decode([ReadingArea].self, from: data) { readingAreas = a }
         if let s = d.string(forKey: "displayMode"), ["over", "above"].contains(s) { displayMode = s }
         if let s = d.string(forKey: "historySide"), ["off", "left", "right"].contains(s) { historySide = s }
         if d.object(forKey: "fadeMs") != nil { fadeMs = d.double(forKey: "fadeMs") }
@@ -81,5 +85,23 @@ public final class AppSettings: ObservableObject, @unchecked Sendable {
         if d.object(forKey: "stableMs") != nil { stableMs = d.double(forKey: "stableMs") }
         if d.object(forKey: "goneAfterMs") != nil { goneAfterMs = d.double(forKey: "goneAfterMs") }
         if let s = d.string(forKey: "fontName"), ["", "naskh", "kufi", "cairo", "tajawal", "amiri"].contains(s) { fontName = s }
+    }
+}
+
+/// A box the user drew: text is read only inside the enabled boxes. `rect` is a fraction of the captured picture (the
+/// Remote Play window's subtitle area or the screen region), origin top-left, so it survives moving the window.
+public struct ReadingArea: Codable, Equatable, Identifiable, Sendable {
+    public var id = UUID()
+    public var name: String
+    public var rect: CGRect
+    public var enabled = true
+
+    public init(name: String, rect: CGRect, enabled: Bool = true) { self.name = name; self.rect = rect; self.enabled = enabled }
+
+    /// The OCR lines to use: those whose centre is inside an enabled area (all of them when none is enabled).
+    public static func keep(_ lines: [OCRLine], in areas: [ReadingArea]) -> [OCRLine] {
+        let on = areas.filter(\.enabled).map(\.rect)
+        guard !on.isEmpty else { return lines }
+        return lines.filter { l in on.contains { $0.contains(CGPoint(x: l.box.midX, y: l.box.midY)) } }
     }
 }

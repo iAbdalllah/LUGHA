@@ -12,6 +12,10 @@ public struct SubtitleItem: Equatable, Sendable {
     /// The game's own colours around and in the English (Native style); nil until sampled from the frame.
     public var background: RGB?
     public var foreground: RGB?
+    /// How to draw the Arabic so it reads: over the English's own patch, and over the patch just above it (display
+    /// "above"). Sampled with the colours.
+    public var toneOver: Tone?
+    public var toneAbove: Tone?
 
     public init(text: String, speaker: String? = nil, box: CGRect = .zero, lines: Int = 1, background: RGB? = nil, foreground: RGB? = nil) {
         self.text = text
@@ -30,6 +34,11 @@ public struct Subtitle: Equatable, Sendable {
         s.items = items.map { i in
             var i = i
             if i.box.width > 0, let c = sampler.textColors(in: i.box) { i.background = c.background; i.foreground = c.text }
+            if i.box.width > 0 {
+                let b = i.box
+                i.toneOver = sampler.tone(in: b.insetBy(dx: -b.height * 0.5, dy: -b.height * 0.3))
+                i.toneAbove = sampler.tone(in: CGRect(x: b.minX - b.width * 0.08, y: b.minY - b.height * 2.4, width: b.width * 1.16, height: b.height * 2.2))
+            }
             return i
         }
         return s
@@ -215,6 +224,49 @@ public final class SubtitlePipeline: @unchecked Sendable {
         return h
     }
 
+    /// A button icon read as text: a lone symbol, or X/O/C/0 alone or in brackets ("[O]", "©", "•", "&").
+    static func isGlyph(_ w: Substring) -> Bool {
+        let core = w.trimmingCharacters(in: CharacterSet(charactersIn: "[](){}"))
+        if core.isEmpty { return true }
+        if core.count == 1, let c = core.first { return !c.isLetter && !c.isNumber || "XOCxo0".contains(c) && w.count <= 3 }
+        return false
+    }
+
+    /// Button icons at either end of a prompt dropped ("[O] Photo Studio" → "Photo Studio").
+    public static func trimGlyphs(_ text: String) -> String {
+        var w = text.split(separator: " ")
+        while let f = w.first, w.count > 1, isGlyph(f) { w.removeFirst() }
+        while let l = w.last, w.count > 1, isGlyph(l) { w.removeLast() }
+        return w.joined(separator: " ")
+    }
+
+    /// The pieces of a row split at button icons, with where each sits along the row (0–1).
+    public static func glyphParts(_ text: String) -> [(text: String, from: CGFloat, to: CGFloat)] {
+        let total = CGFloat(max(text.count, 1))
+        var out: [(text: String, from: CGFloat, to: CGFloat)] = []
+        var cur: [Substring] = []
+        var start = 0, pos = 0
+        func flush() {
+            if !cur.isEmpty {
+                let t = cur.joined(separator: " ")
+                out.append((t, CGFloat(start) / total, CGFloat(start + t.count) / total))
+            }
+            cur = []
+        }
+        for w in text.split(separator: " ", omittingEmptySubsequences: false) {
+            if w.isEmpty || isGlyph(w) { flush() } else { if cur.isEmpty { start = pos }; cur.append(w) }
+            pos += w.count + 1
+        }
+        flush()
+        return out
+    }
+
+    /// "TAKE AMMO PACK (0/3)" → ("TAKE AMMO PACK", "(0/3)").
+    public static func splitCounter(_ text: String) -> (String, String?) {
+        guard let r = text.range(of: #"\s*\(\d{1,3}/\d{1,3}\)\s*$"#, options: .regularExpression), r.lowerBound > text.startIndex else { return (text, nil) }
+        return (String(text[..<r.lowerBound]), text[r].trimmingCharacters(in: .whitespaces))
+    }
+
     /// Typographic punctuation OCR reads from game fonts ("Okay…", "don’t", “quotes”) as plain ASCII, as the package has it.
     public static func plain(_ text: String) -> String {
         var t = text
@@ -315,10 +367,25 @@ public final class SubtitlePipeline: @unchecked Sendable {
             out.append((SubtitleItem(text: hit.target, speaker: hit.speaker ?? speaker, box: box.isNull ? .zero : box, lines: count), hit, source))
         }
         /// One piece of text: with its speaker name taken off; very short text (a HUD word, a sign) only on an exact match.
-        func find(_ raw: String) async -> (Hit, String?)? {
+        func find(_ read: String) async -> (Hit, String?)? {
+            // "TAKE AMMO PACK (0/3)": look up the label, keep the counter next to the Arabic.
+            let (raw, counter) = Self.splitCounter(Self.trimGlyphs(read))
+            guard let (hit, name) = await findText(raw) else { return nil }
+            guard let counter else { return (hit, name) }
+            return (Hit(entryId: hit.entryId, packageId: hit.packageId, target: hit.target + " " + counter, speaker: hit.speaker, category: hit.category,
+                        score: hit.score, method: hit.method, providerId: hit.providerId, machineGenerated: hit.machineGenerated), name)
+        }
+        func findText(_ raw: String) async -> (Hit, String?)? {
             let (speaker, body) = Self.splitSpeaker(raw)
-            // Without the name first; then as read (a label like "Mission: …" can be part of the line itself).
-            for (text, name) in speaker == nil ? [(raw, nil)] : [(body, speaker), (raw, nil)] {
+            // Without the name first; then as read (a label like "Mission: …" can be part of the line itself); then
+            // without the first one or two words: a speaker name in a dim colour that OCR garbled and read without its
+            // colon ("Staf Gember Absolutely no rush…", "Stranger You can't catch me!").
+            var tries: [(String, String?)] = speaker == nil ? [(raw, nil)] : [(body, speaker), (raw, nil)]
+            let words = raw.split(separator: " ").map(String.init)
+            if speaker == nil, words.count >= 4, raw.contains(where: \.isLowercase) {
+                for n in 1 ... 2 where words.count - n >= 3 { tries.append((words.dropFirst(n).joined(separator: " "), nil)) }
+            }
+            for (text, name) in tries {
                 // As read; then without a sign word OCR joined to the row ("I'm going. LOEGER").
                 for candidate in [text] + Self.withoutStrayWord(text) {
                     guard Self.looksLikeText(candidate), let hit = await cachedLookup(candidate) else { continue }
@@ -329,6 +396,17 @@ public final class SubtitlePipeline: @unchecked Sendable {
             }
             return nil
         }
+        /// Prompts side by side that OCR read as one row with the button icons between them ("DEFUSE X PROVOKE",
+        /// "SELECT X BACK"): each part on its own, placed over its share of the row.
+        func findParts(_ line: OCRLine) async {
+            let parts = Self.glyphParts(line.text)
+            guard parts.count > 1 else { return }
+            for p in parts {
+                guard let (hit, speaker) = await find(p.text) else { continue }
+                let b = line.box
+                add(hit, b.width > 0 ? CGRect(x: b.minX + b.width * p.from, y: b.minY, width: b.width * (p.to - p.from), height: b.height) : b, 1, p.text, speaker)
+            }
+        }
         for block in Self.blocks(lines).prefix(12) {
             let box = block.map(\.box).reduce(CGRect.null) { $0.union($1) }
             let joined = block.map(\.text).joined(separator: " ")
@@ -336,7 +414,10 @@ public final class SubtitlePipeline: @unchecked Sendable {
                 add(hit, box, block.count, joined, speaker)
                 continue
             }
-            guard block.count > 1 else { continue }
+            guard block.count > 1 else {
+                await findParts(block[0])
+                continue
+            }
             // Two subtitles stacked (a new speaker under the last one): the longest run of lines that matches,
             // from the top down; a line that is part of nothing is skipped.
             let rows = Array(block.prefix(16))
@@ -353,7 +434,10 @@ public final class SubtitlePipeline: @unchecked Sendable {
                         break
                     }
                 }
-                if !matched { i += 1 }
+                if !matched {
+                    await findParts(rows[i])
+                    i += 1
+                }
             }
         }
         return out

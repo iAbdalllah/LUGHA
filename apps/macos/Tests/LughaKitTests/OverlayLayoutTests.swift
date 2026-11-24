@@ -49,4 +49,26 @@ final class OverlayLayoutTests: XCTestCase {
         r.add([prisoner, hud]); r.add([lucia]); r.add([prisoner])
         XCTAssertEqual(r.items.map(\.text), [prisoner.text, lucia.text])
     }
+
+    func testTextToneAdaptsToThePictureBehindIt() {
+        let gravel = Tone.forPatch(luma: 0.45, spread: 0.15)  // busy mid-grey (the tourists screenshot)
+        XCTAssertFalse(gravel.darkText)
+        XCTAssertGreaterThan(gravel.shade, 0.25, "busy ground gets a backdrop")
+        let sky = Tone.forPatch(luma: 0.85, spread: 0.04)
+        XCTAssertTrue(sky.darkText, "bright, flat: dark text")
+        XCTAssertEqual(sky.shade, 0)
+        let night = Tone.forPatch(luma: 0.08, spread: 0.03)
+        XCTAssertFalse(night.darkText)
+        XCTAssertEqual(night.shade, 0, "dark and flat: plain light text reads")
+    }
+
+    func testReadingAreasKeepOnlyTextInsideEnabledBoxes() {
+        let sub = OCRLine(text: "Staff Member: Hi there!", box: CGRect(x: 0.4, y: 0.72, width: 0.2, height: 0.013))
+        let menu = OCRLine(text: "Jaio sai uc ual", box: CGRect(x: 0.44, y: 0.26, width: 0.11, height: 0.016))
+        XCTAssertEqual(ReadingArea.keep([sub, menu], in: []).count, 2, "no areas: read everything")
+        let subs = ReadingArea(name: "Subtitles", rect: CGRect(x: 0.1, y: 0.65, width: 0.8, height: 0.15))
+        XCTAssertEqual(ReadingArea.keep([sub, menu], in: [subs]).map(\.text), [sub.text])
+        var off = subs; off.enabled = false
+        XCTAssertEqual(ReadingArea.keep([sub, menu], in: [off]).count, 2, "disabled areas don't filter")
+    }
 }

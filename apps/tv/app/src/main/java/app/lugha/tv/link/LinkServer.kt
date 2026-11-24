@@ -153,7 +153,8 @@ class LinkServer(private val scope: CoroutineScope, private val hub: LinkHub = L
                         fun color(k: String) = o[k]?.jsonPrimitive?.content?.let { runCatching { android.graphics.Color.parseColor(it) }.getOrNull() }
                         SubItem(o["text"]?.jsonPrimitive?.content ?: return@mapNotNull null, o["speaker"]?.jsonPrimitive?.content?.takeIf { it != "null" },
                             f("x") ?: return@mapNotNull null, f("y") ?: return@mapNotNull null, f("w") ?: 0f, f("h") ?: 0f,
-                            o["lines"]?.jsonPrimitive?.content?.toIntOrNull() ?: 1, color("bg"), color("fg"))
+                            o["lines"]?.jsonPrimitive?.content?.toIntOrNull() ?: 1, color("bg"), color("fg"),
+                            color("tone_fg"), f("tone_shade")?.coerceIn(0f, 0.8f))
                     }.filter { it.w > 0f && it.h > 0f }
                     hub.show(Subtitle(m["sid"]?.jsonPrimitive?.long ?: 0, m["text"]?.jsonPrimitive?.content ?: "",
                         m["speaker"]?.jsonPrimitive?.content?.takeIf { it != "null" }, System.currentTimeMillis(), items))

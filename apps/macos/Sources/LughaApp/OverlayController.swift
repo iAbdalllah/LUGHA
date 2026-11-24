@@ -49,6 +49,20 @@ final class OverlayController {
     private let hold = ReadingHold()
     private var expiry: Timer?
 
+    private var areasTimer: Timer?
+
+    /// Shows the reading areas' outlines and names for 4 s, then calls `done`.
+    func flashAreas(_ areas: [ReadingArea], done: @escaping () -> Void) {
+        withAnimation(.easeOut(duration: 0.2)) { model.areas = areas }
+        areasTimer?.invalidate()
+        areasTimer = Timer.scheduledTimer(withTimeInterval: 4, repeats: false) { [weak self] _ in
+            Task { @MainActor in
+                withAnimation(.easeOut(duration: 0.4)) { self?.model.areas = [] }
+                done()
+            }
+        }
+    }
+
     private let recent = RecentDialogue()
     private var historyDim: Timer?
 
@@ -90,6 +104,8 @@ final class OverlayModel: ObservableObject {
     /// Recent dialogue for the side panel, newest last; fresh = a line came in the last few seconds.
     @Published var recent: [SubtitleItem] = []
     @Published var recentFresh = false
+    /// Reading areas being shown (outlines), as fractions of the anchor.
+    @Published var areas: [ReadingArea] = []
 }
 
 /// Places each piece where it wants to be, moving pieces so none covers another (OverlayLayout.arrange). The first
@@ -160,6 +176,22 @@ struct SubtitleOverlayView: View {
                 }
                 if settings.historySide != "off", !model.recent.isEmpty {
                     historyPanel(in: geo.size)
+                }
+                if let a = model.anchor {
+                    ForEach(model.areas) { area in
+                        let r = CGRect(x: a.minX + area.rect.minX * a.width, y: a.minY + area.rect.minY * a.height,
+                                       width: area.rect.width * a.width, height: area.rect.height * a.height)
+                        ZStack(alignment: .topLeading) {
+                            RoundedRectangle(cornerRadius: 6).strokeBorder(Color(red: 1, green: 0.45, blue: 0.75), style: StrokeStyle(lineWidth: 3, dash: [10, 6]))
+                            RoundedRectangle(cornerRadius: 6).fill(Color(red: 1, green: 0.45, blue: 0.75).opacity(0.08))
+                            Text(area.name).font(.system(size: 14, weight: .bold)).foregroundColor(.white)
+                                .padding(.horizontal, 8).padding(.vertical, 3)
+                                .background(Capsule().fill(Color(red: 0.85, green: 0.3, blue: 0.6))).padding(6)
+                        }
+                        .frame(width: r.width, height: r.height)
+                        .position(x: r.midX, y: r.midY)
+                        .transition(.opacity)
+                    }
                 }
             }
             .animation(.easeOut(duration: max(settings.fadeMs, 1) / 1000), value: model.shown.map(\.item.text))
@@ -286,15 +318,29 @@ struct SubtitlePlate: View {
             .background(RoundedRectangle(cornerRadius: fontSize * 0.35, style: .continuous).fill(Color.black.opacity(settings.backgroundOpacity)))
     }
 
+    /// How to draw over the picture where this text goes (sampled from the frame): text colour and backdrop.
+    private var tone: Tone? { settings.displayMode == "above" ? main?.toneAbove : main?.toneOver }
+
     private var outline: some View {
-        // A crisp outline from four offset copies plus a soft shadow.
-        ZStack {
+        // Native ("original") with nothing to cover: the text colour adapts to the picture behind it — light text
+        // with a dark edge on dark scenes, dark text with a light edge on bright ones — and a soft backdrop of the
+        // edge colour appears when the patch is busy (gravel, foliage). Outline style keeps the chosen colour.
+        let t = tone
+        let adaptive = settings.textStyle == "native"
+        let fill: Color? = adaptive ? (t.flatMap { color($0.text) } ?? .white) : chosenColor
+        let edge: Color = adaptive ? (t.flatMap { color($0.outline) } ?? .black) : .black
+        let shade = adaptive ? (t?.shade ?? 0.3) : max(t?.shade ?? 0, (t?.darkText ?? false) ? 0.45 : 0)
+        return ZStack {
+            // A crisp outline from four offset copies plus a soft shadow.
             ForEach(0 ..< 4, id: \.self) { k in
-                text(.black).offset(x: [1.5, -1.5, 0, 0][k], y: [0, 0, 1.5, -1.5][k])
+                text(edge).offset(x: [1.5, -1.5, 0, 0][k], y: [0, 0, 1.5, -1.5][k])
             }
-            text(settings.textColor == "yellow" ? chosenColor : (settings.textStyle == "native" ? nil : chosenColor))
+            text(fill)
         }
-        .shadow(color: .black.opacity(0.7), radius: 3, x: 0, y: 2)
+        .shadow(color: edge.opacity(0.7), radius: 3, x: 0, y: 1)
+        .padding(.horizontal, fontSize * 0.35)
+        .padding(.vertical, fontSize * 0.1)
+        .background(RoundedRectangle(cornerRadius: fontSize * 0.3, style: .continuous).fill(edge.opacity(shade)))
     }
 }
 

@@ -258,4 +258,36 @@ final class PipelineTests: XCTestCase {
         p.tick(at: t0.addingTimeInterval(0.25))
         XCTAssertEqual(p.current?.items.count, 1)
     }
+
+    func testGarbledSpeakerNamesWithoutColonFromTheLog() async {
+        let p = SubtitlePipeline(stableFrames: 1, lookup: lookupTable([
+            "Uhm, you have something to say to us?": "عندك شي تقوله لضيوفنا؟",
+            "Absolutely no rush you take your time": "على راحتك، خذ وقتك!",
+        ]))
+        // Recorded: the line moved up when the next speaker's line appeared under it; both names garbled, no colon.
+        await p.ingest(ocr: [
+            OCRLine(text: "burists, Uhrm", box: box([0.363, 0.703, 0.075, 0.012])),
+            OCRLine(text: "you have something to say to us?", box: box([0.443, 0.703, 0.2, 0.012])),
+            OCRLine(text: "Staf Gember Absolutely no rush you take your time", box: box([0.339, 0.725, 0.317, 0.012])),
+        ])
+        XCTAssertEqual(Set(p.current?.items.map(\.text) ?? []), ["على راحتك، خذ وقتك!"], "the first line's text lost its 'Uhm' to the garble")
+        let q = SubtitlePipeline(stableFrames: 1, lookup: lookupTable(["You can't catch me!": "ما تقدر تمسكني!"]))
+        await q.ingest(ocr: [OCRLine(text: "Stranger You can't catch me!", box: box([0.4, 0.72, 0.2, 0.012]))])
+        XCTAssertEqual(q.current?.items.first?.text, "ما تقدر تمسكني!")
+    }
+
+    func testButtonIconsSplitPromptsAndCountersStay() async {
+        XCTAssertEqual(SubtitlePipeline.glyphParts("DEFUSE X PROVOKE").map(\.text), ["DEFUSE", "PROVOKE"])
+        XCTAssertEqual(SubtitlePipeline.trimGlyphs("[O] Photo Studio"), "Photo Studio")
+        XCTAssertEqual(SubtitlePipeline.splitCounter("TAKE AMMO PACK (0/3)").1, "(0/3)")
+        let p = SubtitlePipeline(stableFrames: 1, lookup: lookupTable(["DEFUSE": "فكك", "PROVOKE": "استفزاز", "TAKE AMMO PACK": "خذ صندوق ذخيرة"]))
+        await p.ingest(ocr: [
+            OCRLine(text: "DEFUSE X PROVOKE", box: box([0.8, 0.7, 0.16, 0.013])),
+            OCRLine(text: "TAKE AMMO PACK (0/3)", box: box([0.1, 0.3, 0.15, 0.013])),
+        ])
+        let items = p.current?.items ?? []
+        XCTAssertEqual(Set(items.map(\.text)), ["فكك", "استفزاز", "خذ صندوق ذخيرة (0/3)"])
+        let defuse = items.first { $0.text == "فكك" }!, provoke = items.first { $0.text == "استفزاز" }!
+        XCTAssertLessThan(defuse.box.maxX, provoke.box.minX + 0.01, "each prompt over its own part of the row")
+    }
 }

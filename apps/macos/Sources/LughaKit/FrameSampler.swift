@@ -10,6 +10,27 @@ public struct RGB: Equatable, Sendable {
     func distance(_ o: RGB) -> Double { abs(r - o.r) + abs(g - o.g) + abs(b - o.b) }
 }
 
+/// How to draw Arabic over a patch of the picture so it reads: text colour, and how strong a backdrop of the opposite
+/// colour it needs (0 = none). Bright patches get dark text; busy or mid-grey ones (gravel, foliage) get a backdrop.
+public struct Tone: Equatable, Sendable {
+    public let text: RGB
+    public let shade: Double
+    public init(text: RGB, shade: Double) { self.text = text; self.shade = shade }
+    public var darkText: Bool { text.luma < 0.5 }
+    /// The outline / backdrop colour: the opposite of the text.
+    public var outline: RGB { darkText ? RGB(r: 1, g: 1, b: 1) : RGB(r: 0, g: 0, b: 0) }
+
+    /// From a patch's mean brightness and its spread (standard deviation of brightness).
+    public static func forPatch(luma: Double, spread: Double) -> Tone {
+        let dark = luma > 0.62
+        let text = dark ? RGB(r: 0.07, g: 0.07, b: 0.09) : RGB(r: 1, g: 1, b: 1)
+        // Contrast left between the text and the patch, and how much detail could hide the letters.
+        let contrast = dark ? luma - 0.07 : 1 - luma
+        let shade = min(max((0.62 - contrast) * 1.1 + (spread - 0.06) * 2.6, 0), 0.6)
+        return Tone(text: text, shade: (shade * 100).rounded() / 100)
+    }
+}
+
 /// Reads colours out of a captured frame (downscaled once) so the Arabic can be drawn in the game's own colours, and
 /// finds where the game picture sits inside a window that adds black bars or a title bar.
 public struct FrameSampler {
@@ -57,6 +78,20 @@ public struct FrameSampler {
         // Too little contrast (anti-aliasing, blur): fall back to white or black, whichever reads on the background.
         if fg.distance(bg) < 0.35 { fg = bg.luma > 0.55 ? RGB(r: 0.08, g: 0.08, b: 0.1) : RGB(r: 1, g: 1, b: 1) }
         return (bg, fg)
+    }
+
+    /// The tone for Arabic drawn over `box` (fractions, origin top-left): from the patch's brightness and detail.
+    public func tone(in box: CGRect) -> Tone {
+        let r = box.intersection(CGRect(x: 0, y: 0, width: 1, height: 1))
+        guard !r.isNull, r.width > 0, r.height > 0 else { return Tone.forPatch(luma: 0.2, spread: 0.1) }
+        let x0 = Int(r.minX * Double(width)), x1 = max(Int(r.maxX * Double(width)), x0 + 1)
+        let y0 = Int(r.minY * Double(height)), y1 = max(Int(r.maxY * Double(height)), y0 + 1)
+        let step = max(1, (x1 - x0) / 60)
+        var l: [Double] = []
+        for y in stride(from: y0, to: y1, by: max(1, (y1 - y0) / 12)) { for x in stride(from: x0, to: x1, by: step) { l.append(at(x, y).luma) } }
+        let mean = l.reduce(0, +) / Double(max(l.count, 1))
+        let spread = (l.map { ($0 - mean) * ($0 - mean) }.reduce(0, +) / Double(max(l.count, 1))).squareRoot()
+        return Tone.forPatch(luma: mean, spread: spread)
     }
 
     /// The console's picture inside a window: trims black bars, then — the picture being `aspect` (16:9) — trims what

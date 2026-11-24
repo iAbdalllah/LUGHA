@@ -362,7 +362,7 @@ final class AppModel: ObservableObject {
                     let colors = Dictionary((self.subtitle?.items ?? []).map { ($0.text, $0) }, uniquingKeysWith: { a, _ in a })
                     s.items = cur.items.map { i in
                         var i = i
-                        if let old = colors[i.text] { i.background = old.background; i.foreground = old.foreground }
+                        if let old = colors[i.text] { i.background = old.background; i.foreground = old.foreground; i.toneOver = old.toneOver; i.toneAbove = old.toneAbove }
                         return i
                     }
                     return s
@@ -393,7 +393,9 @@ final class AppModel: ObservableObject {
         } else { return [] }
         return zip(sub.items, boxes).filter { $0.0.box.width > 0 }.map { i, b in
             TVSender.Item(text: i.text, speaker: i.speaker, x: b.minX, y: b.minY, w: b.width, h: b.height, lines: i.lines,
-                          background: i.background?.hex, foreground: i.foreground?.hex)
+                          background: i.background?.hex, foreground: i.foreground?.hex,
+                          toneText: (settings.displayMode == "above" ? i.toneAbove : i.toneOver)?.text.hex,
+                          toneShade: (settings.displayMode == "above" ? i.toneAbove : i.toneOver)?.shade)
         }
     }
 
@@ -419,7 +421,9 @@ final class AppModel: ObservableObject {
         ocrBusy = true
         defer { ocrBusy = false }
         let t0 = Date()
-        let lines = (try? await ocr.recognizeLines(image)) ?? []
+        let read = (try? await ocr.recognizeLines(image)) ?? []
+        // Reading areas: only text inside the boxes the user drew (the PS5's own menus, signs elsewhere are skipped).
+        let lines = ReadingArea.keep(read, in: settings.readingAreas)
         let ocrMs = Int(Date().timeIntervalSince(t0) * 1000)
         lastRead = lines.map(\.text).joined(separator: " · ")
         // Where the game picture is inside the window (black bars, title bar), re-checked every few seconds.
@@ -431,7 +435,7 @@ final class AppModel: ObservableObject {
         let changed = await pipeline.ingest(ocr: lines)
         DiagnosticsLog.shared.write("frame", [
             "ocr_ms": ocrMs, "match_ms": Int(Date().timeIntervalSince(t1) * 1000), "size": [image.width, image.height],
-            "ocr": lines.map { ["text": $0.text, "box": DiagnosticsLog.box($0.box)] },
+            "ocr": lines.map { ["text": $0.text, "box": DiagnosticsLog.box($0.box)] }, "skipped": read.count - lines.count,
             "shown": (pipeline.current?.items ?? []).map { ["text": $0.text, "box": DiagnosticsLog.box($0.box)] }, "changed": changed,
         ])
         if changed {
@@ -452,6 +456,51 @@ final class AppModel: ObservableObject {
             return nil
         } catch {
             return error.localizedDescription
+        }
+    }
+
+    // MARK: Reading areas
+
+    /// The captured picture in global screen points (what OCR box fractions refer to), running or not.
+    func captureAreaGlobal() async -> CGRect? {
+        if let bundleID = settings.captureAppBundleID {
+            guard let w = (try? await CaptureService.appWindows())?.first(where: { $0.bundleID == bundleID }) else { return nil }
+            let a = settings.windowArea, f = w.frame
+            return CGRect(x: f.minX + a.minX * f.width, y: f.minY + a.minY * f.height, width: a.width * f.width, height: a.height * f.height)
+        }
+        guard let region = settings.captureRegion else { return nil }
+        let origin = CGDisplayBounds(settings.displayID ?? CGMainDisplayID())
+        return region.offsetBy(dx: origin.minX, dy: origin.minY)
+    }
+
+    /// Draw a new reading area on the screen (inside the game picture).
+    func addReadingArea() {
+        RegionPicker.pick { [weak self] rect, displayID in
+            guard let self, let rect else { return }
+            Task { @MainActor in
+                guard let cap = await self.captureAreaGlobal() else {
+                    self.status = self.settings.captureAppBundleID == nil ? L.t("Choose a region first") : L.t("Open PS Remote Play and connect to your PS5 first.")
+                    return
+                }
+                let origin = CGDisplayBounds(displayID ?? CGMainDisplayID()).origin
+                let g = rect.offsetBy(dx: origin.x, dy: origin.y)
+                let f = CGRect(x: (g.minX - cap.minX) / cap.width, y: (g.minY - cap.minY) / cap.height, width: g.width / cap.width, height: g.height / cap.height)
+                    .intersection(CGRect(x: 0, y: 0, width: 1, height: 1))
+                guard !f.isNull, f.width > 0.01, f.height > 0.01 else { self.status = L.t("Select the area inside the window."); return }
+                self.settings.readingAreas.append(ReadingArea(name: L.t("Area %d", self.settings.readingAreas.count + 1), rect: f))
+                await self.showReadingAreas()
+            }
+        }
+    }
+
+    /// Outlines the reading areas over the game for a few seconds.
+    func showReadingAreas() async {
+        guard let cap = await captureAreaGlobal() else { return }
+        if !running { overlay.anchor = cap }
+        overlay.show()
+        overlay.flashAreas(settings.readingAreas.filter(\.enabled)) { [weak self] in
+            guard let self, !self.running else { return }
+            self.overlay.hide()
         }
     }
 

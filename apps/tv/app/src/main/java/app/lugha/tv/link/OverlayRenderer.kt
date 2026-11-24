@@ -105,7 +105,7 @@ class OverlayRenderer(private val context: Context, private val layer: FrameLayo
             val maxW = (i.w * sw * 1.6f).coerceAtLeast(sw * 0.25f).coerceAtMost(sw * 0.9f).toInt()
             val key = "hud:" + i.text
             val v = (views[key] as? TextView) ?: TextView(context)
-            plate(v, i.text, null, px, style, if (style.mode == "native") i.bg else null, i.fg)
+            plate(v, i, px, style)
             v.maxWidth = maxW
             val cover = !above && style.mode == "native"
             v.minWidth = if (cover) (i.w * sw).toInt().coerceAtMost(maxW) + 8 else 0
@@ -176,49 +176,69 @@ class OverlayRenderer(private val context: Context, private val layer: FrameLayo
         append(text)
     }
 
-    private fun textColor(style: OverlayStyle, fg: Int?) =
-        if (style.mode == "native") fg ?: Color.WHITE else if (style.textColor == "yellow") Color.rgb(255, 219, 64) else Color.WHITE
+    /** Drawn straight on the picture (no plate to cover the English): the colour must adapt to what is behind it. */
+    private fun onPicture(style: OverlayStyle) = style.mode == "outline" || style.display == "above" && style.mode == "native"
 
-    private fun TextView.base(px: Float, style: OverlayStyle) {
+    /**
+     * Native ("original"): the game's own text colour on its own plate; on the picture, the readable colour the sender
+     * sampled for that spot (light on dark scenes, dark on bright ones). Box/outline: the chosen colour.
+     */
+    private fun textColor(style: OverlayStyle, i: SubItem?): Int = when {
+        style.mode == "native" && style.display == "above" -> i?.toneFg ?: Color.WHITE
+        style.mode == "native" -> i?.fg ?: Color.WHITE
+        style.textColor == "yellow" -> Color.rgb(255, 219, 64)
+        else -> Color.WHITE
+    }
+
+    /** The outline/backdrop colour: the opposite of the text. */
+    private fun edge(text: Int): Int {
+        val l = (0.2126 * Color.red(text) + 0.7152 * Color.green(text) + 0.0722 * Color.blue(text)) / 255
+        return if (l < 0.5) Color.WHITE else Color.BLACK
+    }
+
+    private fun TextView.base(px: Float, style: OverlayStyle, i: SubItem?) {
         setTextSize(TypedValue.COMPLEX_UNIT_PX, px)
         textDirection = View.TEXT_DIRECTION_RTL
         gravity = Gravity.CENTER
         setLineSpacing(0f, 1.08f)
         typeface = typeface(style.font)
-        if (style.mode == "outline" || style.display == "above" && style.mode != "box") setShadowLayer(px * 0.16f, 0f, 0f, Color.BLACK)
+        if (onPicture(style)) setShadowLayer(px * 0.16f, 0f, 0f, edge(textColor(style, i)))
         else setShadowLayer(if (style.mode == "box") 4f else 0f, 0f, 2f, Color.argb(220, 0, 0, 0))
     }
 
-    private fun background(style: OverlayStyle, bg: Int?, px: Float) = when {
-        style.mode == "outline" -> null
-        style.display == "above" && style.mode == "native" -> null
-        else -> GradientDrawable().apply {
-            setColor(bg ?: Color.argb((style.bgOpacity * 255).toInt(), 0, 0, 0))
-            cornerRadius = if (style.mode == "native") 4f else px * 0.3f
+    private fun background(style: OverlayStyle, i: SubItem?, px: Float) = if (onPicture(style)) {
+        // A soft backdrop in the edge colour, as strong as the sampled spot needs (busy ground, mid-grey).
+        val shade = if (style.mode == "native") i?.toneShade ?: 0.3f else (i?.toneShade ?: 0f)
+        if (shade <= 0.02f) null else GradientDrawable().apply {
+            val e = edge(textColor(style, i))
+            setColor(Color.argb((shade * 255).toInt(), Color.red(e), Color.green(e), Color.blue(e)))
+            cornerRadius = px * 0.3f
         }
+    } else GradientDrawable().apply {
+        setColor(i?.bg.takeIf { style.mode == "native" } ?: Color.argb((style.bgOpacity * 255).toInt(), 0, 0, 0))
+        cornerRadius = if (style.mode == "native") 4f else px * 0.3f
     }
 
     private fun fillBlock(v: LinearLayout, lines: List<Pair<SubItem, Boolean>>, px: Float, style: OverlayStyle) {
         v.removeAllViews()
         v.gravity = Gravity.CENTER
-        val bg = lines.lastOrNull { !it.second }?.first?.bg.takeIf { style.mode == "native" }
-        v.background = background(style, bg, px)
+        v.background = background(style, lines.lastOrNull { !it.second }?.first ?: lines.lastOrNull()?.first, px)
         v.setPadding((px * 0.5f).toInt(), (px * 0.18f).toInt(), (px * 0.5f).toInt(), (px * 0.18f).toInt())
         for ((i, old) in lines) {
             v.addView(TextView(context).apply {
-                base(px, style)
+                base(px, style, i)
                 text = line(i.text, i.speaker)
-                setTextColor(textColor(style, i.fg))
+                setTextColor(textColor(style, i))
                 alpha = if (old) 0.55f else 1f
             }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { gravity = Gravity.CENTER_HORIZONTAL })
         }
     }
 
-    private fun plate(v: TextView, text: String, speaker: String?, px: Float, style: OverlayStyle, bg: Int?, fg: Int?) = v.apply {
-        base(px, style)
-        this.text = line(text, speaker)
-        setTextColor(textColor(style, fg))
-        background = background(style, bg, px)
+    private fun plate(v: TextView, i: SubItem, px: Float, style: OverlayStyle) = v.apply {
+        base(px, style, i)
+        this.text = line(i.text, null)
+        setTextColor(textColor(style, i))
+        background = background(style, i, px)
         setPadding((px * 0.3f).toInt(), (px * 0.05f).toInt(), (px * 0.3f).toInt(), (px * 0.05f).toInt())
     }
 

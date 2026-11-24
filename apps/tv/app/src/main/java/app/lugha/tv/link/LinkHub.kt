@@ -21,6 +21,8 @@ data class SubItem(
     val text: String, val speaker: String?, val x: Float, val y: Float, val w: Float, val h: Float, val lines: Int,
     /** Native style: the game's background and text colours (ARGB), when the sender sampled them. */
     val bg: Int? = null, val fg: Int? = null,
+    /** Readable text colour and backdrop strength (0–1) for where the Arabic goes, sampled by the sender. */
+    val toneFg: Int? = null, val toneShade: Float? = null,
 )
 
 /** [items] place each piece over its English; empty = show [text] at the style's position. */
