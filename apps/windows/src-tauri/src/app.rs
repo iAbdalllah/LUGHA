@@ -72,6 +72,31 @@ pub struct Settings {
     pub window_area: (f32, f32, f32, f32),
     /// Also draw subtitles on this PC (often off in window mode: they go to the TV).
     pub show_on_pc: bool,
+    #[serde(flatten)]
+    pub display: Display,
+}
+
+/// Where and how the Arabic is shown, here and on the TV (same options as the Mac app).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Display {
+    /// "over": the Arabic hides the English; "above": just above it, the English stays visible.
+    pub display: String,
+    /// Side panel with the recent dialogue: "off", "left" or "right".
+    pub history: String,
+    pub fade_ms: u32,
+    /// Keep a replaced line up (dimmed, above the new one) until it could be read.
+    pub read_hold: bool,
+    /// Show text only once it has been read this long (avoids half-drawn lines).
+    pub stable_ms: u32,
+    /// Treat the English as gone after it is missing this long.
+    pub gone_after_ms: u32,
+}
+
+impl Default for Display {
+    fn default() -> Self {
+        Self { display: "over".into(), history: "off".into(), fade_ms: 150, read_hold: true, stable_ms: 200, gone_after_ms: 1200 }
+    }
 }
 
 impl Default for Settings {
@@ -86,6 +111,7 @@ impl Default for Settings {
             capture_window: None,
             window_area: (0.08, 0.70, 0.84, 0.26),
             show_on_pc: true,
+            display: Display::default(),
         }
     }
 }
@@ -259,6 +285,7 @@ pub struct Status {
     window_area: (f32, f32, f32, f32),
     show_on_pc: bool,
     last_error: Option<String>,
+    display: Display,
 }
 
 #[derive(Serialize)]
@@ -311,6 +338,7 @@ fn status(core: tauri::State<'_, Shared>, cap: tauri::State<'_, Capture>) -> Cmd
         capture_window: c.settings.capture_window.clone(),
         window_area: c.settings.window_area,
         show_on_pc: c.settings.show_on_pc,
+        display: c.settings.display.clone(),
         windows: cfg!(windows),
         last_error: c.last_error.take(),
     })
@@ -435,12 +463,44 @@ fn set_capture_window(core: tauri::State<'_, Shared>, title: Option<String>, are
     Ok(())
 }
 
+/// The overlay page loaded: send it where the subtitle area is and the display options.
+#[tauri::command(async)]
+fn overlay_ready(app: tauri::AppHandle, core: tauri::State<'_, Shared>) -> Cmd<()> {
+    let r = lock(&core).settings.region.unwrap_or_else(default_region);
+    place_overlay(&app, r);
+    Ok(())
+}
+
+/// Display options from the UI: saved, sent to the overlay and the TV.
+#[tauri::command(async)]
+fn set_display(app: tauri::AppHandle, core: tauri::State<'_, Shared>, display: Display) -> Cmd<()> {
+    let mut c = lock(&core);
+    let d = Display {
+        display: if display.display == "above" { "above".into() } else { "over".into() },
+        history: if ["left", "right"].contains(&display.history.as_str()) { display.history } else { "off".into() },
+        fade_ms: display.fade_ms.min(1000),
+        read_hold: display.read_hold,
+        stable_ms: display.stable_ms.min(1000),
+        gone_after_ms: display.gone_after_ms.clamp(100, 3000),
+    };
+    c.settings.display = d.clone();
+    c.settings.save();
+    let region = c.settings.region.unwrap_or_else(default_region);
+    if let Some(tv) = c.tv.as_mut() {
+        let _ = tv.set_style(&d.display, &d.history, d.fade_ms, d.read_hold);
+    }
+    drop(c);
+    place_overlay(&app, region);
+    Ok(())
+}
+
 #[tauri::command(async)]
 fn set_region(app: tauri::AppHandle, core: tauri::State<'_, Shared>, region: Option<Region>) -> Cmd<Region> {
     let mut c = lock(&core);
     c.settings.region = region.filter(|r| r.w >= 40 && r.h >= 20);
     c.settings.save();
     let r = c.settings.region.unwrap_or_else(default_region);
+    drop(c); // place_overlay reads the settings too
     place_overlay(&app, r);
     Ok(r)
 }
@@ -463,6 +523,7 @@ fn tv_pair(core: tauri::State<'_, Shared>, addr: String, code: String) -> Cmd<()
     c.settings.tv_public = Some(lugha_link::b64(&tv.tv_public));
     c.settings.save();
     c.tv = Some(tv);
+    push_tv_style(&mut c);
     Ok(())
 }
 
@@ -483,7 +544,16 @@ fn tv_connect(core: tauri::State<'_, Shared>, addr: Option<String>) -> Cmd<()> {
         .ok_or("لا يوجد تلفاز مقترن")?;
     let host = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "Windows PC".into());
     c.tv = Some(TvSender::connect(&addr, &c.link, public, &host).map_err(|e| tv_msg(&e))?);
+    push_tv_style(&mut c);
     Ok(())
+}
+
+/// Sends the display options to the connected TV (it keeps them until the next change).
+fn push_tv_style(c: &mut Core) {
+    let d = c.settings.display.clone();
+    if let Some(tv) = c.tv.as_mut() {
+        let _ = tv.set_style(&d.display, &d.history, d.fade_ms, d.read_hold);
+    }
 }
 
 #[tauri::command(async)]
@@ -591,6 +661,8 @@ fn capture_loop(app: tauri::AppHandle, shared: Shared, running: Arc<AtomicBool>)
         let lines = frame.and_then(|f| ocr.recognize(&f).ok()).unwrap_or_default();
         let mut c = shared.lock().unwrap_or_else(|p| p.into_inner());
         let core = &mut *c;
+        pipeline.stable_frames = stable_frames(core.settings.display.stable_ms, interval);
+        pipeline.hide_after = Duration::from_millis(core.settings.display.gone_after_ms as u64);
         let changed = pipeline.ingest(&lines, Instant::now(), |t| {
             core.matcher.as_mut()?.lookup(&Query::new(t)).map(|h| Found { text: h.target, speaker: h.speaker, entry_id: h.entry_id, package_id: h.package_id })
         });
@@ -623,11 +695,38 @@ fn capture_loop(_app: tauri::AppHandle, _shared: Shared, running: Arc<AtomicBool
     running.store(false, Ordering::SeqCst);
 }
 
+/// Frames needed for `stable_ms` at one frame per `interval_ms` (at least 1).
+fn stable_frames(stable_ms: u32, interval_ms: u64) -> u32 {
+    1 + (stable_ms as u64).div_ceil(interval_ms.max(1)) as u32
+}
+
+/// What the overlay page needs: the subtitle area inside the overlay window and the display options.
+#[derive(Serialize, Clone)]
+struct OverlayConfig {
+    region: Region,
+    #[serde(flatten)]
+    display: Display,
+}
+
+/// The overlay covers the whole monitor that holds the subtitle area (click-through, excluded from capture), so the
+/// Arabic can sit over or above the English and the history panel can go at the side.
 fn place_overlay(app: &tauri::AppHandle, r: Region) {
-    if let Some(w) = app.get_webview_window("overlay") {
-        let _ = w.set_position(tauri::PhysicalPosition::new(r.x, r.y));
-        let _ = w.set_size(tauri::PhysicalSize::new(r.w.max(1) as u32, r.h.max(1) as u32));
-    }
+    let Some(w) = app.get_webview_window("overlay") else { return };
+    let (cx, cy) = (r.x + r.w / 2, r.y + r.h / 2);
+    let monitor = w.available_monitors().ok().and_then(|ms| {
+        ms.into_iter().find(|m| {
+            let (p, s) = (m.position(), m.size());
+            cx >= p.x && cy >= p.y && cx < p.x + s.width as i32 && cy < p.y + s.height as i32
+        })
+    }).or_else(|| w.primary_monitor().ok().flatten());
+    let (ox, oy, ow, oh) = match &monitor {
+        Some(m) => (m.position().x, m.position().y, m.size().width, m.size().height),
+        None => (r.x, r.y, r.w.max(1) as u32, r.h.max(1) as u32),
+    };
+    let _ = w.set_position(tauri::PhysicalPosition::new(ox, oy));
+    let _ = w.set_size(tauri::PhysicalSize::new(ow, oh));
+    let display = app.state::<Shared>().lock().map(|c| c.settings.display.clone()).unwrap_or_default();
+    let _ = app.emit_to("overlay", "overlay-config", OverlayConfig { region: Region { x: r.x - ox, y: r.y - oy, w: r.w, h: r.h }, display });
 }
 
 pub fn run() {
@@ -672,6 +771,8 @@ pub fn run() {
             report_line,
             list_windows,
             set_capture_window,
+            set_display,
+            overlay_ready,
             set_region,
             set_ocr_language,
             tv_pair,

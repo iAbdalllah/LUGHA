@@ -112,6 +112,14 @@ async function refresh() {
   const a = state.window_area;
   [['wx', a[0]], ['wy', a[1]], ['ww', a[2]], ['wh', a[3]]].forEach(([id, v]) => ($(id).value = Math.round(v * 100)));
   $('show-pc').checked = state.show_on_pc;
+  // Display options (also sent to the TV)
+  const d = state.display || {};
+  $('d-display').value = d.display || 'over';
+  $('d-history').value = d.history || 'off';
+  $('d-hold').checked = d.read_hold !== false;
+  $('d-stable').value = d.stable_ms ?? 200;
+  $('d-gone').value = d.gone_after_ms ?? 1200;
+  $('d-fade').value = d.fade_ms ?? 150;
 }
 
 async function loadWindows() {
@@ -190,6 +198,16 @@ async function loadHistory() {
 }
 
 // ---- wiring ----
+
+$('display-save').onclick = async () => {
+  const n = (id, def) => Number.isFinite(+$(id).value) && $(id).value !== '' ? Math.round(+$(id).value) : def;
+  await call('set_display', { display: {
+    display: $('d-display').value, history: $('d-history').value, read_hold: $('d-hold').checked,
+    stable_ms: n('d-stable', 200), gone_after_ms: n('d-gone', 1200), fade_ms: n('d-fade', 150),
+  } });
+  toast('حُفظت طريقة العرض');
+  refresh();
+};
 
 document.querySelectorAll('nav button').forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
 
@@ -285,6 +303,7 @@ function mockInvoke(cmd, args) {
     packages: [['sandline-sa-full', '1.1.0']], region: { x: 192, y: 810, w: 1536, h: 243 }, capturing: false,
     tv: '192.168.1.20:47800', tv_paired: true, tv_connected: true, ocr_language: 'en-US', windows: true, last_error: null,
     capture_window: null, window_area: [0.08, 0.7, 0.84, 0.26], show_on_pc: true,
+    display: { display: 'over', history: 'off', fade_ms: 150, read_hold: true, stable_ms: 200, gone_after_ms: 1200 },
   });
   const lines = { 'water costs more than gold out here': { text: 'الماء هنا أغلى من الذهب.', speaker: 'سالم', source: 'Water costs more than gold out here', entry_id: 6, package_id: 'sandline-sa-full' } };
   switch (cmd) {
@@ -298,6 +317,7 @@ function mockInvoke(cmd, args) {
     case 'list_windows': return Promise.resolve(['PS Remote Play', 'Discord', 'File Explorer']);
     case 'set_capture_window': if (args.title !== undefined) m.capture_window = args.title; if (args.area) m.window_area = args.area; if (args.showOnPc != null) m.show_on_pc = args.showOnPc; return Promise.resolve();
     case 'report_line': mockInvoke.last = args; return Promise.resolve();
+    case 'set_display': m.display = args.display; return Promise.resolve();
     case 'start_device_sign_in': return Promise.resolve({ device_code: 'x', user_code: '7K4-Q9P', url: 'http://127.0.0.1:8040/activate', interval: 5 });
     case 'poll_device_sign_in': return Promise.resolve(null);
     default: return Promise.resolve();

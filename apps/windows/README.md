@@ -24,6 +24,7 @@ Secrets (API token, device key, TV link key) live in Windows Credential Manager 
 ```bash
 cd src-tauri
 cargo test --no-default-features                                            # core on any OS: pipeline, store, TV pairing/session/latency
+node --test ui/test/overlay.test.cjs                                         # overlay display rules (block, read-hold, history)
 LUGHA_API=http://127.0.0.1:8040 cargo test --no-default-features --test live_api   # against a running backend
 cargo test --no-default-features                                            # on Windows this also runs the OCR + capture tests
 cargo install tauri-cli --version "^2" && cargo tauri build                  # Windows: NSIS + MSI installers

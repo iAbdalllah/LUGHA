@@ -84,6 +84,21 @@
       </div>
       <div class="row"><button id="region-save">حفظ</button><button id="region-reset" class="ghost">الافتراضي (الربع السفلي)</button></div>
     </div>
+    <div class="card" id="display-card">
+      <h2>طريقة العرض</h2>
+      <div class="row">
+        <label>مكان الترجمة<select id="d-display"><option value="over">فوق النص الإنجليزي (يغطيه)</option><option value="above">أعلى النص الإنجليزي (يبقى ظاهرًا)</option></select></label>
+        <label>لوحة السجل<select id="d-history"><option value="off">مغلقة</option><option value="right">يمين الشاشة</option><option value="left">يسار الشاشة</option></select></label>
+      </div>
+      <p class="muted">لوحة السجل تعرض آخر الحوارات بجانب اللعبة وتخفت بعد ثوانٍ حتى لا تشتت اللعب.</p>
+      <label class="check"><input type="checkbox" id="d-hold"> إبقاء السطر حتى تقرأه (السطر السابق يبقى باهتًا فوق الجديد)</label>
+      <div class="row">
+        <label>انتظار ثبات النص (ملي ثانية)<input id="d-stable" type="number" min="0" max="1000" step="50"></label>
+        <label>اعتبار الإنجليزي اختفى بعد (ملي ثانية)<input id="d-gone" type="number" min="100" max="3000" step="100"></label>
+        <label>ظهور تدريجي (ملي ثانية)<input id="d-fade" type="number" min="0" max="1000" step="50"></label>
+      </div>
+      <div class="row"><button id="display-save">حفظ</button></div>
+    </div>
     <div class="card">
       <h2>جرّب سطراً</h2>
       <div class="row"><input id="try" dir="ltr" placeholder="Water costs more than gold out here"><button id="try-go">ترجم</button></div>

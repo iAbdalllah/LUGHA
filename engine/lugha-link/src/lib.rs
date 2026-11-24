@@ -267,7 +267,22 @@ pub enum Message {
     #[serde(rename = "sub.clear")]
     Clear { id: u64 },
     #[serde(rename = "style.set")]
-    Style { font_scale: f32, position_y: f32, bg_opacity: f32 },
+    Style {
+        font_scale: f32,
+        position_y: f32,
+        bg_opacity: f32,
+        /// "over" (the Arabic hides the English) or "above" (just above it). Older TVs ignore the optional keys.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        display: Option<String>,
+        /// Side panel with the recent dialogue: "off", "left" or "right".
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        history: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        fade_ms: Option<u32>,
+        /// Keep a replaced dialogue line up (dimmed) until it could be read.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        read_hold: Option<bool>,
+    },
     #[serde(rename = "ack")]
     Ack { id: u64, painted_ms: u64 },
     #[serde(rename = "ping")]
