@@ -112,14 +112,15 @@ async function refresh() {
   const a = state.window_area;
   [['wx', a[0]], ['wy', a[1]], ['ww', a[2]], ['wh', a[3]]].forEach(([id, v]) => ($(id).value = Math.round(v * 100)));
   $('show-pc').checked = state.show_on_pc;
+  renderAreas(state.areas || []);
   // Display options (also sent to the TV)
-  const d = state.display || {};
-  $('d-display').value = d.display || 'over';
-  $('d-history').value = d.history || 'off';
-  $('d-hold').checked = d.read_hold !== false;
-  $('d-stable').value = d.stable_ms ?? 200;
-  $('d-gone').value = d.gone_after_ms ?? 1200;
-  $('d-fade').value = d.fade_ms ?? 150;
+  const disp = state.display || {};
+  $('d-display').value = disp.display || 'over';
+  $('d-history').value = disp.history || 'off';
+  $('d-hold').checked = disp.read_hold !== false;
+  $('d-stable').value = disp.stable_ms ?? 200;
+  $('d-gone').value = disp.gone_after_ms ?? 1200;
+  $('d-fade').value = disp.fade_ms ?? 150;
 }
 
 async function loadWindows() {
@@ -197,7 +198,35 @@ async function loadHistory() {
   });
 }
 
+// Reading areas: one row per box (name, X/Y/W/H in % of the captured picture, on/off, delete).
+function renderAreas(areas) {
+  const box = $('areas');
+  box.replaceChildren(...areas.map((a, n) => {
+    const row = document.createElement('div');
+    row.className = 'row area';
+    const num = (k, v) => { const l = document.createElement('label'); l.textContent = k + ' %'; const i = document.createElement('input'); i.type = 'number'; i.min = 0; i.max = 100; i.step = 0.5; i.value = Math.round(v * 1000) / 10; i.dataset.k = k.toLowerCase(); l.append(i); return l; };
+    const name = document.createElement('input'); name.value = a.name; name.dataset.k = 'name'; name.style.maxWidth = '9em';
+    const on = document.createElement('input'); on.type = 'checkbox'; on.checked = a.enabled !== false; on.dataset.k = 'enabled';
+    const del = btn('حذف', () => { row.remove(); }, 'link');
+    row.append(on, name, num('X', a.x), num('Y', a.y), num('W', a.w), num('H', a.h), del);
+    return row;
+  }));
+}
+
+function readAreas() {
+  return [...document.querySelectorAll('#areas .area')].map((row, n) => {
+    const v = (k) => +row.querySelector(`[data-k="${k}"]`).value / 100;
+    return { name: row.querySelector('[data-k="name"]').value || `منطقة ${n + 1}`, x: v('x'), y: v('y'), w: v('w'), h: v('h'), enabled: row.querySelector('[data-k="enabled"]').checked };
+  });
+}
+
 // ---- wiring ----
+
+$('area-add').onclick = () => {
+  const now = readAreas();
+  renderAreas([...now, { name: `منطقة ${now.length + 1}`, x: 0.1, y: 0.8, w: 0.8, h: 0.12, enabled: true }]);
+};
+$('areas-save').onclick = async () => { await call('set_areas', { areas: readAreas() }); toast('حُفظت مناطق القراءة'); refresh(); };
 
 $('display-save').onclick = async () => {
   const n = (id, def) => Number.isFinite(+$(id).value) && $(id).value !== '' ? Math.round(+$(id).value) : def;
@@ -304,6 +333,7 @@ function mockInvoke(cmd, args) {
     tv: '192.168.1.20:47800', tv_paired: true, tv_connected: true, ocr_language: 'en-US', windows: true, last_error: null,
     capture_window: null, window_area: [0.08, 0.7, 0.84, 0.26], show_on_pc: true,
     display: { display: 'over', history: 'off', fade_ms: 150, read_hold: true, stable_ms: 200, gone_after_ms: 1200 },
+    areas: [{ name: 'الترجمة', x: 0.1, y: 0.8, w: 0.8, h: 0.118, enabled: true }],
   });
   const lines = { 'water costs more than gold out here': { text: 'الماء هنا أغلى من الذهب.', speaker: 'سالم', source: 'Water costs more than gold out here', entry_id: 6, package_id: 'sandline-sa-full' } };
   switch (cmd) {
@@ -318,6 +348,7 @@ function mockInvoke(cmd, args) {
     case 'set_capture_window': if (args.title !== undefined) m.capture_window = args.title; if (args.area) m.window_area = args.area; if (args.showOnPc != null) m.show_on_pc = args.showOnPc; return Promise.resolve();
     case 'report_line': mockInvoke.last = args; return Promise.resolve();
     case 'set_display': m.display = args.display; return Promise.resolve();
+    case 'set_areas': m.areas = args.areas; return Promise.resolve();
     case 'start_device_sign_in': return Promise.resolve({ device_code: 'x', user_code: '7K4-Q9P', url: 'http://127.0.0.1:8040/activate', interval: 5 });
     case 'poll_device_sign_in': return Promise.resolve(null);
     default: return Promise.resolve();

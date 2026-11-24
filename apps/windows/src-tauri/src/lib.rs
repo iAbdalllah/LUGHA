@@ -2,6 +2,7 @@
 //! any OS with `cargo test --no-default-features`.
 
 pub mod api;
+pub mod frame;
 pub mod pipeline;
 pub mod store;
 pub mod sync;

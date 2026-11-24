@@ -28,6 +28,16 @@ function render() {
     const before = block.textContent;
     block.replaceChildren(...shown.map(s => el(s.line, 'line' + (s.old ? ' old' : ''))));
     block.className = cfg.display === 'above' ? 'above' : 'over';
+    // On the picture ("above"): text colour adapts to what is behind it, with the opposite edge and a soft backdrop
+    // on busy or mid-grey ground (sampled by the app).
+    const t = current && current.tone_fg ? current : null;
+    if (cfg.display === 'above' && t) {
+      const dark = t.tone_fg.toLowerCase() !== '#ffffff';
+      const edge = dark ? '255,255,255' : '0,0,0';
+      block.style.color = t.tone_fg;
+      block.style.textShadow = `0 0 4px rgb(${edge}), 0 0 2px rgb(${edge}), 0 1px 3px rgba(${edge},.8)`;
+      block.style.background = `rgba(${edge},${t.tone_shade || 0})`;
+    } else { block.style.color = ''; block.style.textShadow = ''; block.style.background = ''; }
     block.style.left = (r.x + r.w / 2) + 'px';
     block.style.minWidth = cfg.display === 'above' ? '0' : Math.min(r.w, window.innerWidth * 0.92) + 'px';
     if (cfg.display === 'above') { block.style.top = ''; block.style.bottom = (window.innerHeight - r.y + 4) + 'px'; }
@@ -52,7 +62,7 @@ function render() {
 const ev = window.__TAURI__?.event;
 ev?.listen('subtitle', ({ payload }) => {
   const now = Date.now();
-  current = payload ? { text: payload.text, speaker: payload.speaker } : null;
+  current = payload ? { text: payload.text, speaker: payload.speaker, tone_fg: payload.tone_fg, tone_shade: payload.tone_shade } : null;
   hold.update(current, now);
   recent.add(current, now);
   render();

@@ -74,6 +74,24 @@ pub struct Settings {
     pub show_on_pc: bool,
     #[serde(flatten)]
     pub display: Display,
+    /// Reading areas: only text inside the enabled ones is read (empty = the whole capture).
+    pub areas: Vec<Area>,
+}
+
+/// A box to read from, as fractions (x, y, w, h) of the captured picture, origin top-left.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Area {
+    pub name: String,
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+    #[serde(default = "yes")]
+    pub enabled: bool,
+}
+
+fn yes() -> bool {
+    true
 }
 
 /// Where and how the Arabic is shown, here and on the TV (same options as the Mac app).
@@ -112,6 +130,7 @@ impl Default for Settings {
             window_area: (0.08, 0.70, 0.84, 0.26),
             show_on_pc: true,
             display: Display::default(),
+            areas: vec![],
         }
     }
 }
@@ -286,6 +305,7 @@ pub struct Status {
     show_on_pc: bool,
     last_error: Option<String>,
     display: Display,
+    areas: Vec<Area>,
 }
 
 #[derive(Serialize)]
@@ -303,11 +323,14 @@ pub struct Line {
     source: String,
     entry_id: i64,
     package_id: String,
+    /// Readable text colour and backdrop strength for the Arabic drawn on the picture (display "above").
+    tone_fg: Option<String>,
+    tone_shade: Option<f32>,
 }
 
 impl From<&Subtitle> for Line {
     fn from(s: &Subtitle) -> Self {
-        Self { text: s.text.clone(), speaker: s.speaker.clone(), source: s.source.clone(), entry_id: s.entry_id, package_id: s.package_id.clone() }
+        Self { text: s.text.clone(), speaker: s.speaker.clone(), source: s.source.clone(), entry_id: s.entry_id, package_id: s.package_id.clone(), tone_fg: None, tone_shade: None }
     }
 }
 
@@ -339,6 +362,7 @@ fn status(core: tauri::State<'_, Shared>, cap: tauri::State<'_, Capture>) -> Cmd
         window_area: c.settings.window_area,
         show_on_pc: c.settings.show_on_pc,
         display: c.settings.display.clone(),
+        areas: c.settings.areas.clone(),
         windows: cfg!(windows),
         last_error: c.last_error.take(),
     })
@@ -419,7 +443,7 @@ fn sync_now(core: tauri::State<'_, Shared>) -> Cmd<SyncSummary> {
 fn lookup(core: tauri::State<'_, Shared>, text: String) -> Cmd<Option<Line>> {
     let mut c = lock(&core);
     let Some(m) = c.matcher.as_mut() else { return Ok(None) };
-    Ok(m.lookup(&Query::new(text.clone())).map(|h| Line { text: h.target, speaker: h.speaker, source: text, entry_id: h.entry_id, package_id: h.package_id }))
+    Ok(m.lookup(&Query::new(text.clone())).map(|h| Line { text: h.target, speaker: h.speaker, source: text, entry_id: h.entry_id, package_id: h.package_id, tone_fg: None, tone_shade: None }))
 }
 
 /// Report a wrong line to the reviewers (the server checks the account owns the package and the line is in it).
@@ -459,6 +483,19 @@ fn set_capture_window(core: tauri::State<'_, Shared>, title: Option<String>, are
     if let Some(s) = show_on_pc {
         c.settings.show_on_pc = s;
     }
+    c.settings.save();
+    Ok(())
+}
+
+/// Reading areas from the UI (fractions of the captured picture).
+#[tauri::command(async)]
+fn set_areas(core: tauri::State<'_, Shared>, areas: Vec<Area>) -> Cmd<()> {
+    let mut c = lock(&core);
+    c.settings.areas = areas
+        .into_iter()
+        .filter(|a| a.w > 0.01 && a.h > 0.01)
+        .map(|a| Area { x: a.x.clamp(0.0, 1.0), y: a.y.clamp(0.0, 1.0), w: a.w.min(1.0 - a.x.clamp(0.0, 1.0)), h: a.h.min(1.0 - a.y.clamp(0.0, 1.0)), ..a })
+        .collect();
     c.settings.save();
     Ok(())
 }
@@ -658,7 +695,26 @@ fn capture_loop(app: tauri::AppHandle, shared: Shared, running: Arc<AtomicBool>)
             },
             None => crate::capture::capture(region.into()).ok(),
         };
-        let lines = frame.and_then(|f| ocr.recognize(&f).ok()).unwrap_or_default();
+        let areas: Vec<Area> = shared.lock().map(|c| c.settings.areas.iter().filter(|a| a.enabled).cloned().collect()).unwrap_or_default();
+        // Where the Arabic goes in "above" mode is just above the text: sample the top band of the (first) area.
+        let mut tone = None;
+        let lines = match frame {
+            None => vec![],
+            Some(f) => {
+                let top = areas.first().map(|a| (a.x, a.y, a.w, (a.h * 0.3).max(0.02))).unwrap_or((0.0, 0.0, 1.0, 0.25));
+                tone = Some(crate::frame::tone(f.width, f.height, &f.bgra, top));
+                if areas.is_empty() {
+                    ocr.recognize(&f).unwrap_or_default()
+                } else {
+                    // Reading areas: OCR each box on its own; text elsewhere (signs, the HUD) is never read.
+                    areas
+                        .iter()
+                        .filter_map(|a| crate::frame::crop(f.width, f.height, &f.bgra, (a.x, a.y, a.w, a.h)))
+                        .flat_map(|(width, height, bgra)| ocr.recognize(&crate::capture::Frame { width, height, bgra }).unwrap_or_default())
+                        .collect()
+                }
+            }
+        };
         let mut c = shared.lock().unwrap_or_else(|p| p.into_inner());
         let core = &mut *c;
         pipeline.stable_frames = stable_frames(core.settings.display.stable_ms, interval);
@@ -667,7 +723,10 @@ fn capture_loop(app: tauri::AppHandle, shared: Shared, running: Arc<AtomicBool>)
             core.matcher.as_mut()?.lookup(&Query::new(t)).map(|h| Found { text: h.target, speaker: h.speaker, entry_id: h.entry_id, package_id: h.package_id })
         });
         if changed {
-            let line = pipeline.current.as_ref().map(Line::from);
+            let line = pipeline.current.as_ref().map(Line::from).map(|mut l| {
+                if let Some((fg, shade)) = &tone { l.tone_fg = Some(fg.clone()); l.tone_shade = Some(*shade); }
+                l
+            });
             let _ = app.emit("subtitle", line.clone());
             if let Some(sub) = &pipeline.current {
                 core.history.insert(0, sub.clone());
@@ -772,6 +831,7 @@ pub fn run() {
             list_windows,
             set_capture_window,
             set_display,
+            set_areas,
             overlay_ready,
             set_region,
             set_ocr_language,
