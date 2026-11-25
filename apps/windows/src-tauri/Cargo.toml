@@ -11,7 +11,7 @@ name = "lugha_windows"
 path = "src/lib.rs"
 
 [[bin]]
-name = "lugha"
+name = "lugha-windows"
 path = "src/main.rs"
 required-features = ["app"]
 
