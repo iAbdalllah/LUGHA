@@ -305,21 +305,113 @@ struct ReadingAreasSection: View {
             HStack {
                 Text(L.t("Reading areas")).font(.caption).foregroundColor(.secondary)
                 Spacer()
+                Menu(L.t("Presets")) {
+                    Button(L.t("Subtitles only")) { applyPreset("subtitles") }
+                    Button(L.t("Full screen")) { applyPreset("full") }
+                    Button(L.t("Subtitles + instructions")) { applyPreset("game") }
+                }
+                .controlSize(.small).fixedSize()
                 if !settings.readingAreas.isEmpty { Button(L.t("Show")) { Task { await app.showReadingAreas() } }.controlSize(.small) }
                 Button(L.t("Add area")) { app.addReadingArea() }.controlSize(.small)
             }
             ForEach($settings.readingAreas) { $area in
-                HStack(spacing: 6) {
-                    Toggle("", isOn: $area.enabled).labelsHidden().toggleStyle(.checkbox)
-                    TextField("", text: $area.name).textFieldStyle(.roundedBorder).font(.caption)
-                    Text(String(format: "%.0f%% · %.0f%%", area.rect.minY * 100, area.rect.height * 100))
-                        .font(.caption2.monospaced()).foregroundColor(.secondary).environment(\.layoutDirection, .leftToRight)
-                    Button(role: .destructive) { settings.readingAreas.removeAll { $0.id == area.id } } label: { Image(systemName: "trash") }
-                        .buttonStyle(.borderless)
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Toggle("", isOn: $area.enabled).labelsHidden().toggleStyle(.checkbox)
+                        TextField("", text: $area.name).textFieldStyle(.roundedBorder).font(.caption)
+                        Button(role: .destructive) { settings.readingAreas.removeAll { $0.id == area.id } } label: { Image(systemName: "trash") }
+                            .buttonStyle(.borderless)
+                    }
+                    DisclosureGroup(L.t("Design")) { AreaDesign(area: $area, changed: changed) }.font(.caption)
                 }
+                .padding(6)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Color.secondary.opacity(0.08)))
             }
             Text(L.t("Only text inside these boxes is translated. With none, everything in the capture is read.")).font(.caption2).foregroundColor(.secondary)
         }
+    }
+
+    private func applyPreset(_ kind: String) {
+        settings.readingAreas = ReadingArea.preset(kind).map { a in var a = a; a.name = L.t(a.name); return a }
+        changed()
+    }
+
+    private func changed() { Task { await app.textOptionsChanged() } }
+}
+
+/// One area's design: where its Arabic goes, its look, and the size of its box.
+struct AreaDesign: View {
+    @Binding var area: ReadingArea
+    let changed: () -> Void
+
+    private func pct(_ label: String, _ v: Binding<CGFloat>) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(label).font(.caption2).foregroundColor(.secondary)
+            TextField("", value: Binding(get: { Double(v.wrappedValue * 100) }, set: { v.wrappedValue = CGFloat(min(max($0, 0), 100) / 100); changed() }),
+                      format: .number.precision(.fractionLength(1)))
+                .textFieldStyle(.roundedBorder).frame(width: 58)
+        }
+    }
+
+    private func slider(_ label: String, _ v: Binding<Double>, _ range: ClosedRange<Double>) -> some View {
+        HStack {
+            Text(label).font(.caption2).foregroundColor(.secondary).frame(width: 90, alignment: .leading)
+            Slider(value: Binding(get: { v.wrappedValue }, set: { v.wrappedValue = $0; changed() }), in: range)
+            Text("\(Int(v.wrappedValue * 100))%").font(.caption2.monospaced()).frame(width: 40)
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(L.t("Reading area (% of the picture)")).font(.caption2).foregroundColor(.secondary)
+            HStack(spacing: 6) {
+                pct(L.t("Left"), $area.rect.origin.x); pct(L.t("Top"), $area.rect.origin.y)
+                pct(L.t("Width"), $area.rect.size.width); pct(L.t("Height"), $area.rect.size.height)
+            }
+            .environment(\.layoutDirection, .leftToRight)
+            Picker(L.t("Translation"), selection: Binding(get: { area.place }, set: { area.place = $0; changed() })) {
+                Text(L.t("Automatic")).tag("auto")
+                Text(L.t("Over the English")).tag("over")
+                Text(L.t("Below the English box")).tag("below")
+                Text(L.t("Above the English box")).tag("above")
+                Text(L.t("Custom place")).tag("custom")
+            }
+            if area.place == "custom" {
+                Text(L.t("Translation area (% of the picture)")).font(.caption2).foregroundColor(.secondary)
+                HStack(spacing: 6) {
+                    pct(L.t("Left"), $area.translation.origin.x); pct(L.t("Top"), $area.translation.origin.y)
+                    pct(L.t("Width"), $area.translation.size.width); pct(L.t("Height"), $area.translation.size.height)
+                }
+                .environment(\.layoutDirection, .leftToRight)
+                Picker(L.t("Text in the area"), selection: Binding(get: { area.valign }, set: { area.valign = $0; changed() })) {
+                    Text(L.t("Top")).tag("top"); Text(L.t("Middle")).tag("center"); Text(L.t("Bottom")).tag("bottom")
+                }
+            }
+            Picker(L.t("Look"), selection: Binding(get: { area.look }, set: { area.look = $0; changed() })) {
+                Text(L.t("Automatic")).tag("auto")
+                Text(L.t("Text on the picture")).tag("subtitle")
+                Text(L.t("Box")).tag("box")
+                Text(L.t("Game-style card")).tag("card")
+            }
+            Picker(L.t("Alignment"), selection: Binding(get: { area.align }, set: { area.align = $0; changed() })) {
+                Text(L.t("Right")).tag("right"); Text(L.t("Centre")).tag("center"); Text(L.t("Left")).tag("left")
+            }
+            .pickerStyle(.segmented)
+            slider(L.t("Text size"), $area.font, 0.5...2)
+            slider(L.t("Box width"), $area.boxW, 0.3...2)
+            slider(L.t("Box height"), $area.boxH, 0...2.5)
+            HStack(spacing: 6) {
+                Text(L.t("Accent edge")).font(.caption2).foregroundColor(.secondary)
+                ForEach([nil, "#E9B44C", "#E85FA0", "#4FC3F7", "#7BD88F"], id: \.self) { (hex: String?) in
+                    let c = hex.flatMap { RGB(hex: $0) }
+                    Circle().fill(c.map { Color(.sRGB, red: $0.r, green: $0.g, blue: $0.b) } ?? Color.clear).frame(width: 16, height: 16)
+                        .overlay(Circle().stroke(area.accent == hex ? Color.accentColor : Color.secondary.opacity(0.5), lineWidth: area.accent == hex ? 2.5 : 1))
+                        .overlay(hex == nil ? Image(systemName: "nosign").font(.system(size: 9)).foregroundColor(.secondary) : nil)
+                        .onTapGesture { area.accent = hex; changed() }
+                }
+            }
+        }
+        .padding(.top, 4)
     }
 }
 

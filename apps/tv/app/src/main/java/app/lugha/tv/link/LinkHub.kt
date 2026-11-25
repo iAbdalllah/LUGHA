@@ -23,7 +23,33 @@ data class SubItem(
     val bg: Int? = null, val fg: Int? = null,
     /** Readable text colour and backdrop strength (0–1) for where the Arabic goes, sampled by the sender. */
     val toneFg: Int? = null, val toneShade: Float? = null,
+    /** The player's design for the reading area this line came from (null: the general style). */
+    val area: AreaStyle? = null,
 )
+
+/**
+ * How one reading area's translation looks and where it goes (set per area by the player).
+ * [place]: "auto" (the general rules), "over"/"below"/"above" the English, or "custom" = inside [tx],[ty],[tw],[th]
+ * (fractions of the screen) at [valign]. [look]: "auto", "subtitle" (text on the picture), "box" (the general plate
+ * colour) or "card" (a dark card with an [accent] edge, like game hints). [boxW] scales the box width, [boxH] its
+ * height (padding), [font] the text size.
+ */
+data class AreaStyle(
+    val name: String = "",
+    val place: String = "auto",
+    val tx: Float = 0f, val ty: Float = 0f, val tw: Float = 0f, val th: Float = 0f,
+    val valign: String = "bottom",
+    val look: String = "auto",
+    val align: String = "center",
+    val font: Float = 1f,
+    val boxW: Float = 1f,
+    val boxH: Float = 1f,
+    val accent: Int? = null,
+    val bg: Int? = null,
+) {
+    /** Drawn by its own rules rather than the general subtitle block / HUD layout. */
+    val own get() = place != "auto" || look != "auto"
+}
 
 /** [items] place each piece over its English; empty = show [text] at the style's position. */
 data class Subtitle(val sid: Long, val text: String, val speaker: String?, val receivedAt: Long, val items: List<SubItem> = emptyList())

@@ -151,10 +151,29 @@ class LinkServer(private val scope: CoroutineScope, private val hub: LinkHub = L
                         val o = e as? JsonObject ?: return@mapNotNull null
                         fun f(k: String) = o[k]?.jsonPrimitive?.content?.toFloatOrNull()
                         fun color(k: String) = o[k]?.jsonPrimitive?.content?.let { runCatching { android.graphics.Color.parseColor(it) }.getOrNull() }
+                        val a = o["area"] as? JsonObject
+                        fun af(k: String) = a?.get(k)?.jsonPrimitive?.content?.toFloatOrNull()
+                        fun ac(k: String) = a?.get(k)?.jsonPrimitive?.content?.takeIf { Regex("#[0-9A-Fa-f]{6}").matches(it) }?.let { android.graphics.Color.parseColor(it) }
+                        fun astr(k: String, allowed: Set<String>, def: String) = a?.get(k)?.jsonPrimitive?.content?.takeIf { it in allowed } ?: def
+                        val area = a?.let {
+                            AreaStyle(
+                                name = it["name"]?.jsonPrimitive?.content ?: "",
+                                place = astr("place", setOf("auto", "over", "below", "above", "custom"), "auto"),
+                                tx = (af("tx") ?: 0f).coerceIn(0f, 1f), ty = (af("ty") ?: 0f).coerceIn(0f, 1f),
+                                tw = (af("tw") ?: 0f).coerceIn(0f, 1f), th = (af("th") ?: 0f).coerceIn(0f, 1f),
+                                valign = astr("valign", setOf("top", "center", "bottom"), "bottom"),
+                                look = astr("look", setOf("auto", "subtitle", "box", "card"), "auto"),
+                                align = astr("align", setOf("center", "right", "left"), "center"),
+                                font = (af("font") ?: 1f).coerceIn(0.4f, 2.5f),
+                                boxW = (af("box_w") ?: 1f).coerceIn(0.3f, 2.5f),
+                                boxH = (af("box_h") ?: 1f).coerceIn(0f, 3f),
+                                accent = ac("accent"), bg = ac("bg"),
+                            )
+                        }
                         SubItem(o["text"]?.jsonPrimitive?.content ?: return@mapNotNull null, o["speaker"]?.jsonPrimitive?.content?.takeIf { it != "null" },
                             f("x") ?: return@mapNotNull null, f("y") ?: return@mapNotNull null, f("w") ?: 0f, f("h") ?: 0f,
                             o["lines"]?.jsonPrimitive?.content?.toIntOrNull() ?: 1, color("bg"), color("fg"),
-                            color("tone_fg"), f("tone_shade")?.coerceIn(0f, 0.8f))
+                            color("tone_fg"), f("tone_shade")?.coerceIn(0f, 0.8f), area)
                     }.filter { it.w > 0f && it.h > 0f }
                     hub.show(Subtitle(m["sid"]?.jsonPrimitive?.long ?: 0, m["text"]?.jsonPrimitive?.content ?: "",
                         m["speaker"]?.jsonPrimitive?.content?.takeIf { it != "null" }, System.currentTimeMillis(), items))

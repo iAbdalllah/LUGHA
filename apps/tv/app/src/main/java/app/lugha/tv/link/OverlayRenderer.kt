@@ -80,7 +80,9 @@ class OverlayRenderer(private val context: Context, private val layer: FrameLayo
             }
             lastSid = sub?.sid
         }
-        val shown = if (style.readHold) hold.visible(now) else items.map { it to false }
+        val shownAll = if (style.readHold) hold.visible(now) else items.map { it to false }
+        // Lines from reading areas the player designed go by their area's rules; the rest by the general ones.
+        val (own, shown) = if (style.display == "history") emptyList<Pair<SubItem, Boolean>>() to emptyList() else shownAll.partition { it.first.area?.own == true }
         // History only: nothing over the game, just the side panel.
         val sc = if (style.display == "history") app.lugha.tv.ui.Scene(null, emptyList()) else scene(shown)
         val (sw, sh) = dm.widthPixels to dm.heightPixels
@@ -91,13 +93,16 @@ class OverlayRenderer(private val context: Context, private val layer: FrameLayo
         val pieces = mutableListOf<Piece>()
 
         sc.block?.let { b ->
-            val px = (b.lineH * sh * 0.9f * style.fontScale).coerceIn(18f, 84f)
+            // The subtitle area's own size settings, when the player set them (font, box width and height).
+            val ar = b.lines.firstNotNullOfOrNull { it.first.area }
+            val px = (b.lineH * sh * 0.9f * style.fontScale * (ar?.font ?: 1f)).coerceIn(16f, 96f)
             val key = "block"
             val v = (views[key] as? LinearLayout) ?: LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
-            fillBlock(v, b.lines, px, style)
-            val maxW = (b.w * sw * 1.35f).coerceAtLeast(sw * 0.4f).coerceAtMost(sw * 0.92f).toInt()
-            v.minimumWidth = if (above || style.mode == "outline") 0 else (b.w * sw).toInt().coerceAtMost(maxW) + (px * 0.6f).toInt()
-            v.minimumHeight = if (above || style.mode == "outline") 0 else (b.h * sh).toInt() + (px * 0.3f).toInt()
+            fillBlock(v, b.lines, px, style, ar?.boxH ?: 1f)
+            val bw = ar?.boxW ?: 1f
+            val maxW = (b.w * sw * 1.35f * bw).coerceAtLeast(sw * 0.25f).coerceAtMost(sw * 0.95f).toInt()
+            v.minimumWidth = if (above || style.mode == "outline") 0 else ((b.w * sw * bw).toInt() + (px * 0.6f).toInt()).coerceAtMost(maxW)
+            v.minimumHeight = if (above || style.mode == "outline") 0 else ((b.h * sh).toInt() + (px * 0.3f).toInt()).let { (it * (ar?.boxH ?: 1f)).toInt() }
             v.measure(View.MeasureSpec.makeMeasureSpec(maxW, View.MeasureSpec.AT_MOST), View.MeasureSpec.UNSPECIFIED)
             val w = v.measuredWidth
             val h = v.measuredHeight
@@ -124,7 +129,52 @@ class OverlayRenderer(private val context: Context, private val layer: FrameLayo
             val top = if (above) (i.y * sh - gap - h) else ((i.y + i.h / 2f) * sh - h / 2f)
             pieces += Piece(key, v, Rect((cx - w / 2f).toInt(), top.toInt(), w, h), if (old) 0.6f else 1f)
         }
-        val rects = arrange(pieces.map { it.want }, pieces.map { false }, sw, sh, gap, fixed = if (sc.block != null) 1 else 0)
+        // Areas the player designed: one card per area (its lines together), placed by the area's own rule.
+        val fixedOwn = mutableListOf<Piece>()
+        val movableOwn = mutableListOf<Piece>()
+        for ((name, list) in own.groupBy { it.first.area!!.name.ifEmpty { it.first.text } }) {
+            val a = list.first().first.area!!
+            val its = list.map { it.first }
+            val ux = its.minOf { it.x }; val uy = its.minOf { it.y }
+            val ur = its.maxOf { it.x + it.w }; val ub = its.maxOf { it.y + it.h }
+            val lineH = its.map { it.h / it.lines.coerceAtLeast(1) }.sorted().let { it[it.size / 2] } * sh
+            val px = (lineH * 0.9f * style.fontScale * a.font).coerceIn(14f, 110f)
+            val key = "area:$name"
+            val v = (views[key] as? LinearLayout) ?: LinearLayout(context)
+            fillArea(v, list, a, px, style)
+            val baseW = (if (a.place == "custom") a.tw else ur - ux) * sw
+            val maxW = (baseW * a.boxW).coerceIn(sw * 0.1f, sw * 0.96f).toInt()
+            // Over the English: at least as wide as it, so it hides it; elsewhere as wide as the text needs.
+            v.minimumWidth = if (a.place == "over" && a.look != "subtitle") maxW else 0
+            v.measure(View.MeasureSpec.makeMeasureSpec(maxW, View.MeasureSpec.AT_MOST), View.MeasureSpec.UNSPECIFIED)
+            val w = v.measuredWidth
+            val h = v.measuredHeight
+            fun leftFor(l: Float, r: Float) = when (a.align) {
+                "right" -> r * sw - w
+                "left" -> l * sw
+                else -> (l + r) / 2f * sw - w / 2f
+            }
+            val r = when (a.place) {
+                "custom" -> {
+                    val top = when (a.valign) {
+                        "top" -> a.ty * sh
+                        "center" -> (a.ty + a.th / 2f) * sh - h / 2f
+                        else -> (a.ty + a.th) * sh - h
+                    }
+                    Rect(leftFor(a.tx, a.tx + a.tw).toInt(), top.toInt(), w, h)
+                }
+                "below" -> Rect(leftFor(ux, ur).toInt(), (ub * sh + gap).toInt(), w, h)
+                "above" -> Rect(leftFor(ux, ur).toInt(), (uy * sh - gap - h).toInt(), w, h)
+                else -> Rect(((ux + ur) / 2f * sw - w / 2f).toInt(), ((uy + ub) / 2f * sh - h / 2f).toInt(), w, h)
+            }
+            val alpha = if (list.all { it.second }) 0.6f else 1f
+            if (a.place == "custom") fixedOwn += Piece(key, v, r, alpha) else movableOwn += Piece(key, v, r, alpha)
+        }
+        // The subtitle block and hand-placed areas stay put; everything else makes way for them.
+        val blockPieces = pieces.take(if (sc.block != null) 1 else 0)
+        val ordered = blockPieces + fixedOwn + movableOwn + pieces.drop(blockPieces.size)
+        pieces.clear(); pieces += ordered
+        val rects = arrange(pieces.map { it.want }, pieces.map { false }, sw, sh, gap, fixed = blockPieces.size + fixedOwn.size)
 
         // History panel.
         if (style.historySide != "off" && history.items.isNotEmpty()) {
@@ -235,11 +285,67 @@ class OverlayRenderer(private val context: Context, private val layer: FrameLayo
         cornerRadius = if (style.mode == "native") 4f else px * 0.3f
     }
 
-    private fun fillBlock(v: LinearLayout, lines: List<Pair<SubItem, Boolean>>, px: Float, style: OverlayStyle) {
+    /** One designed area: its lines on its look ("card": dark with an accent edge; "box"; "subtitle": on the picture). */
+    private fun fillArea(v: LinearLayout, lines: List<Pair<SubItem, Boolean>>, a: AreaStyle, px: Float, style: OverlayStyle) {
+        v.removeAllViews()
+        v.orientation = LinearLayout.HORIZONTAL
+        v.layoutDirection = View.LAYOUT_DIRECTION_RTL
+        val look = if (a.look == "auto") (if (style.mode == "outline") "subtitle" else "box") else a.look
+        val padV = (px * 0.28f * a.boxH).toInt()
+        val padH = (px * 0.5f).toInt()
+        val first = lines.firstOrNull { !it.second }?.first ?: lines.first().first
+        val fg = when (look) {
+            "card" -> Color.WHITE
+            "subtitle" -> first.toneFg ?: Color.WHITE
+            else -> {
+                val p = a.bg ?: style.plateRgb
+                if ((0.2126 * Color.red(p) + 0.7152 * Color.green(p) + 0.0722 * Color.blue(p)) / 255 > 0.6) Color.rgb(18, 18, 23) else Color.WHITE
+            }
+        }
+        v.background = when (look) {
+            "card" -> GradientDrawable().apply {
+                val c = a.bg ?: Color.rgb(20, 22, 27)
+                setColor(Color.argb(232, Color.red(c), Color.green(c), Color.blue(c)))
+                cornerRadius = px * 0.22f
+                setStroke(1, Color.argb(60, 255, 255, 255))
+            }
+            "box" -> GradientDrawable().apply {
+                val p = a.bg ?: style.plateRgb
+                setColor(Color.argb((style.bgOpacity * 255).toInt(), Color.red(p), Color.green(p), Color.blue(p)))
+                cornerRadius = px * 0.3f
+            }
+            else -> null
+        }
+        // The accent edge sits on the reading side (right, for Arabic).
+        a.accent?.takeIf { look != "subtitle" }?.let { c ->
+            v.addView(View(context).apply { setBackgroundColor(c) }, LinearLayout.LayoutParams((px * 0.14f).toInt().coerceAtLeast(3), LinearLayout.LayoutParams.MATCH_PARENT))
+        }
+        val col = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(padH, padV, padH, padV)
+        }
+        val g = when (a.align) { "right" -> Gravity.RIGHT; "left" -> Gravity.LEFT; else -> Gravity.CENTER_HORIZONTAL }
+        for ((i, old) in lines) {
+            col.addView(TextView(context).apply {
+                setTextSize(TypedValue.COMPLEX_UNIT_PX, px)
+                textDirection = View.TEXT_DIRECTION_RTL
+                gravity = g
+                setLineSpacing(0f, 1.1f)
+                typeface = typeface(style.font)
+                text = line(i.text, i.speaker)
+                setTextColor(fg)
+                if (look == "subtitle") setShadowLayer(px * 0.16f, 0f, 0f, edge(fg))
+                alpha = if (old) 0.55f else 1f
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        }
+        v.addView(col, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+    }
+
+    private fun fillBlock(v: LinearLayout, lines: List<Pair<SubItem, Boolean>>, px: Float, style: OverlayStyle, boxH: Float = 1f) {
         v.removeAllViews()
         v.gravity = Gravity.CENTER
         v.background = background(style, lines.lastOrNull { !it.second }?.first ?: lines.lastOrNull()?.first, px)
-        v.setPadding((px * 0.5f).toInt(), (px * 0.18f).toInt(), (px * 0.5f).toInt(), (px * 0.18f).toInt())
+        v.setPadding((px * 0.5f).toInt(), (px * 0.18f * boxH).toInt(), (px * 0.5f).toInt(), (px * 0.18f * boxH).toInt())
         for ((i, old) in lines) {
             v.addView(TextView(context).apply {
                 base(px, style, i)

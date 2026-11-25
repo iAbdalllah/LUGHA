@@ -395,11 +395,24 @@ final class AppModel: ObservableObject {
             boxes = sub.items.map { CGRect(x: a.minX + $0.box.minX * a.width, y: a.minY + $0.box.minY * a.height,
                                            width: $0.box.width * a.width, height: $0.box.height * a.height) }
         } else { return [] }
+        // Picture rect → TV rect, the same way as the boxes above (for hand-placed translation areas).
+        let toTV: (CGRect) -> CGRect = { [gameRect, pictureArea] r in
+            if let g = gameRect, g.width > 0, g.height > 0 {
+                return CGRect(x: (r.minX - g.minX) / g.width, y: (r.minY - g.minY) / g.height, width: r.width / g.width, height: r.height / g.height)
+            }
+            if let a = pictureArea { return CGRect(x: a.minX + r.minX * a.width, y: a.minY + r.minY * a.height, width: r.width * a.width, height: r.height * a.height) }
+            return r
+        }
+        let areas = settings.readingAreas
         return zip(sub.items, boxes).filter { $0.0.box.width > 0 }.map { i, b in
-            TVSender.Item(text: i.text, speaker: i.speaker, x: b.minX, y: b.minY, w: b.width, h: b.height, lines: i.lines,
-                          background: i.background?.hex, foreground: i.foreground?.hex,
-                          toneText: (settings.displayMode == "above" ? i.toneAbove : i.toneOver)?.text.hex,
-                          toneShade: (settings.displayMode == "above" ? i.toneAbove : i.toneOver)?.shade)
+            let style = ReadingArea.owner(of: i.box, in: areas)?.tvStyle(toTV: toTV)
+            return TVSender.Item(text: i.text, speaker: i.speaker, x: b.minX, y: b.minY, w: b.width, h: b.height, lines: i.lines,
+                                 background: i.background?.hex, foreground: i.foreground?.hex,
+                                 toneText: (settings.displayMode == "above" ? i.toneAbove : i.toneOver)?.text.hex,
+                                 toneShade: (settings.displayMode == "above" ? i.toneAbove : i.toneOver)?.shade,
+                                 area: style.map { $0.mapValues { v -> any Sendable in
+                                     switch v { case let s as String: return s; case let d as Double: return d; case let f as CGFloat: return Double(f); default: return "\(v)" }
+                                 } })
         }
     }
 

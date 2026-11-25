@@ -206,6 +206,7 @@ public final class TVSender: @unchecked Sendable {
                 if let f = i.foreground { d["fg"] = f }
                 if let t = i.toneText { d["tone_fg"] = t }
                 if let t = i.toneShade { d["tone_shade"] = t }
+                if let a = i.area { d["area"] = a as [String: Any] }
                 return d
             }
         }
@@ -233,10 +234,13 @@ public final class TVSender: @unchecked Sendable {
         /// Readable text colour (#RRGGBB) and backdrop strength (0–1) for where the Arabic goes in the current display.
         public let toneText: String?
         public let toneShade: Double?
+        /// The player's design for the reading area this line came from (ReadingArea.tvStyle), or nil.
+        public let area: [String: any Sendable]?
         public init(text: String, speaker: String?, x: Double, y: Double, w: Double, h: Double, lines: Int, background: String? = nil, foreground: String? = nil,
-                    toneText: String? = nil, toneShade: Double? = nil) {
+                    toneText: String? = nil, toneShade: Double? = nil, area: [String: any Sendable]? = nil) {
             self.text = text; self.speaker = speaker; self.x = x; self.y = y; self.w = w; self.h = h; self.lines = lines
             self.background = background; self.foreground = foreground; self.toneText = toneText; self.toneShade = toneShade
+            self.area = area
         }
     }
 

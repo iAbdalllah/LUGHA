@@ -102,7 +102,81 @@ public struct ReadingArea: Codable, Equatable, Identifiable, Sendable {
     public var rect: CGRect
     public var enabled = true
 
+    // ---- How this area's translation looks and where it goes (sent to the TV; same keys on every app) ----
+    /// "auto" (the general rules), "over" / "below" / "above" the English, or "custom" = inside `translation`.
+    public var place = "auto"
+    /// Custom place: where the Arabic goes, as fractions of the picture.
+    public var translation = CGRect(x: 0.1, y: 0.76, width: 0.8, height: 0.06)
+    /// Inside the custom rect: "top", "center" or "bottom".
+    public var valign = "bottom"
+    /// "auto", "subtitle" (text on the picture), "box" (the general plate colour) or "card" (dark, with an accent edge).
+    public var look = "auto"
+    /// "center", "right" or "left".
+    public var align = "center"
+    /// Text size, box width and box height (padding), 1 = as the game's text.
+    public var font = 1.0
+    public var boxW = 1.0
+    public var boxH = 1.0
+    /// Accent edge colour (#RRGGBB) for "card"/"box", or nil.
+    public var accent: String?
+
     public init(name: String, rect: CGRect, enabled: Bool = true) { self.name = name; self.rect = rect; self.enabled = enabled }
+
+    enum CodingKeys: String, CodingKey { case id, name, rect, enabled, place, translation, valign, look, align, font, boxW, boxH, accent }
+
+    /// Areas saved before the design options existed still load (missing keys take the defaults).
+    public init(from d: Decoder) throws {
+        let c = try d.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        name = try c.decode(String.self, forKey: .name)
+        rect = try c.decode(CGRect.self, forKey: .rect)
+        enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+        place = try c.decodeIfPresent(String.self, forKey: .place) ?? "auto"
+        translation = try c.decodeIfPresent(CGRect.self, forKey: .translation) ?? CGRect(x: 0.1, y: 0.76, width: 0.8, height: 0.06)
+        valign = try c.decodeIfPresent(String.self, forKey: .valign) ?? "bottom"
+        look = try c.decodeIfPresent(String.self, forKey: .look) ?? "auto"
+        align = try c.decodeIfPresent(String.self, forKey: .align) ?? "center"
+        font = try c.decodeIfPresent(Double.self, forKey: .font) ?? 1
+        boxW = try c.decodeIfPresent(Double.self, forKey: .boxW) ?? 1
+        boxH = try c.decodeIfPresent(Double.self, forKey: .boxH) ?? 1
+        accent = try c.decodeIfPresent(String.self, forKey: .accent)
+    }
+
+    /// The design as the TV reads it (`area` on each sub.show item). `toTV` maps a picture rect to the TV screen.
+    public func tvStyle(toTV: (CGRect) -> CGRect) -> [String: Any] {
+        var d: [String: Any] = ["name": name, "place": place, "valign": valign, "look": look, "align": align,
+                                "font": font, "box_w": boxW, "box_h": boxH]
+        if place == "custom" {
+            let t = toTV(translation)
+            d["tx"] = t.minX; d["ty"] = t.minY; d["tw"] = t.width; d["th"] = t.height
+        }
+        if let accent { d["accent"] = accent }
+        return d
+    }
+
+    /// The area a line belongs to: the first enabled one holding its centre.
+    public static func owner(of box: CGRect, in areas: [ReadingArea]) -> ReadingArea? {
+        areas.first { $0.enabled && $0.rect.contains(CGPoint(x: box.midX, y: box.midY)) }
+    }
+
+    /// Ready-made sets: just the subtitles, the whole picture, or subtitles plus the two kinds of game hints.
+    public static func preset(_ kind: String) -> [ReadingArea] {
+        switch kind {
+        case "full":
+            return [ReadingArea(name: "Full screen", rect: CGRect(x: 0, y: 0, width: 1, height: 1))]
+        case "game":
+            var subs = ReadingArea(name: "Subtitles", rect: CGRect(x: 0.12, y: 0.78, width: 0.78, height: 0.11))
+            subs.boxH = 0.8
+            var left = ReadingArea(name: "Instructions (top left)", rect: CGRect(x: 0.01, y: 0.18, width: 0.30, height: 0.30))
+            left.place = "below"; left.look = "card"; left.align = "right"
+            var bottom = ReadingArea(name: "Instructions (bottom)", rect: CGRect(x: 0.20, y: 0.935, width: 0.60, height: 0.06))
+            bottom.place = "custom"; bottom.translation = CGRect(x: 0.10, y: 0.765, width: 0.80, height: 0.05)
+            bottom.look = "subtitle"; bottom.font = 0.92; bottom.accent = "#E85FA0"
+            return [subs, left, bottom]
+        default:
+            return [ReadingArea(name: "Subtitles", rect: CGRect(x: 0.08, y: 0.72, width: 0.84, height: 0.24))]
+        }
+    }
 
     /// The OCR lines to use: those whose centre is inside an enabled area (all of them when none is enabled).
     public static func keep(_ lines: [OCRLine], in areas: [ReadingArea]) -> [OCRLine] {
