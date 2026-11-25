@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:convert';
 import 'dart:io';
 
@@ -422,6 +423,7 @@ class AppState extends ChangeNotifier {
         _rpSub = null;
         tv?.clear();
       case RpText(:final lines):
+        _rpLast = e;
         _onSubtitleText(lines);
     }
     notifyListeners();
@@ -446,6 +448,9 @@ class AppState extends ChangeNotifier {
     _gate.feed(lines);
   }
 
+  /// The last recognized frame (lines with their areas and boxes), for sending each area's line to the TV.
+  RpText? _rpLast;
+
   /// Text that held for the "wait for stable text" time.
   void _onStableText(List<String> lines) {
     final text = lines.join(' ').trim();
@@ -453,6 +458,13 @@ class AppState extends ChangeNotifier {
     rpLastSource = text;
     notifyListeners();
     Hit? look(String q) => engine?.lookup(q);
+    // Reading areas with their positions: every area's text is matched on its own and goes to the TV with its design.
+    final ev = _rpLast;
+    final areas = display.areas.where((a) => a.enabled).toList();
+    if (ev != null && areas.isNotEmpty && ev.areas.length == lines.length && ev.boxes.length == lines.length && listEquals(ev.lines, lines)) {
+      _showByArea(ev, areas, look);
+      return;
+    }
     final f = findLine(text, look);
     if (f != null) {
       final target = f.counter == null ? f.hit.target : '${f.hit.target} ${f.counter}';
@@ -472,6 +484,46 @@ class AppState extends ChangeNotifier {
       return;
     }
     tv?.show(known.toSet().join('  ·  '));
+  }
+
+  void _showByArea(RpText ev, List<ReadingArea> areas, Hit? Function(String) look) {
+    final groups = <int, List<int>>{};
+    for (var n = 0; n < ev.lines.length; n++) {
+      groups.putIfAbsent(ev.areas[n], () => []).add(n);
+    }
+    final items = <Map<String, dynamic>>[];
+    final shown = <String>[];
+    for (final MapEntry(key: a, value: idx) in groups.entries) {
+      if (a < 0 || a >= areas.length) continue;
+      final area = areas[a];
+      final text = [for (final n in idx) ev.lines[n]].join(' ').trim();
+      String? target, speaker;
+      final f = findLine(text, look);
+      if (f != null) {
+        target = f.counter == null ? f.hit.target : '${f.hit.target} ${f.counter}';
+        speaker = f.hit.speaker ?? f.speaker;
+        history.insert(0, Line(text, target, speaker, DateTime.now(), entryId: f.hit.entryId, packageId: f.hit.packageId));
+        if (history.length > 50) history.removeLast();
+      } else {
+        // A list or a row of prompts: each line (or part between button icons) on its own.
+        final known = [
+          for (final n in idx.take(12))
+            for (final part in glyphParts(ev.lines[n]).length > 1 ? glyphParts(ev.lines[n]) : [ev.lines[n].trim()]) findLine(part, look),
+        ].whereType<Found<Hit>>().map((f) => f.counter == null ? f.hit.target : '${f.hit.target} ${f.counter}').toSet();
+        if (known.isEmpty) continue;
+        target = known.join('\n');
+      }
+      final bs = [for (final n in idx) ev.boxes[n]];
+      final x = bs.map((b) => b[0]).reduce(math.min), y = bs.map((b) => b[1]).reduce(math.min);
+      final r = bs.map((b) => b[0] + b[2]).reduce(math.max), b = bs.map((b) => b[1] + b[3]).reduce(math.max);
+      items.add({'text': target, 'speaker': ?speaker, 'x': x, 'y': y, 'w': r - x, 'h': b - y, 'lines': idx.length, 'area': area.tvStyle()});
+      shown.add(target);
+    }
+    if (items.isEmpty) {
+      tv?.clear();
+      return;
+    }
+    tv?.showItems(shown.join('\n'), items);
   }
 
   Future<void> sendTestLine() async {

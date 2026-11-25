@@ -3,20 +3,107 @@ import 'dart:async';
 /// How subtitles look and behave on the TV, and the reader's timing — the same options as the Mac and PC apps.
 /// A box to read from, as fractions of the picture (origin top-left). Only text inside enabled boxes is read.
 class ReadingArea {
-  const ReadingArea(this.name, this.x, this.y, this.w, this.h, {this.enabled = true});
+  const ReadingArea(this.name, this.x, this.y, this.w, this.h,
+      {this.enabled = true,
+      this.place = 'auto',
+      this.tx = 0.1,
+      this.ty = 0.76,
+      this.tw = 0.8,
+      this.th = 0.06,
+      this.valign = 'bottom',
+      this.look = 'auto',
+      this.align = 'center',
+      this.font = 1,
+      this.boxW = 1,
+      this.boxH = 1,
+      this.accent});
   final String name;
   final double x, y, w, h;
   final bool enabled;
 
-  ReadingArea copyWith({String? name, double? x, double? y, double? w, double? h, bool? enabled}) =>
-      ReadingArea(name ?? this.name, x ?? this.x, y ?? this.y, w ?? this.w, h ?? this.h, enabled: enabled ?? this.enabled);
+  // ---- How this area's translation looks and where it goes (sent to the TV; same keys on every app) ----
+  /// 'auto' (the general rules), 'over' / 'below' / 'above' the English, or 'custom' = inside tx, ty, tw, th.
+  final String place;
+  final double tx, ty, tw, th;
 
-  Map<String, dynamic> toJson() => {'name': name, 'x': x, 'y': y, 'w': w, 'h': h, 'enabled': enabled};
+  /// Inside the custom box: 'top', 'center' or 'bottom'.
+  final String valign;
+
+  /// 'auto', 'subtitle' (text on the picture), 'box' (the general plate colour) or 'card' (dark, accent edge).
+  final String look;
+
+  /// 'center', 'right' or 'left'.
+  final String align;
+
+  /// Text size, box width and box height (padding); 1 = like the game's text.
+  final double font, boxW, boxH;
+
+  /// Accent edge colour (#RRGGBB) or null.
+  final String? accent;
+
+  /// Drawn by its own rules on the TV (not the general subtitle block).
+  bool get designed => place != 'auto' || look != 'auto';
+
+  ReadingArea copyWith({String? name, double? x, double? y, double? w, double? h, bool? enabled, String? place, double? tx, double? ty, double? tw, double? th,
+          String? valign, String? look, String? align, double? font, double? boxW, double? boxH, String? accent, bool clearAccent = false}) =>
+      ReadingArea(name ?? this.name, x ?? this.x, y ?? this.y, w ?? this.w, h ?? this.h,
+          enabled: enabled ?? this.enabled,
+          place: place ?? this.place,
+          tx: tx ?? this.tx,
+          ty: ty ?? this.ty,
+          tw: tw ?? this.tw,
+          th: th ?? this.th,
+          valign: valign ?? this.valign,
+          look: look ?? this.look,
+          align: align ?? this.align,
+          font: font ?? this.font,
+          boxW: boxW ?? this.boxW,
+          boxH: boxH ?? this.boxH,
+          accent: clearAccent ? null : (accent ?? this.accent));
+
+  Map<String, dynamic> toJson() => {
+        'name': name, 'x': x, 'y': y, 'w': w, 'h': h, 'enabled': enabled, 'place': place, 'tx': tx, 'ty': ty, 'tw': tw, 'th': th,
+        'valign': valign, 'look': look, 'align': align, 'font': font, 'box_w': boxW, 'box_h': boxH, 'accent': ?accent,
+      };
+
+  /// The design as the TV reads it (`area` on a sub.show item).
+  Map<String, dynamic> tvStyle() => {
+        'name': name, 'place': place, 'valign': valign, 'look': look, 'align': align, 'font': font, 'box_w': boxW, 'box_h': boxH,
+        if (place == 'custom') ...{'tx': tx, 'ty': ty, 'tw': tw, 'th': th},
+        'accent': ?accent,
+      };
 
   static ReadingArea fromJson(Map<String, dynamic> j) {
     double f(String k, double d) => ((j[k] as num?)?.toDouble() ?? d).clamp(0.0, 1.0);
-    return ReadingArea(j['name'] as String? ?? '', f('x', 0.1), f('y', 0.8), f('w', 0.8), f('h', 0.12), enabled: j['enabled'] as bool? ?? true);
+    double g(String k, double d, double lo, double hi) => ((j[k] as num?)?.toDouble() ?? d).clamp(lo, hi);
+    String o(String k, Set<String> allowed, String d) => allowed.contains(j[k]) ? j[k] as String : d;
+    return ReadingArea(j['name'] as String? ?? '', f('x', 0.1), f('y', 0.8), f('w', 0.8), f('h', 0.12),
+        enabled: j['enabled'] as bool? ?? true,
+        place: o('place', {'auto', 'over', 'below', 'above', 'custom'}, 'auto'),
+        tx: f('tx', 0.1),
+        ty: f('ty', 0.76),
+        tw: f('tw', 0.8),
+        th: f('th', 0.06),
+        valign: o('valign', {'top', 'center', 'bottom'}, 'bottom'),
+        look: o('look', {'auto', 'subtitle', 'box', 'card'}, 'auto'),
+        align: o('align', {'center', 'right', 'left'}, 'center'),
+        font: g('font', 1, 0.4, 2.5),
+        boxW: g('box_w', 1, 0.3, 2.5),
+        boxH: g('box_h', 1, 0, 3),
+        accent: j['accent'] is String && RegExp(r'^#[0-9A-Fa-f]{6}$').hasMatch(j['accent'] as String) ? j['accent'] as String : null);
   }
+
+  /// Ready-made sets: just the subtitles, the whole picture, or subtitles plus the two kinds of game hints.
+  static List<ReadingArea> preset(String kind, String Function(String) t) => switch (kind) {
+        'full' => [ReadingArea(t('Full screen'), 0, 0, 1, 1)],
+        'game' => [
+            ReadingArea(t('Subtitles'), 0.12, 0.78, 0.78, 0.11, boxH: 0.8),
+            ReadingArea(t('Instructions (top left)'), 0.01, 0.18, 0.30, 0.30, place: 'below', look: 'card', align: 'right'),
+            ReadingArea(t('Instructions (bottom)'), 0.20, 0.935, 0.60, 0.06,
+                place: 'custom', tx: 0.10, ty: 0.765, tw: 0.80, th: 0.05, look: 'subtitle', font: 0.92, accent: '#E85FA0'),
+          ],
+        _ => [ReadingArea(t('Subtitles'), 0.08, 0.72, 0.84, 0.24)],
+      };
 }
 
 class DisplayPrefs {

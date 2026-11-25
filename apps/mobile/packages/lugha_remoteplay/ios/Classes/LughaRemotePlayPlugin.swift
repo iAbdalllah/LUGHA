@@ -218,19 +218,21 @@ final class RemoteSession {
         req.recognitionLanguages = ["en-US"]
         try? VNImageRequestHandler(cvPixelBuffer: frame, options: [:]).perform([req])
         let boxes = areas
-        let lines = (req.results ?? [])
-            .compactMap { o -> (CGFloat, String)? in
+        // Each line with the reading area it is in (index into the areas Dart sent) and where it is.
+        let found = (req.results ?? [])
+            .compactMap { o -> (text: String, area: Int, box: CGRect)? in
                 guard let text = o.topCandidates(1).first?.string, !text.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
                 // Vision's origin is bottom-left; the areas' is top-left.
-                let cx = o.boundingBox.midX, cy = 1 - o.boundingBox.midY
-                guard boxes.contains(where: { cx >= $0.x && cx <= $0.x + $0.w && cy >= $0.y && cy <= $0.y + $0.h }) else { return nil }
-                return (cy, text)
+                let b = CGRect(x: o.boundingBox.minX, y: 1 - o.boundingBox.maxY, width: o.boundingBox.width, height: o.boundingBox.height)
+                guard let n = boxes.firstIndex(where: { b.midX >= $0.x && b.midX <= $0.x + $0.w && b.midY >= $0.y && b.midY <= $0.y + $0.h }) else { return nil }
+                return (text, n, b)
             }
-            .sorted { $0.0 < $1.0 }
-            .map(\.1)
+            .sorted { $0.box.minY < $1.box.minY }
+        let lines = found.map(\.text)
         if lines != lastLines {
             lastLines = lines
-            plugin?.emit(["type": "text", "lines": lines])
+            plugin?.emit(["type": "text", "lines": lines, "areas": found.map(\.area),
+                          "boxes": found.map { [Double($0.box.minX), Double($0.box.minY), Double($0.box.width), Double($0.box.height)] }])
         }
     }
 

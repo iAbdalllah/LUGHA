@@ -178,6 +178,13 @@ class TvSender {
     }
   }
 
+  /// Placed pieces: each with where its English is (fractions of the picture) and its reading area's design.
+  /// [text] is what older TVs show.
+  void showItems(String text, List<Map<String, dynamic>> items, {String? speaker}) {
+    final id = _id++;
+    _send({'t': 'sub.show', 'id': id, 'sid': id, 'text': text, 'speaker': ?speaker, 'dir': 'rtl', 'ack': false, 'items': items});
+  }
+
   void clear() => _send({'t': 'sub.clear', 'id': _id++});
 
   /// Translation stopped: the TV empties the screen (no line kept for reading, no history).

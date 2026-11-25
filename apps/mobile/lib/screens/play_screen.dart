@@ -130,6 +130,9 @@ class _PictureAreasState extends State<_PictureAreas> {
   Timer? _timer;
   Offset? _start, _now;
 
+  /// What dragging draws: -1 = a new reading area; n = the translation box of area n.
+  int _target = -1;
+
   @override
   void initState() {
     super.initState();
@@ -177,13 +180,29 @@ class _PictureAreasState extends State<_PictureAreas> {
                 final x = a.dx < b.dx ? a.dx : b.dx, y = a.dy < b.dy ? a.dy : b.dy;
                 final w = (a.dx - b.dx).abs(), h = (a.dy - b.dy).abs();
                 if (w < 0.03 || h < 0.02) return;
-                widget.app.setDisplay(widget.app.display.copyWith(areas: [...areas, ReadingArea('${L.t('Area')} ${areas.length + 1}', x, y, w, h)]));
+                final t = _target;
+                if (t >= 0 && t < areas.length) {
+                  // The translation goes exactly here.
+                  widget.app.setDisplay(widget.app.display.copyWith(areas: [
+                    for (final (j, a) in areas.indexed) j == t ? a.copyWith(place: 'custom', tx: x, ty: y, tw: w, th: h) : a,
+                  ]));
+                } else {
+                  widget.app.setDisplay(widget.app.display.copyWith(areas: [...areas, ReadingArea('${L.t('Area')} ${areas.length + 1}', x, y, w, h)]));
+                }
               },
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(8),
                 child: Stack(fit: StackFit.expand, children: [
                   Image.memory(png, fit: BoxFit.fill, gaplessPlayback: true),
                   for (final a in areas) rect(a.x, a.y, a.w, a.h, a.name, on: a.enabled),
+                  for (final a in areas.where((a) => a.place == 'custom'))
+                    Positioned(
+                      left: a.tx * box.maxWidth, top: a.ty * box.maxHeight, width: a.tw * box.maxWidth, height: a.th * box.maxHeight,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(border: Border.all(color: Colors.pinkAccent, width: 2)),
+                        child: Align(alignment: AlignmentDirectional.bottomStart, child: Text('↳ ${a.name}', style: const TextStyle(color: Colors.pinkAccent, fontSize: 10))),
+                      ),
+                    ),
                   if (_start != null && _now != null)
                     rect(_start!.dx < _now!.dx ? _start!.dx : _now!.dx, _start!.dy < _now!.dy ? _start!.dy : _now!.dy, (_start!.dx - _now!.dx).abs(), (_start!.dy - _now!.dy).abs(), ''),
                 ]),
@@ -192,7 +211,96 @@ class _PictureAreasState extends State<_PictureAreas> {
           }),
         ),
         const SizedBox(height: 4),
+        DropdownButton<int>(
+          isExpanded: true,
+          value: _target < areas.length ? _target : -1,
+          items: [
+            DropdownMenuItem(value: -1, child: Text(L.t('Draw: a new reading area'))),
+            for (final (n, a) in areas.indexed) DropdownMenuItem(value: n, child: Text(L.t('Draw: where the translation of %s goes', a.name))),
+          ],
+          onChanged: (v) => setState(() => _target = v ?? -1),
+        ),
         Text(L.t('Drag on the picture to draw a box around the English subtitles. Only text inside the boxes is translated.'), style: Theme.of(context).textTheme.bodySmall),
+      ]),
+    );
+  }
+}
+
+/// One area's design: where its Arabic goes, its look and the size of its box (same options as the Mac and PC).
+class _AreaDesign extends StatelessWidget {
+  const _AreaDesign({required this.area, required this.onChanged});
+  final ReadingArea area;
+  final ValueChanged<ReadingArea> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final a = area;
+    Widget pick(String label, String value, List<(String, String)> options, ReadingArea Function(String) set) => Row(children: [
+          SizedBox(width: 110, child: Text(L.t(label))),
+          Expanded(
+            child: DropdownButton<String>(
+              isExpanded: true,
+              value: value,
+              items: [for (final (v, l) in options) DropdownMenuItem(value: v, child: Text(L.t(l)))],
+              onChanged: (v) => v == null ? null : onChanged(set(v)),
+            ),
+          ),
+        ]);
+    Widget slide(String label, double value, double min, double max, ReadingArea Function(double) set) => Row(children: [
+          SizedBox(width: 110, child: Text(L.t(label))),
+          Expanded(child: Slider(value: value.clamp(min, max), min: min, max: max, onChanged: (v) => onChanged(set(v)))),
+          SizedBox(width: 44, child: Text('${(value * 100).round()}%', textDirection: TextDirection.ltr)),
+        ]);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        pick('Translation', a.place, [
+          ('auto', 'Automatic'), ('over', 'Over the English'), ('below', 'Below the English box'), ('above', 'Above the English box'), ('custom', 'Custom place'),
+        ], (v) => a.copyWith(place: v)),
+        if (a.place == 'custom') ...[
+          Text(L.t('Draw the translation box on the PS5 picture, or type it (% of the picture):'), style: Theme.of(context).textTheme.bodySmall),
+          Wrap(spacing: 8, children: [
+            for (final (k, v, set) in <(String, double, ReadingArea Function(double))>[
+              ('X', a.tx, (n) => a.copyWith(tx: n)), ('Y', a.ty, (n) => a.copyWith(ty: n)), ('W', a.tw, (n) => a.copyWith(tw: n)), ('H', a.th, (n) => a.copyWith(th: n)),
+            ])
+              SizedBox(
+                width: 64,
+                child: TextFormField(
+                  key: ValueKey('t-$k-${a.name}-$v'),
+                  initialValue: (v * 100).toStringAsFixed(1),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  textDirection: TextDirection.ltr,
+                  decoration: InputDecoration(labelText: '$k %', isDense: true),
+                  onFieldSubmitted: (s) { final n = double.tryParse(s); if (n != null) onChanged(set((n / 100).clamp(0.0, 1.0))); },
+                ),
+              ),
+          ]),
+          pick('Text in the area', a.valign, [('top', 'Top'), ('center', 'Middle'), ('bottom', 'Bottom')], (v) => a.copyWith(valign: v)),
+        ],
+        pick('Look', a.look, [('auto', 'Automatic'), ('subtitle', 'Text on the picture'), ('box', 'Box'), ('card', 'Game-style card')], (v) => a.copyWith(look: v)),
+        pick('Alignment', a.align, [('right', 'Right'), ('center', 'Centre'), ('left', 'Left')], (v) => a.copyWith(align: v)),
+        slide('Text size', a.font, 0.5, 2, (v) => a.copyWith(font: v)),
+        slide('Box width', a.boxW, 0.3, 2, (v) => a.copyWith(boxW: v)),
+        slide('Box height', a.boxH, 0, 2.5, (v) => a.copyWith(boxH: v)),
+        Row(children: [
+          SizedBox(width: 110, child: Text(L.t('Accent edge'))),
+          for (final hex in <String?>[null, '#E9B44C', '#E85FA0', '#4FC3F7', '#7BD88F'])
+            Padding(
+              padding: const EdgeInsets.only(left: 6),
+              child: GestureDetector(
+                onTap: () => onChanged(hex == null ? a.copyWith(clearAccent: true) : a.copyWith(accent: hex)),
+                child: Container(
+                  width: 24, height: 24,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: hex == null ? Colors.transparent : Color(int.parse('FF${hex.substring(1)}', radix: 16)),
+                    border: Border.all(color: a.accent == hex ? Colors.white : Colors.white24, width: a.accent == hex ? 2.5 : 1),
+                  ),
+                  child: hex == null ? const Icon(Icons.block, size: 14, color: Colors.white38) : null,
+                ),
+              ),
+            ),
+        ]),
       ]),
     );
   }
@@ -249,14 +357,20 @@ class _AreasEditor extends StatelessWidget {
                 IconButton(icon: const Icon(Icons.delete_outline), onPressed: () => save([...areas]..removeAt(i))),
               ]),
             ),
-          Align(
-            alignment: AlignmentDirectional.centerStart,
-            child: TextButton.icon(
+          for (final (i, a) in areas.indexed)
+            ExpansionTile(
+              title: Text('${L.t('Design')}: ${a.name}', style: t.bodyMedium),
+              children: [_AreaDesign(area: a, onChanged: (b) => save([for (final (j, x) in areas.indexed) j == i ? b : x]))],
+            ),
+          Wrap(spacing: 8, children: [
+            TextButton.icon(
               icon: const Icon(Icons.add),
               label: Text(L.t('Add area')),
               onPressed: () => save([...areas, ReadingArea('${L.t('Area')} ${areas.length + 1}', 0.1, 0.8, 0.8, 0.12)]),
             ),
-          ),
+            for (final (k, label) in [('subtitles', 'Subtitles only'), ('full', 'Full screen'), ('game', 'Subtitles + instructions')])
+              OutlinedButton(onPressed: () => save(ReadingArea.preset(k, L.t)), child: Text(L.t(label))),
+          ]),
         ],
       ),
     );

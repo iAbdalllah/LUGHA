@@ -82,10 +82,14 @@ sealed class RpEvent {}
 /// The session is up and frames are being read.
 class RpConnected extends RpEvent {}
 
-/// Text recognized in the subtitle area of one frame, top to bottom (already de-duplicated: sent only on change).
+/// Text recognized in the reading areas of one frame, top to bottom (already de-duplicated: sent only on change).
+/// [areas]: for each line, the index of the area it is in (into the list given to [RemotePlay.start]/[setArea]);
+/// [boxes]: where each line is (x, y, w, h as fractions of the frame). Both empty on plugins that do not report them.
 class RpText extends RpEvent {
-  RpText(this.lines);
+  RpText(this.lines, {this.areas = const [], this.boxes = const []});
   final List<String> lines;
+  final List<int> areas;
+  final List<List<double>> boxes;
 }
 
 /// The PS5 asked for its login passcode (the account has one set): call [RemotePlay.setLoginPin].
@@ -119,7 +123,9 @@ class RemotePlay {
         final m = e as Map;
         return switch (m['type']) {
           'connected' => RpConnected(),
-          'text' => RpText((m['lines'] as List).cast<String>()),
+          'text' => RpText((m['lines'] as List).cast<String>(),
+              areas: [for (final a in (m['areas'] as List?) ?? const []) (a as num).toInt()],
+              boxes: [for (final b in (m['boxes'] as List?) ?? const []) [for (final v in b as List) (v as num).toDouble()]]),
           'pin' => RpPinRequest(m['incorrect'] == true),
           _ => RpStopped((m['reason'] as String?) ?? '', error: m['error'] == true),
         };
