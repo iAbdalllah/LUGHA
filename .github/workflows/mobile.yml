@@ -20,7 +20,7 @@ jobs:
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: "17" }
       - uses: subosito/flutter-action@v2
-        with: { channel: stable, cache: true }
+        with: { channel: stable, flutter-version: 3.44.4, cache: true } # the version the apps are built with locally
       - name: Engine for host tests + Android ABIs
         run: |
           cargo build --release -p lugha-ffi
@@ -54,7 +54,7 @@ jobs:
         with:
           workspaces: engine
       - uses: subosito/flutter-action@v2
-        with: { channel: stable, cache: true }
+        with: { channel: stable, flutter-version: 3.44.4, cache: true } # the version the apps are built with locally
       - run: SKIP_ANDROID=1 ./scripts/build-mobile.sh
         working-directory: engine
       - run: flutter pub get && flutter build ios --no-codesign
