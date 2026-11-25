@@ -29,6 +29,9 @@ add_library(lugha_libevent INTERFACE)
 target_link_libraries(lugha_libevent INTERFACE event_core_static event_extra_static)
 target_include_directories(lugha_libevent INTERFACE "${libevent_SOURCE_DIR}/include" "${libevent_BINARY_DIR}/include")
 add_library(PkgConfig::LIBEVENT ALIAS lugha_libevent)
+# No pkg-config: every dependency is built here, and chiaki's own pkg-config lookup of libevent would clash with the
+# target above. "OFF" (not *-NOTFOUND) keeps find_program from searching again.
+set(PKG_CONFIG_EXECUTABLE OFF CACHE FILEPATH "" FORCE)
 
 # protoc for chiaki's takion.proto (nanopb then needs Python with the `protobuf` module): the official prebuilt one.
 if(CMAKE_HOST_WIN32)
