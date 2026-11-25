@@ -25,8 +25,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive # chiaki-ng, for the PS5 source (engine/lugha-rp)
-      # lugha-rp builds chiaki-ng with CMake; its nanopb step needs Python's protobuf module.
-      - run: pip install protobuf
+      # lugha-rp builds chiaki-ng with CMake; its nanopb step needs Python with protobuf (grpcio-tools brings protoc).
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install protobuf grpcio-tools
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:

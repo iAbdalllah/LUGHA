@@ -51,6 +51,12 @@ FetchContent_Declare(protoc URL https://github.com/protocolbuffers/protobuf/rele
 FetchContent_MakeAvailable(protoc)
 find_program(PROTOC protoc PATHS "${protoc_SOURCE_DIR}/bin" NO_DEFAULT_PATH REQUIRED)
 
+# json-c cannot size ssize_t with MSVC (it has SSIZE_T); tell it, so its check is skipped.
+if(MSVC)
+    set(HAVE_SIZEOF_SSIZE_T TRUE CACHE INTERNAL "")
+    set(SIZEOF_SSIZE_T ${CMAKE_SIZEOF_VOID_P} CACHE INTERNAL "")
+endif()
+
 set(CHIAKI_ENABLE_TESTS OFF CACHE BOOL "" FORCE)
 set(CHIAKI_ENABLE_CLI OFF CACHE BOOL "" FORCE)
 set(CHIAKI_ENABLE_GUI OFF CACHE BOOL "" FORCE)
