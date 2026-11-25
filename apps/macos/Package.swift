@@ -26,6 +26,11 @@ let package = Package(
                 .linkedFramework("Security"),
                 .linkedFramework("Vision"),
                 .linkedFramework("ScreenCaptureKit"),
+                // PS5 Remote Play (chiaki-ng inside the engine; build it with: cargo build --release -p lugha-ffi --features remoteplay).
+                .linkedFramework("CoreServices"),
+                .linkedFramework("SystemConfiguration"),
+                .linkedFramework("VideoToolbox"),
+                .linkedFramework("CoreMedia"),
             ]
         ),
         .executableTarget(name: "LughaApp", dependencies: ["LughaKit"], path: "Sources/LughaApp"),

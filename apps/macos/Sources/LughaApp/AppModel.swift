@@ -62,6 +62,7 @@ final class AppModel: ObservableObject {
     private var ocrBusy = false
 
     init() {
+        loadPS5()
         settings.load()
         ArabicFonts.registerBundled()
         L.language = settings.interfaceLanguage
@@ -263,6 +264,7 @@ final class AppModel: ObservableObject {
     }
 
     func start() async {
+        if settings.usePS5 { return await startPS5() }
         guard CaptureService.hasPermission() || CaptureService.requestPermission() else {
             status = L.t("Screen Recording permission is needed to read subtitles.")
             return
@@ -301,6 +303,94 @@ final class AppModel: ObservableObject {
         }
     }
 
+    // MARK: PS5 direct (LUGHA's own Remote Play)
+
+    @Published var psnAccount: String?
+    @Published var ps5Link: PS5.Link?
+    @Published var ps5Consoles: [PS5.Console] = []
+    @Published var ps5Searching = false
+    /// "", "connecting", "connected", "pin", or why it stopped.
+    @Published var ps5State = ""
+    @Published var ps5Picture: CGImage?
+    private var ps5Session: PS5Session?
+
+    func loadPS5() {
+        psnAccount = keychain.get("psn_account")
+        ps5Link = keychain.get("ps5_link").flatMap { try? JSONDecoder().decode(PS5.Link.self, from: Data($0.utf8)) }
+    }
+
+    func psnSignedIn(_ accountID: String) {
+        try? keychain.set(accountID, for: "psn_account")
+        psnAccount = accountID
+    }
+
+    func findPS5() async {
+        ps5Searching = true
+        ps5Consoles = await PS5.discover()
+        ps5Searching = false
+    }
+
+    func linkPS5(host: String, name: String, ps5: Bool, pin: String) async {
+        guard let acc = psnAccount else { status = L.t("Sign in to PlayStation Network first."); return }
+        do {
+            let link = try await PS5.link(host: host, name: name, ps5: ps5, accountID: acc, pin: pin)
+            if let data = try? JSONEncoder().encode(link) { try? keychain.set(String(decoding: data, as: UTF8.self), for: "ps5_link") }
+            ps5Link = link
+            status = ""
+        } catch {
+            status = error.localizedDescription
+        }
+    }
+
+    func unlinkPS5() {
+        keychain.delete("ps5_link")
+        ps5Link = nil
+    }
+
+    func wakePS5() {
+        if let l = ps5Link { PS5.wake(l) }
+    }
+
+    func setPS5Pin(_ pin: String) { ps5Session?.setPin(pin) }
+
+    /// The newest PS5 picture, for drawing reading areas on it.
+    func refreshPS5Picture() { ps5Picture = ps5Session?.picture() }
+
+    private func startPS5() async {
+        guard let link = ps5Link else { status = L.t("Link your PS5 first."); return }
+        let s = PS5Session(onPicture: { [weak self] img in Task { @MainActor in await self?.process(img) } },
+                           onState: { [weak self] st in
+                               Task { @MainActor in
+                                   guard let self else { return }
+                                   switch st {
+                                   case .connecting: self.ps5State = "connecting"
+                                   case .connected: self.ps5State = "connected"
+                                   case .pin: self.ps5State = "pin"
+                                   case .ended(let why):
+                                       self.ps5State = why.isEmpty ? "" : why
+                                       if self.running { await self.stop() }
+                                   }
+                               }
+                           })
+        do {
+            try s.start(link)
+        } catch {
+            status = error.localizedDescription
+            return
+        }
+        ps5Session = s
+        captureWindow = nil
+        gameRect = nil
+        // The PS5 picture is the whole TV picture: reading areas and positions map 1:1.
+        pictureArea = CGRect(x: 0, y: 0, width: 1, height: 1)
+        pipeline.stableFor = settings.stableMs / 1000
+        pipeline.removeAfter = settings.goneAfterMs / 1000
+        running = true
+        status = ""
+        await pushStyleToTV()
+        startHeartbeat()
+    }
+
     // MARK: Window mode (PS Remote Play and the like)
 
     @Published var windows: [CaptureService.AppWindow] = []
@@ -315,6 +405,8 @@ final class AppModel: ObservableObject {
     }
 
     func setSource(_ bundleID: String?) async {
+        settings.usePS5 = bundleID == "__ps5__"
+        if settings.usePS5 { if running { await stop(); await start() }; return }
         settings.captureAppBundleID = bundleID
         if bundleID != nil, settings.windowArea == .zero { settings.windowArea = AppSettings.defaultWindowArea }
         if running { await stop(); await start() }
@@ -327,6 +419,9 @@ final class AppModel: ObservableObject {
     }
 
     func stop() async {
+        ps5Session?.stop()
+        ps5Session = nil
+        if ps5State == "connected" || ps5State == "connecting" { ps5State = "" }
         gameRect = nil
         heartbeat?.invalidate()
         heartbeat = nil

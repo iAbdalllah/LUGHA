@@ -31,6 +31,8 @@ public final class AppSettings: ObservableObject, @unchecked Sendable {
     @Published public var windowArea: CGRect = AppSettings.defaultWindowArea { didSet { d.set(NSStringFromRect(windowArea), forKey: "windowArea") } }
     /// Also draw subtitles on this Mac (off is typical in window mode: they go to the TV).
     @Published public var showOnMac: Bool = true { didSet { d.set(showOnMac, forKey: "showOnMac") } }
+    /// Read the game straight from the linked PS5 (LUGHA's own Remote Play) instead of the screen or a window.
+    @Published public var usePS5: Bool = false { didSet { d.set(usePS5, forKey: "usePS5") } }
 
     /// How the Arabic looks: "native" (the game's own colours, as if the game drew it), "box" (dark plate),
     /// "outline" (no plate, outlined text like film subtitles).
@@ -77,6 +79,7 @@ public final class AppSettings: ObservableObject, @unchecked Sendable {
         if let id = d.object(forKey: "displayID") as? UInt32 { displayID = id }
         if let l = d.string(forKey: "interfaceLanguage") { interfaceLanguage = l }
         captureAppBundleID = d.string(forKey: "captureAppBundleID")
+        usePS5 = d.bool(forKey: "usePS5")
         if let a = d.string(forKey: "windowArea") { windowArea = NSRectFromString(a) }
         if windowArea == Self.oldWholeWindowArea { windowArea = Self.wholeWindowArea }
         if d.object(forKey: "showOnMac") != nil { showOnMac = d.bool(forKey: "showOnMac") }

@@ -1,5 +1,6 @@
 import LughaKit
 import SwiftUI
+import WebKit
 
 struct MenuPanelView: View {
     @EnvironmentObject var app: AppModel
@@ -263,8 +264,9 @@ struct SourcePicker: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Picker(L.t("Read from"), selection: Binding(get: { settings.captureAppBundleID ?? "" },
+            Picker(L.t("Read from"), selection: Binding(get: { settings.usePS5 ? "__ps5__" : settings.captureAppBundleID ?? "" },
                                                        set: { v in Task { await app.setSource(v.isEmpty ? nil : v) } })) {
+                Text(L.t("PS5 direct (no Remote Play app)")).tag("__ps5__")
                 Text(L.t("An area of the screen")).tag("")
                 ForEach(app.windows) { w in
                     Text(CaptureService.isRemotePlay(w) ? "\(w.appName) ★" : w.appName).tag(w.bundleID)
@@ -274,7 +276,9 @@ struct SourcePicker: View {
                     Text(L.t("%@ (not open)", id)).tag(id)
                 }
             }
-            if settings.captureAppBundleID != nil {
+            if settings.usePS5 {
+                PS5Section(settings: settings)
+            } else if settings.captureAppBundleID != nil {
                 Picker(L.t("Area"), selection: Binding(
                     get: { settings.windowArea == AppSettings.wholeWindowArea ? 1 : settings.windowArea == AppSettings.defaultWindowArea ? 0 : 2 },
                     set: { v in Task { await app.setWindowArea(v == 1 ? AppSettings.wholeWindowArea : AppSettings.defaultWindowArea) } })) {
@@ -291,6 +295,189 @@ struct SourcePicker: View {
             }
         }
         .task { await app.refreshWindows() }
+    }
+}
+
+/// PS5 direct: sign in to PSN, link the console once with its code, then LUGHA opens its own Remote Play session; the
+/// live picture is shown here and reading areas (or where an area's translation goes) are drawn on it.
+struct PS5Section: View {
+    @EnvironmentObject var app: AppModel
+    @ObservedObject var settings: AppSettings
+    @State private var host = ""
+    @State private var pin = ""
+    @State private var loginPin = ""
+    @State private var picked: PS5.Console?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(L.t("LUGHA connects to the PS5 itself. Play on the TV with your controller as usual.")).font(.caption2).foregroundColor(.secondary)
+            HStack {
+                Image(systemName: app.psnAccount == nil ? "person.crop.circle" : "checkmark.circle.fill")
+                    .foregroundColor(app.psnAccount == nil ? .secondary : .green)
+                Text(app.psnAccount == nil ? L.t("PlayStation Network") : L.t("Signed in to PSN")).font(.caption)
+                Spacer()
+                Button(app.psnAccount == nil ? L.t("Sign in") : L.t("Change")) { PSNWindow.open(app: app) }.controlSize(.small)
+            }
+            if let link = app.ps5Link {
+                HStack {
+                    Circle().fill(app.ps5State == "connected" ? Color.green : Color.secondary).frame(width: 8, height: 8)
+                    Text("\(link.name) · \(link.host)").font(.caption).environment(\.layoutDirection, .leftToRight)
+                    Spacer()
+                    Button(L.t("Wake")) { app.wakePS5() }.controlSize(.small)
+                    Button(L.t("Unlink")) { app.unlinkPS5() }.controlSize(.small)
+                }
+                if !app.ps5State.isEmpty && !["connected", "connecting", "pin"].contains(app.ps5State) {
+                    Text(app.ps5State).font(.caption2).foregroundColor(.orange)
+                }
+                if app.ps5State == "connecting" { Text(L.t("Connecting to PS5…")).font(.caption2).foregroundColor(.secondary) }
+                if app.ps5State == "pin" {
+                    HStack {
+                        TextField(L.t("PS5 login passcode"), text: $loginPin).textFieldStyle(.roundedBorder)
+                        Button(L.t("Send")) { app.setPS5Pin(loginPin) }
+                    }
+                }
+                if app.running && app.ps5State == "connected" { PS5Picture(settings: settings) }
+                else { Text(L.t("Press Start: the PS5 picture shows here, and you can draw reading areas on it.")).font(.caption2).foregroundColor(.secondary) }
+            } else if app.psnAccount != nil {
+                HStack {
+                    Button(app.ps5Searching ? L.t("Searching…") : L.t("Find PS5")) { Task { await app.findPS5() } }.disabled(app.ps5Searching).controlSize(.small)
+                    TextField(L.t("or its address"), text: $host).textFieldStyle(.roundedBorder).environment(\.layoutDirection, .leftToRight)
+                }
+                ForEach(app.ps5Consoles) { c in
+                    Button("\(c.name) (\(c.host))\(c.ready ? "" : " · " + L.t("Resting"))") { picked = c; host = c.host }
+                        .buttonStyle(.link).font(.caption)
+                }
+                Text(L.t("On the PS5: Settings › System › Remote Play › Link Device. Enter the 8 digits it shows.")).font(.caption2).foregroundColor(.secondary)
+                HStack {
+                    TextField(L.t("Code from the PS5"), text: $pin).textFieldStyle(.roundedBorder).environment(\.layoutDirection, .leftToRight)
+                    Button(L.t("Link")) {
+                        let h = host.trimmingCharacters(in: .whitespaces)
+                        Task { await app.linkPS5(host: h, name: picked?.host == h ? picked!.name : "PS5", ps5: picked?.host == h ? picked!.ps5 : true, pin: pin) }
+                    }
+                    .disabled(host.isEmpty || pin.count < 8)
+                }
+            }
+        }
+    }
+}
+
+/// The live PS5 picture with the reading areas over it (amber) and hand-placed translation boxes (pink). Dragging
+/// draws a new reading area, or where the chosen area's translation goes.
+struct PS5Picture: View {
+    @EnvironmentObject var app: AppModel
+    @ObservedObject var settings: AppSettings
+    @State private var start: CGPoint?
+    @State private var now: CGPoint?
+    @State private var target = -1
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            TimelineView(.periodic(from: .now, by: 1.5)) { ctx in
+                GeometryReader { geo in
+                    let size = geo.size
+                    ZStack(alignment: .topLeading) {
+                        if let img = app.ps5Picture { Image(decorative: img, scale: 1).resizable() } else { Color.black }
+                        ForEach(settings.readingAreas) { a in
+                            box(a.rect, size, a.enabled ? Color.orange : Color.orange.opacity(0.4), a.name)
+                            if a.place == "custom" { box(a.translation, size, Color.pink, "↳ " + a.name) }
+                        }
+                        if let s = start, let n = now { box(rect(s, n), size, .white, "") }
+                    }
+                    .contentShape(Rectangle())
+                    .gesture(DragGesture(minimumDistance: 4)
+                        .onChanged { g in
+                            if start == nil { start = frac(g.startLocation, size) }
+                            now = frac(g.location, size)
+                        }
+                        .onEnded { _ in finish() })
+                    .onChange(of: ctx.date) { _, _ in app.refreshPS5Picture() }
+                }
+            }
+            .aspectRatio(16 / 9, contentMode: .fit)
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            Picker("", selection: $target) {
+                Text(L.t("Draw: a new reading area")).tag(-1)
+                ForEach(Array(settings.readingAreas.enumerated()), id: \.offset) { n, a in Text(L.t("Draw: where the translation of %@ goes", a.name)).tag(n) }
+            }
+            .labelsHidden()
+        }
+        .environment(\.layoutDirection, .leftToRight)
+    }
+
+    private func frac(_ p: CGPoint, _ s: CGSize) -> CGPoint { CGPoint(x: min(max(p.x / s.width, 0), 1), y: min(max(p.y / s.height, 0), 1)) }
+    private func rect(_ a: CGPoint, _ b: CGPoint) -> CGRect { CGRect(x: min(a.x, b.x), y: min(a.y, b.y), width: abs(a.x - b.x), height: abs(a.y - b.y)) }
+
+    private func box(_ r: CGRect, _ s: CGSize, _ c: Color, _ label: String) -> some View {
+        Rectangle().stroke(c, lineWidth: 2).background(c.opacity(0.1))
+            .overlay(alignment: .topLeading) { Text(label).font(.system(size: 9)).foregroundColor(c).padding(2) }
+            .frame(width: r.width * s.width, height: r.height * s.height)
+            .offset(x: r.minX * s.width, y: r.minY * s.height)
+    }
+
+    private func finish() {
+        defer { start = nil; now = nil }
+        guard let a = start, let b = now else { return }
+        let r = rect(a, b)
+        guard r.width > 0.03, r.height > 0.02 else { return }
+        if target >= 0, target < settings.readingAreas.count {
+            settings.readingAreas[target].place = "custom"
+            settings.readingAreas[target].translation = r
+        } else {
+            settings.readingAreas.append(ReadingArea(name: "\(L.t("Area")) \(settings.readingAreas.count + 1)", rect: r))
+        }
+        Task { await app.textOptionsChanged() }
+    }
+}
+
+/// Sony's sign-in page in its own window; closes itself once Sony hands back the code.
+enum PSNWindow {
+    @MainActor private static var window: NSWindow?
+
+    @MainActor static func open(app: AppModel) {
+        if let w = window { w.makeKeyAndOrderFront(nil); return }
+        let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 480, height: 700), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+        w.title = "PlayStation Network"
+        w.isReleasedWhenClosed = false
+        w.contentView = NSHostingView(rootView: PSNWebView { code in
+            Task { @MainActor in
+                window?.close()
+                window = nil
+                do { app.psnSignedIn(try await PSN.accountID(code: code)) } catch { app.status = error.localizedDescription }
+            }
+        })
+        w.center()
+        w.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        window = w
+    }
+}
+
+struct PSNWebView: NSViewRepresentable {
+    let onCode: (String) -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(onCode: onCode) }
+
+    func makeNSView(context: Context) -> WKWebView {
+        let v = WKWebView()
+        v.navigationDelegate = context.coordinator
+        v.load(URLRequest(url: PSN.authorizeURL))
+        return v
+    }
+
+    func updateNSView(_: WKWebView, context _: Context) {}
+
+    final class Coordinator: NSObject, WKNavigationDelegate {
+        let onCode: (String) -> Void
+        init(onCode: @escaping (String) -> Void) { self.onCode = onCode }
+
+        func webView(_: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void) {
+            if let url = action.request.url, let code = PSN.code(from: url) {
+                decisionHandler(.cancel)
+                onCode(code)
+                return
+            }
+            decisionHandler(.allow)
+        }
     }
 }
 

@@ -6,7 +6,8 @@ HERE="$(cd "$(dirname "$0")/.." && pwd)"
 ENGINE="$HERE/../../engine"
 VERSION="${VERSION:-0.1.0}"
 
-(cd "$ENGINE" && cargo build --release -p lugha-ffi)
+# With PS5 Remote Play (chiaki-ng, built with CMake; needs Python with protobuf).
+(cd "$ENGINE" && cargo build --release -p lugha-ffi --features remoteplay)
 (cd "$HERE" && swift build -c release --product LughaApp)
 
 APP="$HERE/build/LUGHA.app"
@@ -33,6 +34,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleDevelopmentRegion</key><string>ar</string>
   <key>CFBundleLocalizations</key><array><string>ar</string><string>en</string></array>
   <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
+  <key>NSLocalNetworkUsageDescription</key><string>LUGHA connects to your PS5 and your LUGHA TV on this network.</string>
 </dict>
 </plist>
 PLIST

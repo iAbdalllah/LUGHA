@@ -11,11 +11,16 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive # chiaki-ng: PS5 Remote Play is built into the engine
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install protobuf grpcio-tools
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: engine
-      - run: cargo build --release -p lugha-ffi -p lugha-pkg
+      - run: cargo build --release -p lugha-ffi -p lugha-pkg --features lugha-ffi/remoteplay
         working-directory: engine
       - run: swift test
         working-directory: apps/macos
