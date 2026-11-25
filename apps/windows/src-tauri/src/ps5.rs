@@ -91,8 +91,9 @@ pub fn ps5_status(core: tauri::State<'_, Shared>, ps5: tauri::State<'_, Ps5>) ->
 }
 
 /// Opens Sony's sign-in page; when Sony redirects back, the account id is fetched and saved. The UI hears
-/// "psn-signed-in" (ok) or "psn-error" (message).
-#[tauri::command]
+/// "psn-signed-in" (ok) or "psn-error" (message). Async on purpose: a window built from a synchronous command
+/// (the main thread) stays blank on Windows (WebView2 deadlock).
+#[tauri::command(async)]
 pub fn psn_sign_in(app: tauri::AppHandle) -> Cmd<()> {
     if let Some(w) = app.get_webview_window("psn") {
         let _ = w.set_focus();
