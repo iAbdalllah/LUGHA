@@ -10,6 +10,35 @@ use serde_json::json;
 
 use crate::{err, out, s};
 
+/// The last chiaki log lines (warnings and errors, plus LUGHA's own notes), for showing why something failed.
+static LOG: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+fn log_once() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        lugha_rp::set_log(|level, m| {
+            if level >= 4 {
+                let mut l = LOG.lock().unwrap();
+                l.push(m.to_string());
+                let n = l.len();
+                if n > 40 { l.drain(..n - 40); }
+            }
+        })
+    });
+}
+
+fn note(m: impl Into<String>) {
+    let mut l = LOG.lock().unwrap();
+    l.push(m.into());
+}
+
+/// Recent warnings and errors from Remote Play, newest last, one per line.
+#[no_mangle]
+pub extern "C" fn lugha_rpx_log() -> *mut c_char {
+    let l = LOG.lock().unwrap();
+    std::ffi::CString::new(l.join("\n")).map(std::ffi::CString::into_raw).unwrap_or(std::ptr::null_mut())
+}
+
 fn b64(b: &[u8]) -> String {
     base64::engine::general_purpose::STANDARD.encode(b)
 }
@@ -21,6 +50,7 @@ fn unb64_16(v: &str) -> Option<[u8; 16]> {
 /// Consoles on the local network within `timeout_ms`: `[{"host","name","ps5","ready","app","id"}]`.
 #[no_mangle]
 pub extern "C" fn lugha_rpx_discover(timeout_ms: u32) -> *mut c_char {
+    log_once();
     let found: Arc<std::sync::Mutex<Vec<lugha_rp::Console>>> = Arc::default();
     let f = found.clone();
     let d = match lugha_rp::Discovery::start(move |list| *f.lock().unwrap() = list) {
@@ -40,6 +70,7 @@ pub extern "C" fn lugha_rpx_discover(timeout_ms: u32) -> *mut c_char {
 /// Returns `{"ok":true,"regist_key","rp_key","nickname","mac"}` (keys base64) or `{"ok":false,"error"}`.
 #[no_mangle]
 pub unsafe extern "C" fn lugha_rpx_register(host: *const c_char, account_id: *const c_char, pin: u32, ps5: bool) -> *mut c_char {
+    log_once();
     let (Some(host), Some(acc)) = (s(host), s(account_id)) else { return err("missing argument") };
     let id = match lugha_rp::account_id(acc) {
         Ok(i) => i,
@@ -84,8 +115,15 @@ pub unsafe extern "C" fn lugha_rpx_start(
     state: StateCb,
     ctx: *mut c_void,
 ) -> *mut LughaRpSession {
-    let (Some(host), Some(k), Some(m)) = (s(host), s(regist_key_b64), s(rp_key_b64)) else { return std::ptr::null_mut() };
-    let (Some(key), Some(morning)) = (unb64_16(k), unb64_16(m)) else { return std::ptr::null_mut() };
+    log_once();
+    let (Some(host), Some(k), Some(m)) = (s(host), s(regist_key_b64), s(rp_key_b64)) else {
+        note("LUGHA: start without host or keys");
+        return std::ptr::null_mut();
+    };
+    let (Some(key), Some(morning)) = (unb64_16(k), unb64_16(m)) else {
+        note(format!("LUGHA: registration keys are not 16 bytes (regist {} chars, rp {} chars)", k.len(), m.len()));
+        return std::ptr::null_mut();
+    };
     let opts = lugha_rp::Options {
         host: host.to_string(),
         ps5,
@@ -111,7 +149,10 @@ pub unsafe extern "C" fn lugha_rpx_start(
     );
     match session {
         Ok(s) => Box::into_raw(Box::new(LughaRpSession(s))),
-        Err(_) => std::ptr::null_mut(),
+        Err(e) => {
+            note(format!("LUGHA: Remote Play did not start: {e}"));
+            std::ptr::null_mut()
+        }
     }
 }
 

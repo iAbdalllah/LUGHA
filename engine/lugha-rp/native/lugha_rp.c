@@ -353,13 +353,17 @@ void *lugha_rp_session_start(const char *host, const uint8_t regist_key[16], con
     info.packet_loss_max = 0.05;
     info.enable_idr_on_fec_failure = true;
 
-    if (chiaki_session_init(&s->session, &info, &g_log) != CHIAKI_ERR_SUCCESS) {
+    ChiakiErrorCode err = chiaki_session_init(&s->session, &info, &g_log);
+    if (err != CHIAKI_ERR_SUCCESS) {
+        CHIAKI_LOGE(&g_log, "LUGHA: session init for %s failed: %s", s->host, chiaki_error_string(err));
         free(s);
         return NULL;
     }
     chiaki_session_set_event_cb(&s->session, on_event, s);
     chiaki_session_set_video_sample_cb(&s->session, on_video, s);
-    if (chiaki_session_start(&s->session) != CHIAKI_ERR_SUCCESS) {
+    err = chiaki_session_start(&s->session);
+    if (err != CHIAKI_ERR_SUCCESS) {
+        CHIAKI_LOGE(&g_log, "LUGHA: session start for %s failed: %s", s->host, chiaki_error_string(err));
         chiaki_session_fini(&s->session);
         free(s);
         return NULL;

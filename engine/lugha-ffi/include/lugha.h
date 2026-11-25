@@ -65,6 +65,8 @@ LughaRpSession *lugha_rpx_start(const char *host, bool ps5, const char *regist_k
 void lugha_rpx_request_keyframe(LughaRpSession *session);
 void lugha_rpx_set_pin(LughaRpSession *session, const char *pin);
 void lugha_rpx_stop(LughaRpSession *session);
+/* Recent Remote Play warnings and errors, one per line (free with lugha_string_free). */
+char *lugha_rpx_log(void);
 
 #ifdef __cplusplus
 }

@@ -26,6 +26,14 @@ import VideoToolbox
 @_silgen_name("lugha_rpx_set_pin") private func rpx_set_pin(_ s: OpaquePointer, _ pin: UnsafePointer<CChar>)
 @_silgen_name("lugha_rpx_stop") private func rpx_stop(_ s: OpaquePointer)
 @_silgen_name("lugha_string_free") private func lugha_string_free(_ s: UnsafeMutablePointer<CChar>?)
+@_silgen_name("lugha_rpx_log") private func rpx_log() -> UnsafeMutablePointer<CChar>?
+
+/// The last few Remote Play warnings/errors, to show why something failed.
+func remotePlayLog(lines: Int = 3) -> String {
+    guard let p = rpx_log() else { return "" }
+    defer { lugha_string_free(p) }
+    return String(cString: p).split(separator: "\n").suffix(lines).joined(separator: "\n")
+}
 
 private func takeJSON(_ p: UnsafeMutablePointer<CChar>?) -> Any? {
     guard let p else { return nil }
@@ -75,7 +83,8 @@ public class LughaRemotePlayPlugin: NSObject, FlutterPlugin, FlutterStreamHandle
                 if r["ok"] as? Bool == true {
                     done(["host": host, "ps5": ps5, "nickname": r["nickname"] ?? "PS5", "regist_key": r["regist_key"] ?? "", "rp_key": r["rp_key"] ?? "", "mac": r["mac"] ?? ""])
                 } else {
-                    done(FlutterError(code: "register", message: r["error"] as? String ?? "registration failed", details: nil))
+                    let why = remotePlayLog()
+                    done(FlutterError(code: "register", message: (r["error"] as? String ?? "registration failed") + (why.isEmpty ? "" : "\n" + why), details: nil))
                 }
             }
         case "wakeup":
@@ -89,7 +98,8 @@ public class LughaRemotePlayPlugin: NSObject, FlutterPlugin, FlutterStreamHandle
             session?.stop()
             let s = RemoteSession(plugin: self, areas: Self.areas(a), fps: max(1, (a["fps"] as? Int) ?? 4))
             guard s.start(host: host, ps5: a["ps5"] as? Bool ?? true, key: key, rpKey: rpKey) else {
-                return result(FlutterError(code: "start", message: "could not open Remote Play", details: nil))
+                let why = remotePlayLog()
+                return result(FlutterError(code: "start", message: "could not open Remote Play (\(host))" + (why.isEmpty ? "" : "\n" + why), details: nil))
             }
             session = s
             UIApplication.shared.isIdleTimerDisabled = true // the phone must stay awake while LUGHA reads the PS5
@@ -165,7 +175,10 @@ final class RemoteSession {
             switch state {
             case 1: me.plugin?.emit(["type": "connected"])
             case 3: me.plugin?.emit(["type": "pin", "incorrect": why == "incorrect"])
-            default: me.plugin?.emit(["type": "stopped", "reason": why, "error": !why.isEmpty && !why.lowercased().contains("stopped")])
+            default:
+                let error = !why.isEmpty && !why.lowercased().contains("stopped")
+                let detail = error ? remotePlayLog() : ""
+                me.plugin?.emit(["type": "stopped", "reason": why + (detail.isEmpty ? "" : "\n" + detail), "error": error])
             }
         }, ctx)
         guard handle != nil else { return false }
