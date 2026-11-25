@@ -1,0 +1,21 @@
+[package]
+name = "lugha-rp"
+description = "LUGHA Remote Play: find a PS5/PS4, register with it, and read its picture (chiaki-ng, LAN only)"
+version.workspace = true
+edition.workspace = true
+license = "AGPL-3.0-only"
+publish.workspace = true
+links = "lugha_rp"
+
+[dependencies]
+openh264 = "0.6"
+base64.workspace = true
+thiserror.workspace = true
+serde_json.workspace = true
+ureq = { version = "2", features = ["json"] }
+
+[build-dependencies]
+cmake = "0.1"
+
+[dev-dependencies]
+png = "0.17"
