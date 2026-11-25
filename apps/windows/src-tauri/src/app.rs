@@ -76,6 +76,9 @@ pub struct Settings {
     pub display: Display,
     /// Reading areas: only text inside the enabled ones is read (empty = the whole capture).
     pub areas: Vec<Area>,
+    /// Read the game straight from the linked PS5 (LUGHA's own Remote Play) instead of the screen or a window.
+    pub use_ps5: bool,
+    pub ps5: Option<crate::ps5::Console>,
 }
 
 /// A box to read from, as fractions (x, y, w, h) of the captured picture, origin top-left.
@@ -136,6 +139,8 @@ impl Default for Settings {
             window_area: (0.08, 0.70, 0.84, 0.26),
             show_on_pc: true,
             display: Display::default(),
+            use_ps5: false,
+            ps5: None,
             areas: vec![],
         }
     }
@@ -150,7 +155,7 @@ impl Settings {
         }
         s
     }
-    fn save(&self) {
+    pub(crate) fn save(&self) {
         let _ = std::fs::write(data_dir().join("settings.json"), serde_json::to_vec_pretty(self).unwrap_or_default());
     }
 }
@@ -185,7 +190,7 @@ fn default_region() -> Region {
 // ---------- state ----------
 
 pub struct Core {
-    settings: Settings,
+    pub(crate) settings: Settings,
     api: Api,
     user: Option<String>,
     device: DeviceKeys,
@@ -201,6 +206,23 @@ pub struct Core {
 }
 
 type Shared = Arc<Mutex<Core>>;
+pub type SharedCore = Shared;
+
+pub(crate) fn with_core<R>(s: &Shared, f: impl FnOnce(&mut Core) -> R) -> R {
+    f(&mut s.lock().unwrap_or_else(|p| p.into_inner()))
+}
+
+pub(crate) fn vault_get(key: &str) -> Option<String> {
+    vault::get(key)
+}
+
+pub(crate) fn vault_set(key: &str, value: &str) -> Result<(), String> {
+    vault::set(key, value).map_err(|e| e.to_string())
+}
+
+pub(crate) fn vault_delete(key: &str) {
+    vault::delete(key)
+}
 
 #[derive(Default)]
 struct Capture {
@@ -317,6 +339,7 @@ pub struct Status {
     last_error: Option<String>,
     display: Display,
     areas: Vec<Area>,
+    use_ps5: bool,
 }
 
 #[derive(Serialize)]
@@ -374,6 +397,7 @@ fn status(core: tauri::State<'_, Shared>, cap: tauri::State<'_, Capture>) -> Cmd
         show_on_pc: c.settings.show_on_pc,
         display: c.settings.display.clone(),
         areas: c.settings.areas.clone(),
+        use_ps5: c.settings.use_ps5,
         windows: cfg!(windows),
         last_error: c.last_error.take(),
     })
@@ -512,6 +536,22 @@ fn set_areas(core: tauri::State<'_, Shared>, areas: Vec<Area>) -> Cmd<()> {
 }
 
 /// The overlay page loaded: send it where the subtitle area is and the display options.
+/// Choose the PS5 (LUGHA's own Remote Play) as the source, or go back to the screen/window.
+#[tauri::command(async)]
+fn set_use_ps5(core: tauri::State<'_, Shared>, ps5: tauri::State<'_, crate::ps5::Ps5>, on: bool) -> Cmd<()> {
+    let mut c = lock(&core);
+    if on && c.settings.ps5.is_none() {
+        return Err("اربط جهاز PS5 أولاً.".into());
+    }
+    c.settings.use_ps5 = on;
+    c.settings.save();
+    drop(c);
+    if !on {
+        crate::ps5::disconnect(&ps5);
+    }
+    Ok(())
+}
+
 #[tauri::command(async)]
 fn overlay_ready(app: tauri::AppHandle, core: tauri::State<'_, Shared>) -> Cmd<()> {
     let r = lock(&core).settings.region.unwrap_or_else(default_region);
@@ -659,12 +699,18 @@ fn start_capture(app: tauri::AppHandle, core: tauri::State<'_, Shared>, cap: tau
     if cap.running.swap(true, Ordering::SeqCst) {
         return Ok(());
     }
-    let (region, show_on_pc, window_mode) = {
+    let (region, show_on_pc, window_mode, use_ps5) = {
         let c = lock(&core);
-        (c.settings.region.unwrap_or_else(default_region), c.settings.show_on_pc, c.settings.capture_window.is_some())
+        (c.settings.region.unwrap_or_else(default_region), c.settings.show_on_pc, c.settings.capture_window.is_some(), c.settings.use_ps5)
     };
-    // Window mode with "show on this PC" off: subtitles go only to the TV.
-    if !window_mode || show_on_pc {
+    if use_ps5 {
+        // The game is on the TV: read the PS5's picture through LUGHA's own Remote Play session.
+        if let Err(e) = crate::ps5::connect(&app, core.inner(), &app.state::<crate::ps5::Ps5>()) {
+            cap.running.store(false, Ordering::SeqCst);
+            return Err(e);
+        }
+    } else if !window_mode || show_on_pc {
+        // Window mode with "show on this PC" off: subtitles go only to the TV.
         place_overlay(&app, region);
         if let Some(w) = app.get_webview_window("overlay") {
             let _ = w.show();
@@ -679,6 +725,8 @@ fn start_capture(app: tauri::AppHandle, core: tauri::State<'_, Shared>, cap: tau
 #[tauri::command(async)]
 fn stop_capture(app: tauri::AppHandle, cap: tauri::State<'_, Capture>) -> Cmd<()> {
     cap.running.store(false, Ordering::SeqCst);
+    // Free the console for other Remote Play apps.
+    crate::ps5::disconnect(&app.state::<crate::ps5::Ps5>());
     if let Some(w) = app.get_webview_window("overlay") {
         let _ = w.hide();
     }
@@ -700,11 +748,13 @@ fn capture_loop(app: tauri::AppHandle, shared: Shared, running: Arc<AtomicBool>)
     let mut pipeline = Pipeline::default();
     while running.load(Ordering::SeqCst) {
         let t0 = Instant::now();
-        let (region, interval, window, area) = {
+        let (region, interval, window, area, use_ps5) = {
             let c = shared.lock().unwrap_or_else(|p| p.into_inner());
-            (c.settings.region.unwrap_or_else(default_region), c.settings.interval_ms, c.settings.capture_window.clone(), c.settings.window_area)
+            (c.settings.region.unwrap_or_else(default_region), c.settings.interval_ms, c.settings.capture_window.clone(), c.settings.window_area, c.settings.use_ps5)
         };
-        let frame = match window {
+        let frame = if use_ps5 {
+            app.state::<crate::ps5::Ps5>().frame_bgra().map(|(width, height, bgra)| crate::capture::Frame { width, height, bgra })
+        } else { match window {
             // Window mode: the window may be behind others while the game is played on the TV.
             Some(title) => match crate::capture::find_window(&title) {
                 Some(hwnd) => crate::capture::capture_window(hwnd, area).ok(),
@@ -715,7 +765,7 @@ fn capture_loop(app: tauri::AppHandle, shared: Shared, running: Arc<AtomicBool>)
                 }
             },
             None => crate::capture::capture(region.into()).ok(),
-        };
+        } };
         let areas: Vec<Area> = shared.lock().map(|c| c.settings.areas.iter().filter(|a| a.enabled).cloned().collect()).unwrap_or_default();
         // Where the Arabic goes in "above" mode is just above the text: sample the top band of the (first) area.
         let mut tone = None;
@@ -813,6 +863,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage::<Shared>(Arc::new(Mutex::new(Core::new())))
         .manage(Capture::default())
+        .manage(crate::ps5::Ps5::default())
         .setup(|app| {
             if let Some(overlay) = app.get_webview_window("overlay") {
                 let _ = overlay.set_ignore_cursor_events(true);
@@ -861,7 +912,18 @@ pub fn run() {
             tv_test,
             tv_forget,
             start_capture,
-            stop_capture
+            stop_capture,
+            set_use_ps5,
+            crate::ps5::ps5_status,
+            crate::ps5::psn_sign_in,
+            crate::ps5::ps5_find,
+            crate::ps5::ps5_link,
+            crate::ps5::ps5_connect,
+            crate::ps5::ps5_disconnect,
+            crate::ps5::ps5_set_pin,
+            crate::ps5::ps5_wake,
+            crate::ps5::ps5_forget,
+            crate::ps5::ps5_picture
         ])
         .run(tauri::generate_context!())
         .expect("LUGHA failed to start");

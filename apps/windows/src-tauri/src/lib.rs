@@ -17,3 +17,5 @@ pub mod secrets;
 
 #[cfg(feature = "app")]
 pub mod app;
+#[cfg(feature = "app")]
+pub mod ps5;

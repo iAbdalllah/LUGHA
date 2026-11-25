@@ -75,6 +75,34 @@
         <div class="row"><button id="window-save">حفظ</button></div>
       </div>
     </div>
+    <div class="card" id="ps5-card" hidden>
+      <h2>PS5 مباشرة</h2>
+      <p class="muted">لغة تتصل بجهاز PS5 بنفسها، فلا تحتاج تطبيق PS Remote Play. تلعب على التلفاز بيد التحكم كالعادة، ولغة تقرأ الصورة فقط.</p>
+      <div id="ps5-setup">
+        <div class="step"><b>١. حساب PlayStation</b>
+          <p class="muted">تسجّل الدخول في صفحة Sony نفسها؛ لغة لا ترى كلمة المرور.</p>
+          <div class="row"><button id="psn-btn">تسجيل الدخول إلى PlayStation Network</button><span id="psn-state" class="muted"></span></div>
+        </div>
+        <div class="step"><b>٢. جهازك</b>
+          <p class="muted">شغّل PS5 واجعله على نفس شبكة الواي فاي.</p>
+          <div class="row"><button id="ps5-find" class="ghost">ابحث عن PS5</button><label>أو العنوان<input id="ps5-host" dir="ltr" placeholder="192.168.1.20"></label></div>
+          <div id="ps5-list"></div>
+        </div>
+        <div class="step"><b>٣. الربط</b>
+          <p class="muted">على PS5: الإعدادات ← النظام ← التشغيل عن بُعد ← ربط جهاز. اكتب الرمز الذي يظهر (٨ أرقام).</p>
+          <div class="row"><label>الرمز<input id="ps5-pin" dir="ltr" inputmode="numeric" maxlength="9" placeholder="12345678"></label><button id="ps5-link" class="primary">ربط</button></div>
+        </div>
+      </div>
+      <div id="ps5-linked" hidden>
+        <p><span class="dot" id="ps5-dot"></span> <b id="ps5-name"></b> <span class="muted" dir="ltr" id="ps5-addr"></span> · <span id="ps5-conn"></span></p>
+        <div class="row">
+          <button id="ps5-connect">عرض الصورة</button><button id="ps5-disconnect" class="ghost">قطع الاتصال</button>
+          <button id="ps5-wake" class="ghost">إيقاظ الجهاز</button><button id="ps5-forget" class="link">إلغاء الربط</button>
+        </div>
+        <div class="shot" id="ps5-shot" hidden><img id="ps5-img" alt=""><div id="ps5-boxes"></div></div>
+        <p class="muted" id="ps5-hint" hidden>اسحب على الصورة لرسم مربع حول مكان الترجمة الإنجليزية، ثم اضغط «حفظ» في «مناطق القراءة».</p>
+      </div>
+    </div>
     <div class="card" id="region-card">
       <h2>منطقة الالتقاط</h2>
       <p class="muted">المنطقة التي تظهر فيها ترجمة اللعبة الإنجليزية (بالبكسل على الشاشة الرئيسية).</p>

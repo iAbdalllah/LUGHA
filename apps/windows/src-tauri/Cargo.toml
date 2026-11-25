@@ -18,7 +18,7 @@ required-features = ["app"]
 [features]
 # The Tauri shell. Off for headless tests of the core (API, sync, pipeline, TV link) on any OS.
 default = ["app"]
-app = ["dep:tauri", "dep:tauri-build"]
+app = ["dep:tauri", "dep:tauri-build", "dep:lugha-rp", "dep:png"]
 
 [dependencies]
 lugha-core = { path = "../../../engine/lugha-core" }
@@ -32,6 +32,9 @@ base64 = "0.22"
 thiserror = "1"
 dirs = "5"
 tauri = { version = "2", features = [], optional = true }
+# LUGHA's own Remote Play (PS5 as the game source). AGPL-3.0 (chiaki-ng).
+lugha-rp = { path = "../../../engine/lugha-rp", optional = true }
+png = { version = "0.17", optional = true }
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62", features = [

@@ -8,6 +8,10 @@ const $ = (id) => document.getElementById(id);
 
 let state = null;
 let dcTimer = null;
+let ps5Chosen = false; // the PS5 source is picked but not linked yet
+let ps5 = null;        // ps5_status
+let ps5Pick = null;    // console chosen in the search list
+let shotTimer = null;
 
 function toast(text, err = false) {
   const t = $('toast');
@@ -49,7 +53,9 @@ async function refresh() {
   [['rx', r.x], ['ry', r.y], ['rw', r.w], ['rh', r.h]].forEach(([id, v]) => ($(id).value = v));
   const cap = state.capturing;
   $('cap-title').textContent = cap ? 'الترجمة تعمل' : 'الترجمة متوقفة';
-  $('cap-sub').textContent = cap
+  $('cap-sub').textContent = state.use_ps5
+    ? (cap ? 'تُقرأ الترجمة من PS5 مباشرة وتظهر على التلفاز.' : 'اللعب على التلفاز: لغة تقرأ صورة PS5 بنفسها.')
+    : cap
     ? (state.tv_connected ? 'تظهر الترجمة فوق اللعبة وعلى التلفاز.' : 'تظهر الترجمة فوق اللعبة.')
     : (state.windows ? 'شغّل اللعبة في وضع نافذة أو ملء الشاشة بلا حدود، ثم ابدأ.' : 'الالتقاط متاح على ويندوز فقط.');
   $('cap-toggle').textContent = cap ? 'إيقاف' : 'ابدأ الترجمة';
@@ -106,9 +112,12 @@ async function refresh() {
   // Read from: screen region or a window (PS Remote Play)
   const win = state.capture_window;
   if (win && ![...$('source').options].some((o) => o.value === win)) $('source').append(new Option(win + ' (غير مفتوحة)', win));
-  $('source').value = win || '';
-  $('window-opts').hidden = !win;
-  $('region-card').hidden = !!win;
+  const usePs5 = state.use_ps5 || ps5Chosen;
+  $('source').value = usePs5 ? '__ps5__' : (win || '');
+  $('window-opts').hidden = !win || usePs5;
+  $('region-card').hidden = !!win || usePs5;
+  $('ps5-card').hidden = !usePs5;
+  if (usePs5) loadPs5();
   const a = state.window_area;
   [['wx', a[0]], ['wy', a[1]], ['ww', a[2]], ['wh', a[3]]].forEach(([id, v]) => ($(id).value = Math.round(v * 100)));
   $('show-pc').checked = state.show_on_pc;
@@ -127,7 +136,7 @@ async function refresh() {
 async function loadWindows() {
   const titles = await call('list_windows');
   const cur = $('source').value;
-  $('source').innerHTML = '<option value="">منطقة من الشاشة</option>';
+  $('source').innerHTML = '<option value="__ps5__">PS5 مباشرة (بدون تطبيق Remote Play) ★</option><option value="">منطقة من الشاشة</option>';
   titles.forEach((t) => $('source').append(new Option(t.toLowerCase().includes('remote play') ? t + ' ★' : t, t)));
   $('source').value = cur;
 }
@@ -221,6 +230,123 @@ function readAreas() {
   });
 }
 
+// ---- PS5 (LUGHA's own Remote Play) ----
+const PS5_STATE = { off: 'غير متصل', connecting: 'جارٍ الاتصال…', connected: 'متصل', pin: 'يطلب رمز الدخول' };
+
+async function loadPs5() {
+  ps5 = await call('ps5_status');
+  $('psn-state').textContent = ps5.psn ? '✓ تم تسجيل الدخول' : '';
+  $('psn-btn').textContent = ps5.psn ? 'تبديل الحساب' : 'تسجيل الدخول إلى PlayStation Network';
+  $('ps5-setup').hidden = ps5.linked;
+  $('ps5-linked').hidden = !ps5.linked;
+  if (ps5.linked) {
+    $('ps5-name').textContent = ps5.console.name || 'PS5';
+    $('ps5-addr').textContent = ps5.console.host;
+    showPs5State(ps5.state);
+  }
+}
+
+function showPs5State(st) {
+  const on = st === 'connected';
+  $('ps5-conn').textContent = PS5_STATE[st] || st;
+  $('ps5-dot').className = 'dot' + (on ? ' ok' : '');
+  $('ps5-connect').hidden = on || st === 'connecting';
+  $('ps5-disconnect').hidden = !(on || st === 'connecting');
+  $('ps5-shot').hidden = !on;
+  $('ps5-hint').hidden = !on;
+  clearInterval(shotTimer);
+  if (on) { loadShot(); shotTimer = setInterval(loadShot, 1500); }
+}
+
+async function loadShot() {
+  if ($('ps5-card').hidden || $('tab-play').hidden) return;
+  const url = await invoke('ps5_picture').catch(() => null);
+  if (url) $('ps5-img').src = url;
+  drawBoxes();
+}
+
+// The reading areas drawn over the live picture; dragging on it adds one.
+function drawBoxes() {
+  const host = $('ps5-boxes');
+  host.replaceChildren(...readAreas().map((a) => {
+    const d = document.createElement('div');
+    d.className = 'box' + (a.enabled ? '' : ' off');
+    Object.assign(d.style, { left: a.x * 100 + '%', top: a.y * 100 + '%', width: a.w * 100 + '%', height: a.h * 100 + '%' });
+    const l = document.createElement('span'); l.textContent = a.name; d.append(l);
+    return d;
+  }));
+}
+
+(() => {
+  const shot = $('ps5-shot');
+  let start = null, ghost = null;
+  const at = (e) => { const r = shot.getBoundingClientRect(); return [Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), Math.min(1, Math.max(0, (e.clientY - r.top) / r.height))]; };
+  shot.onpointerdown = (e) => {
+    start = at(e);
+    shot.setPointerCapture(e.pointerId);
+    ghost = document.createElement('div'); ghost.className = 'box'; $('ps5-boxes').append(ghost);
+  };
+  shot.onpointermove = (e) => {
+    if (!start) return;
+    const [x, y] = at(e);
+    Object.assign(ghost.style, { left: Math.min(x, start[0]) * 100 + '%', top: Math.min(y, start[1]) * 100 + '%', width: Math.abs(x - start[0]) * 100 + '%', height: Math.abs(y - start[1]) * 100 + '%' });
+  };
+  shot.onpointerup = (e) => {
+    if (!start) return;
+    const [x, y] = at(e);
+    const box = { x: Math.min(x, start[0]), y: Math.min(y, start[1]), w: Math.abs(x - start[0]), h: Math.abs(y - start[1]) };
+    start = null;
+    if (box.w > 0.03 && box.h > 0.02) {
+      const now = readAreas();
+      renderAreas([...now, { name: `منطقة ${now.length + 1}`, ...box, enabled: true }]);
+      toast('أُضيفت المنطقة. اضغط «حفظ» في «مناطق القراءة».');
+    }
+    drawBoxes();
+  };
+})();
+
+$('psn-btn').onclick = () => call('psn_sign_in');
+$('ps5-find').onclick = async (e) => {
+  e.target.disabled = true;
+  $('ps5-list').textContent = 'جارٍ البحث…';
+  try {
+    const list = await call('ps5_find');
+    $('ps5-list').replaceChildren();
+    if (!list.length) $('ps5-list').textContent = 'لم يُعثر على جهاز. تأكد أن PS5 يعمل وعلى نفس الشبكة، أو اكتب عنوانه.';
+    list.forEach((c) => {
+      const b = btn(`${c.name} (${c.host})${c.ready ? '' : ' · وضع الراحة'}`, () => {
+        ps5Pick = c; $('ps5-host').value = c.host;
+        [...$('ps5-list').children].forEach((x) => x.classList.toggle('on', x === b));
+      }, 'ghost');
+      $('ps5-list').append(b);
+      if (list.length === 1) b.click();
+    });
+  } finally { e.target.disabled = false; }
+};
+$('ps5-link').onclick = async (e) => {
+  const host = $('ps5-host').value.trim();
+  if (!host) return toast('ابحث عن الجهاز أو اكتب عنوانه.', true);
+  e.target.disabled = true;
+  try {
+    const name = ps5Pick && ps5Pick.host === host ? ps5Pick.name : 'PS5';
+    const ps5flag = ps5Pick && ps5Pick.host === host ? ps5Pick.ps5 : true;
+    await call('ps5_link', { host, name, ps5: ps5flag, pin: $('ps5-pin').value });
+    $('ps5-pin').value = '';
+    await call('set_use_ps5', { on: true });
+    toast('تم ربط PS5');
+    refresh();
+  } finally { e.target.disabled = false; }
+};
+$('ps5-connect').onclick = () => call('ps5_connect');
+$('ps5-disconnect').onclick = () => call('ps5_disconnect');
+$('ps5-wake').onclick = async () => { await call('ps5_wake'); toast('أُرسل أمر الإيقاظ. انتظر نحو ٢٠ ثانية ثم اتصل.'); };
+$('ps5-forget').onclick = async () => {
+  if (!confirm('إلغاء ربط هذا الكمبيوتر بجهاز PS5؟')) return;
+  await call('ps5_forget');
+  ps5Chosen = true;
+  refresh();
+};
+
 // ---- wiring ----
 
 $('area-add').onclick = () => {
@@ -281,7 +407,19 @@ $('region-save').onclick = async () => {
   toast('تم حفظ المنطقة');
   refresh();
 };
-$('source').onchange = async (e) => { await call('set_capture_window', { title: e.target.value || null, area: null, showOnPc: null }); refresh(); };
+$('source').onchange = async (e) => {
+  const v = e.target.value;
+  if (v === '__ps5__') {
+    ps5Chosen = true;
+    const st = await call('ps5_status');
+    if (st.linked) await call('set_use_ps5', { on: true });
+  } else {
+    ps5Chosen = false;
+    if (state.use_ps5) await call('set_use_ps5', { on: false });
+    await call('set_capture_window', { title: v || null, area: null, showOnPc: null });
+  }
+  refresh();
+};
 $('source-refresh').onclick = loadWindows;
 $('window-save').onclick = async () => {
   const area = ['wx', 'wy', 'ww', 'wh'].map((id) => Math.min(100, Math.max(0, +$(id).value)) / 100);
@@ -323,6 +461,16 @@ $('sign-out').onclick = async () => {
 listen('subtitle', ({ payload }) => renderSub(payload));
 listen('tv-lost', () => { toast('انقطع الاتصال بالتلفاز', true); refresh(); });
 listen('capture-error', ({ payload }) => { toast(payload, true); refresh(); });
+listen('psn-signed-in', () => { toast('تم تسجيل الدخول إلى PlayStation Network'); loadPs5(); });
+listen('psn-error', ({ payload }) => toast(payload, true));
+listen('ps5-state', ({ payload }) => {
+  if (payload === 'pin') {
+    const pin = prompt('يطلب PS5 رمز الدخول للمستخدم:');
+    if (pin) invoke('ps5_set_pin', { pin });
+  }
+  if (!['off', 'connecting', 'connected', 'pin'].includes(payload)) toast('PS5: ' + payload, true);
+  showPs5State(payload);
+});
 
 loadWindows().then(refresh);
 
@@ -335,6 +483,7 @@ function mockInvoke(cmd, args) {
     capture_window: null, window_area: [0.08, 0.7, 0.84, 0.26], show_on_pc: true,
     display: { display: 'over', plate_color: '#000000', history: 'off', fade_ms: 150, read_hold: true, stable_ms: 200, gone_after_ms: 1200 },
     areas: [{ name: 'الترجمة', x: 0.1, y: 0.8, w: 0.8, h: 0.118, enabled: true }],
+    use_ps5: false, ps5: { psn: false, console: null, linked: false, state: 'off' },
   });
   const lines = { 'water costs more than gold out here': { text: 'الماء هنا أغلى من الذهب.', speaker: 'سالم', source: 'Water costs more than gold out here', entry_id: 6, package_id: 'sandline-sa-full' } };
   switch (cmd) {
@@ -352,6 +501,20 @@ function mockInvoke(cmd, args) {
     case 'set_areas': m.areas = args.areas; return Promise.resolve();
     case 'start_device_sign_in': return Promise.resolve({ device_code: 'x', user_code: '7K4-Q9P', url: 'http://127.0.0.1:8040/activate', interval: 5 });
     case 'poll_device_sign_in': return Promise.resolve(null);
+    case 'ps5_status': return Promise.resolve({ ...m.ps5 });
+    case 'set_use_ps5': m.use_ps5 = args.on; return Promise.resolve();
+    case 'psn_sign_in': m.ps5.psn = true; setTimeout(loadPs5, 300); return Promise.resolve();
+    case 'ps5_find': return new Promise((r) => setTimeout(() => r([{ host: '192.168.8.40', name: 'PS5-123', ps5: true, ready: true, app: 'Game' }]), 800));
+    case 'ps5_link': m.ps5.linked = true; m.ps5.console = { host: args.host, name: args.name, ps5: true, mac: '' }; return Promise.resolve(m.ps5.console);
+    case 'ps5_connect': m.ps5.state = 'connected'; setTimeout(() => showPs5State('connected'), 400); return Promise.resolve();
+    case 'ps5_disconnect': m.ps5.state = 'off'; showPs5State('off'); return Promise.resolve();
+    case 'ps5_forget': m.ps5 = { psn: m.ps5.psn, console: null, linked: false, state: 'off' }; m.use_ps5 = false; return Promise.resolve();
+    case 'ps5_picture': {
+      const c = document.createElement('canvas'); c.width = 960; c.height = 540; const g = c.getContext('2d');
+      const gr = g.createLinearGradient(0, 0, 0, 540); gr.addColorStop(0, '#3b5b7a'); gr.addColorStop(1, '#a87a4a'); g.fillStyle = gr; g.fillRect(0, 0, 960, 540);
+      g.fillStyle = '#fff'; g.font = 'bold 26px sans-serif'; g.textAlign = 'center'; g.fillText('Lucia: Water costs more than gold out here.', 480, 470);
+      return Promise.resolve(c.toDataURL());
+    }
     default: return Promise.resolve();
   }
 }

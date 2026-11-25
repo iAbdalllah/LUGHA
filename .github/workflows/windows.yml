@@ -2,9 +2,9 @@ name: windows-app
 
 on:
   push:
-    paths: ["apps/windows/**", "engine/**", ".github/workflows/windows.yml"]
+    paths: ["apps/windows/**", "engine/**", "apps/mobile/third_party/chiaki-ng", ".github/workflows/windows.yml"]
   pull_request:
-    paths: ["apps/windows/**", "engine/**", ".github/workflows/windows.yml"]
+    paths: ["apps/windows/**", "engine/**", "apps/mobile/third_party/chiaki-ng", ".github/workflows/windows.yml"]
 
 jobs:
   core:
@@ -23,6 +23,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive # chiaki-ng, for the PS5 source (engine/lugha-rp)
+      # lugha-rp builds chiaki-ng with CMake; its nanopb step needs Python's protobuf module.
+      - run: pip install protobuf
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
