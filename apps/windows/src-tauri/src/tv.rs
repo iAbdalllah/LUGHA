@@ -147,7 +147,13 @@ impl TvSender {
 
     pub fn clear(&mut self) -> Result<(), TvError> {
         let id = self.id();
-        self.send(&Message::Clear { id })
+        self.send(&Message::Clear { id, all: false })
+    }
+
+    /// Translation stopped: the TV empties the screen (no line kept for reading, no history).
+    pub fn clear_all(&mut self) -> Result<(), TvError> {
+        let id = self.id();
+        self.send(&Message::Clear { id, all: true })
     }
 
     pub fn ping(&mut self) -> Result<bool, TvError> {

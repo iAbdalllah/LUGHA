@@ -241,6 +241,8 @@ public final class TVSender: @unchecked Sendable {
     }
 
     public func clear() async throws { try await send(["t": "sub.clear", "id": takeID()]) }
+    /// Translation stopped: the TV empties the screen (no line kept for reading, no history).
+    public func clearAll() async throws { try await send(["t": "sub.clear", "id": takeID(), "all": true]) }
 
     public func ping() async throws -> Bool {
         let id = takeID()

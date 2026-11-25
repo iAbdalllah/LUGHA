@@ -165,7 +165,7 @@ class LinkServer(private val scope: CoroutineScope, private val hub: LinkHub = L
                         send(buildJsonObject { put("t", "ack"); put("id", m["id"]!!.jsonPrimitive.long); put("painted_ms", painted) })
                     }
                 }
-                "sub.clear" -> hub.clear()
+                "sub.clear" -> if (m["all"]?.jsonPrimitive?.boolean == true) hub.clearAll() else hub.clear()
                 "style.set" -> hub.setStyle(OverlayStyle(
                     fontScale = m["font_scale"]?.jsonPrimitive?.float ?: 1f,
                     positionY = (m["position_y"]?.jsonPrimitive?.float ?: 0.86f).coerceIn(0.05f, 0.95f),

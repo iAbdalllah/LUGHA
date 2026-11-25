@@ -727,6 +727,14 @@ fn stop_capture(app: tauri::AppHandle, cap: tauri::State<'_, Capture>) -> Cmd<()
     cap.running.store(false, Ordering::SeqCst);
     // Free the console for other Remote Play apps.
     crate::ps5::disconnect(&app.state::<crate::ps5::Ps5>());
+    // Nothing should stay on the TV once translation stops.
+    {
+        let shared = app.state::<Shared>();
+        let mut c = shared.lock().unwrap_or_else(|p| p.into_inner());
+        if let Some(tv) = c.tv.as_mut() {
+            let _ = tv.clear_all();
+        }
+    }
     if let Some(w) = app.get_webview_window("overlay") {
         let _ = w.hide();
     }

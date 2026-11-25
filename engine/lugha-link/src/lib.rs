@@ -264,8 +264,9 @@ pub enum Message {
     Welcome { tv_name: String, screen_w: u32, screen_h: u32 },
     #[serde(rename = "sub.show")]
     Show { id: u64, sid: u64, text: String, #[serde(default)] speaker: Option<String>, #[serde(default)] dir: Option<String>, #[serde(default)] ack: bool, #[serde(default)] ts: u64 },
+    /// `all`: translation stopped, so the TV also drops lines kept up for reading and its history panel.
     #[serde(rename = "sub.clear")]
-    Clear { id: u64 },
+    Clear { id: u64, #[serde(default, skip_serializing_if = "std::ops::Not::not")] all: bool },
     #[serde(rename = "style.set")]
     Style {
         font_scale: f32,

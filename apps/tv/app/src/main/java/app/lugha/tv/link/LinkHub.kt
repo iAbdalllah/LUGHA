@@ -40,6 +40,8 @@ data class HubState(
     val style: OverlayStyle = OverlayStyle(),
     val senders: List<PairedSender> = emptyList(),
     val justPaired: String? = null,
+    /** Bumped when translation stops or the sender leaves: the overlay drops everything, history included. */
+    val wipe: Int = 0,
 )
 
 /** Process-wide receiver state shared by the server, the overlay service and the UI. */
@@ -80,7 +82,7 @@ object LinkHub {
 
     // ── called by the server ──
     fun onConnected(name: String?) = _state.update { it.copy(connectedTo = name ?: "…") }
-    fun onDisconnected() = _state.update { it.copy(connectedTo = null) }
+    fun onDisconnected() = _state.update { it.copy(connectedTo = null, subtitle = null, wipe = it.wipe + 1) }
     fun onPairingLocked(until: Long) = _state.update { it.copy(pairingLockedUntil = until) }
 
     fun onPaired(sender: PairedSender) {
@@ -99,6 +101,9 @@ object LinkHub {
     }
 
     fun clear() = _state.update { it.copy(subtitle = null) }
+
+    /** Translation stopped (or the sender left): nothing stays on screen. */
+    fun clearAll() = _state.update { it.copy(subtitle = null, wipe = it.wipe + 1) }
     fun latency(ms: Long) = _state.update { it.copy(lastLatencyMs = ms) }
 
     fun setStyle(style: OverlayStyle) {

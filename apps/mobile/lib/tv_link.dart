@@ -180,6 +180,9 @@ class TvSender {
 
   void clear() => _send({'t': 'sub.clear', 'id': _id++});
 
+  /// Translation stopped: the TV empties the screen (no line kept for reading, no history).
+  void clearAll() => _send({'t': 'sub.clear', 'id': _id++, 'all': true});
+
   /// [extra]: display/history/fade_ms/read_hold (DisplayPrefs.tvStyle); older TVs ignore them.
   void setStyle({required double fontScale, required bool bottom, required double bgOpacity, Map<String, dynamic> extra = const {}}) =>
       _send({'t': 'style.set', 'font_scale': fontScale, 'position_y': bottom ? 0.9 : 0.1, 'bg_opacity': bgOpacity, ...extra});

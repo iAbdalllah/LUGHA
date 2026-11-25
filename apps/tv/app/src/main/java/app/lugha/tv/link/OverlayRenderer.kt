@@ -55,7 +55,13 @@ class OverlayRenderer(private val context: Context, private val layer: FrameLayo
         lastSid = null
     }
 
+    private var lastWipe = 0
+
     fun render(s: HubState, force: Boolean = false) {
+        if (s.wipe != lastWipe) {
+            lastWipe = s.wipe
+            clear()
+        }
         lastState = s
         main.removeCallbacks(again)
         val now = System.currentTimeMillis()

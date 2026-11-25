@@ -336,6 +336,7 @@ final class AppModel: ObservableObject {
         overlay.update(nil)
         overlay.hide()
         running = false
+        if let tv { try? await tv.clearAll() }
     }
 
     /// What OCR read in the capture area on the last frame (shown in the panel so the player can see what LUGHA sees).

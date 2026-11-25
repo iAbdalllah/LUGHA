@@ -404,7 +404,7 @@ class AppState extends ChangeNotifier {
     _rpSub = null;
     rpRunning = false;
     rpStatus = '';
-    tv?.clear();
+    tv?.clearAll();
     notifyListeners();
   }
 
