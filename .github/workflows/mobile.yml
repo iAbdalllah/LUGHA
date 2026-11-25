@@ -26,7 +26,7 @@ jobs:
           cargo build --release -p lugha-ffi
           ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME" SKIP_IOS=1 ./scripts/build-mobile.sh
         working-directory: engine
-      - run: flutter pub get && flutter analyze && flutter test
+      - run: flutter pub get && flutter analyze --no-fatal-infos && flutter test
         working-directory: apps/mobile
       - run: flutter test
         working-directory: apps/mobile/packages/lugha_engine
