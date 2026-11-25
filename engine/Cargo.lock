@@ -881,6 +881,7 @@ dependencies = [
  "hex",
  "lugha-core",
  "lugha-link",
+ "lugha-rp",
  "serde",
  "serde_json",
 ]

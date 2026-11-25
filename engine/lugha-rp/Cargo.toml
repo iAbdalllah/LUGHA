@@ -8,14 +8,23 @@ publish.workspace = true
 links = "lugha_rp"
 
 [dependencies]
-openh264 = "0.6"
+openh264 = { version = "0.6", optional = true }
 base64.workspace = true
 thiserror.workspace = true
 serde_json.workspace = true
 ureq = { version = "2", features = ["json"] }
+
+[features]
+# Decode H.264 here (openh264). Apple apps turn it off and use VideoToolbox (Session::start_raw).
+default = ["decode"]
+decode = ["dep:openh264"]
 
 [build-dependencies]
 cmake = "0.1"
 
 [dev-dependencies]
 png = "0.17"
+
+[[example]]
+name = "rp"
+required-features = ["decode"]

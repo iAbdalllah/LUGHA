@@ -9,6 +9,9 @@ use lugha_core::crypto::DeviceKeys;
 use lugha_core::{Matcher, Package, Query, TrustStore};
 use serde_json::{json, Value};
 
+#[cfg(feature = "remoteplay")]
+pub mod rp;
+
 pub struct LughaEngine {
     trust: TrustStore,
     device: DeviceKeys,

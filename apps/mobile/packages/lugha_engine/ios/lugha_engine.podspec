@@ -13,6 +13,8 @@ Pod::Spec.new do |s|
   s.source_files     = 'Classes/**/*'
   s.public_header_files = 'Classes/**/*.h'
   s.dependency 'Flutter'
+  # Remote Play (chiaki-ng inside the Rust library) needs these.
+  s.frameworks = 'CoreServices', 'SystemConfiguration', 'Security'
   # The plugin pod links as a framework: force-load the right slice into it.
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',

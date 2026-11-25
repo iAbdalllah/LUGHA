@@ -16,6 +16,11 @@ serde.workspace = true
 serde_json.workspace = true
 hex.workspace = true
 base64.workspace = true
+# LUGHA Remote Play for the iPhone and Mac apps (AGPL-3.0, chiaki-ng). Off by default: it needs CMake.
+lugha-rp = { path = "../lugha-rp", optional = true, default-features = false }
 
 [dev-dependencies]
 lugha-core = { path = "../lugha-core", features = ["issuer"] }
+
+[features]
+remoteplay = ["dep:lugha-rp"]

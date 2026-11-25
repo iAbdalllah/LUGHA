@@ -41,6 +41,12 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive # chiaki-ng: Remote Play is built into the iOS engine
+      # chiaki-ng's nanopb step needs Python with protobuf (grpcio-tools brings protoc).
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install protobuf grpcio-tools
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios

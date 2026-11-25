@@ -9,7 +9,9 @@
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Duration;
+#[cfg(feature = "decode")]
+use std::time::Instant;
 
 use base64::Engine;
 
@@ -272,15 +274,31 @@ pub struct Options {
     pub pictures_per_second: f32,
 }
 
-struct Shared {
+/// Where the video goes: decoded here (openh264, the "decode" feature) or handed over as H.264 for the platform's
+/// own decoder (VideoToolbox on Apple devices).
+type FrameFn = Box<dyn Fn(&[u8]) + Send + Sync>;
+
+enum Sink {
+    #[cfg(feature = "decode")]
+    Decode(Box<Decode>),
+    Raw(FrameFn),
+}
+
+#[cfg(feature = "decode")]
+struct Decode {
     decoder: Mutex<Decoder>,
     on_picture: Box<dyn Fn(Picture) + Send + Sync>,
-    on_state: Box<dyn Fn(State) + Send + Sync>,
     every: Duration,
     last: Mutex<Option<Instant>>,
+}
+
+struct Shared {
+    sink: Sink,
+    on_state: Box<dyn Fn(State) + Send + Sync>,
     keyframe_wanted: Mutex<bool>,
 }
 
+#[cfg(feature = "decode")]
 struct Decoder {
     inner: Option<openh264::decoder::Decoder>,
     errors: u32,
@@ -296,6 +314,8 @@ unsafe impl Send for Session {}
 unsafe impl Sync for Session {}
 
 impl Session {
+    /// Decoded pictures (RGBA) at `opts.pictures_per_second`.
+    #[cfg(feature = "decode")]
     pub fn start(
         opts: &Options,
         on_picture: impl Fn(Picture) + Send + Sync + 'static,
@@ -303,14 +323,27 @@ impl Session {
     ) -> Result<Self, Error> {
         init()?;
         let dec = openh264::decoder::Decoder::new().map_err(|e| Error::Decoder(e.to_string()))?;
-        let shared = Arc::new(Shared {
+        let sink = Sink::Decode(Box::new(Decode {
             decoder: Mutex::new(Decoder { inner: Some(dec), errors: 0 }),
             on_picture: Box::new(on_picture),
-            on_state: Box::new(on_state),
             every: Duration::from_secs_f32(1.0 / opts.pictures_per_second.clamp(0.5, 30.0)),
             last: Mutex::new(None),
-            keyframe_wanted: Mutex::new(false),
-        });
+        }));
+        Self::open(opts, sink, Box::new(on_state))
+    }
+
+    /// Every H.264 access unit as it arrives (Annex B, SPS/PPS before key frames), for a platform decoder.
+    pub fn start_raw(
+        opts: &Options,
+        on_frame: impl Fn(&[u8]) + Send + Sync + 'static,
+        on_state: impl Fn(State) + Send + Sync + 'static,
+    ) -> Result<Self, Error> {
+        init()?;
+        Self::open(opts, Sink::Raw(Box::new(on_frame)), Box::new(on_state))
+    }
+
+    fn open(opts: &Options, sink: Sink, on_state: Box<dyn Fn(State) + Send + Sync>) -> Result<Self, Error> {
+        let shared = Arc::new(Shared { sink, on_state, keyframe_wanted: Mutex::new(false) });
         extern "C" fn video(buf: *const u8, n: usize, user: *mut c_void) {
             let s = unsafe { &*(user as *const Shared) };
             let data = unsafe { std::slice::from_raw_parts(buf, n) };
@@ -355,41 +388,51 @@ impl Session {
 
     /// Hands over the next decoded picture right away (e.g. for the area editor), whatever the rate.
     pub fn picture_now(&self) {
-        *self.shared.last.lock().unwrap() = None;
+        #[cfg(feature = "decode")]
+        if let Sink::Decode(d) = &self.shared.sink {
+            *d.last.lock().unwrap() = None;
+        }
     }
 }
 
 impl Shared {
     fn frame(&self, data: &[u8]) {
-        let due = self.last.lock().unwrap().is_none_or(|t| t.elapsed() >= self.every);
-        let mut guard = self.decoder.lock().unwrap();
-        let d = &mut *guard;
-        let Some(dec) = d.inner.as_mut() else { return };
-        // Decode every frame (H.264 needs them all); turn one into RGBA only when a picture is due.
-        let outcome = match dec.decode(data) {
-            Ok(Some(yuv)) => Ok(due.then(|| {
-                use openh264::formats::YUVSource;
-                let (w, h) = yuv.dimensions();
-                let mut rgba = vec![0u8; w * h * 4];
-                yuv.write_rgba8(&mut rgba);
-                Picture { width: w as u32, height: h as u32, rgba }
-            })),
-            Ok(None) => Ok(None),
-            Err(_) => Err(()),
-        };
-        match outcome {
-            Ok(pic) => {
-                d.errors = 0;
-                drop(guard);
-                if let Some(p) = pic {
-                    *self.last.lock().unwrap() = Some(Instant::now());
-                    (self.on_picture)(p);
+        match &self.sink {
+            Sink::Raw(f) => f(data),
+            #[cfg(feature = "decode")]
+            Sink::Decode(dd) => {
+                let Decode { decoder, on_picture, every, last } = &**dd;
+                let due = last.lock().unwrap().is_none_or(|t| t.elapsed() >= *every);
+                let mut guard = decoder.lock().unwrap();
+                let d = &mut *guard;
+                let Some(dec) = d.inner.as_mut() else { return };
+                // Decode every frame (H.264 needs them all); turn one into RGBA only when a picture is due.
+                let outcome = match dec.decode(data) {
+                    Ok(Some(yuv)) => Ok(due.then(|| {
+                        use openh264::formats::YUVSource;
+                        let (w, h) = yuv.dimensions();
+                        let mut rgba = vec![0u8; w * h * 4];
+                        yuv.write_rgba8(&mut rgba);
+                        Picture { width: w as u32, height: h as u32, rgba }
+                    })),
+                    Ok(None) => Ok(None),
+                    Err(_) => Err(()),
+                };
+                match outcome {
+                    Ok(pic) => {
+                        d.errors = 0;
+                        drop(guard);
+                        if let Some(p) = pic {
+                            *last.lock().unwrap() = Some(Instant::now());
+                            on_picture(p);
+                        }
+                    }
+                    Err(()) => {
+                        d.errors += 1;
+                        // A lost packet breaks the picture until the next key frame: ask for one (not on every error).
+                        if d.errors == 1 || d.errors.is_multiple_of(30) { *self.keyframe_wanted.lock().unwrap() = true }
+                    }
                 }
-            }
-            Err(()) => {
-                d.errors += 1;
-                // A lost packet breaks the picture until the next key frame: ask for one (not on every error).
-                if d.errors == 1 || d.errors.is_multiple_of(30) { *self.keyframe_wanted.lock().unwrap() = true }
             }
         }
     }
@@ -398,8 +441,16 @@ impl Shared {
 impl Drop for Session {
     fn drop(&mut self) {
         unsafe { ffi::lugha_rp_session_stop(self.handle) }
-        self.shared.decoder.lock().unwrap().inner = None;
+        #[cfg(feature = "decode")]
+        if let Sink::Decode(d) = &self.shared.sink {
+            d.decoder.lock().unwrap().inner = None;
+        }
     }
+}
+
+/// A platform decoder that hit a broken picture: ask the console for a fresh key frame (see [`keep_picture_healthy`]).
+pub fn decoder_failed(s: &Session) {
+    *s.shared.keyframe_wanted.lock().unwrap() = true;
 }
 
 /// Call now and then (e.g. with each picture) so a broken picture asks the console for a fresh key frame.

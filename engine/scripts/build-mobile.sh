@@ -27,7 +27,8 @@ fi
 
 if [ "${SKIP_IOS:-0}" != 1 ]; then
   export IPHONEOS_DEPLOYMENT_TARGET=15.0
-  for t in aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios; do (cd "$HERE" && cargo build --release -p lugha-ffi --target "$t"); done
+  # iOS includes LUGHA Remote Play (chiaki-ng, built with CMake); Android has its own (packages/lugha_remoteplay).
+  for t in aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios; do (cd "$HERE" && cargo build --release -p lugha-ffi --features remoteplay --target "$t"); done
   # One simulator slice for Apple Silicon and Intel Macs.
   mkdir -p "$HERE/target/ios-sim-universal"
   lipo -create "$HERE/target/aarch64-apple-ios-sim/release/liblugha_ffi.a" "$HERE/target/x86_64-apple-ios/release/liblugha_ffi.a" \

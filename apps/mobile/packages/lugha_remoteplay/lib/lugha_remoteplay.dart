@@ -163,5 +163,14 @@ class RemotePlay {
 
   static Future<void> setArea(Area area, {List<Area> areas = const []}) => _call('setArea', {'area': area.toMap(), 'areas': [for (final a in areas) a.toMap()]});
   static Future<void> setLoginPin(String pin) => _call('setLoginPin', {'pin': pin});
+
+  /// The newest frame of the running session as PNG (for drawing reading areas on it), or null.
+  static Future<Uint8List?> snapshot() async {
+    try {
+      return await _ch.invokeMethod<Uint8List>('snapshot');
+    } catch (_) {
+      return null; // not running yet, or not supported by this platform's plugin
+    }
+  }
   static Future<void> stop() => _call('stop');
 }

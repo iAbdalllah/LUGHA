@@ -39,6 +39,8 @@ class L {
     'PS5': 'PS5', 'Play on your TV': 'العب على التلفاز',
     'Play on the TV as usual. This phone connects to your PS5 over Wi‑Fi, reads the game\'s English subtitles and shows the Arabic on the TV.':
         'العب على التلفاز كالمعتاد. يتصل هذا الجوال بجهاز PS5 عبر الواي فاي، ويقرأ ترجمة اللعبة الإنجليزية ويعرض العربية على التلفاز.',
+    'Or the PS5 address': 'أو عنوان PS5', 'Use': 'استخدم',
+    'Drag on the picture to draw a box around the English subtitles. Only text inside the boxes is translated.': 'اسحب على الصورة لترسم مربعًا حول الترجمة الإنجليزية. يُترجم النص داخل المربعات فقط.',
     'Sign in to PlayStation Network': 'تسجيل الدخول إلى PlayStation Network', 'Signed in to PSN': 'تم تسجيل الدخول إلى PSN',
     'Your password goes only to Sony; LUGHA keeps just your account number.': 'كلمة المرور تذهب إلى Sony فقط؛ تحفظ لغة رقم حسابك فقط.',
     'Link your PS5': 'اربط جهاز PS5', 'Find PS5': 'ابحث عن PS5', 'No PS5 found on this Wi‑Fi.': 'لم يُعثر على PS5 على هذه الشبكة.',

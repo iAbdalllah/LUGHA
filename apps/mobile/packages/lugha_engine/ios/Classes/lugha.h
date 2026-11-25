@@ -5,6 +5,9 @@
 #ifndef LUGHA_H
 #define LUGHA_H
 
+#include <stdbool.h>
+#include <stddef.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -49,8 +52,23 @@ char *lugha_link_decrypt(LughaLinkSession *session, const char *msg_b64);       
 void lugha_link_session_free(LughaLinkSession *session);
 const char *lugha_engine_version(void);
 
+/* ---- Remote Play (built with the "remoteplay" feature; AGPL-3.0, chiaki-ng) ---- */
+typedef struct LughaRpSession LughaRpSession;
+/* One H.264 access unit (Annex B, SPS/PPS before key frames), valid during the call: decode with VideoToolbox. */
+typedef void (*LughaRpFrameCb)(void *ctx, const unsigned char *data, size_t size);
+typedef void (*LughaRpStateCb)(void *ctx, int state, const char *reason); /* 1 connected, 2 ended, 3 passcode */
+char *lugha_rpx_discover(unsigned int timeout_ms);
+char *lugha_rpx_register(const char *host, const char *account_id, unsigned int pin, bool ps5);
+int lugha_rpx_wakeup(const char *host, const char *regist_key_b64, bool ps5);
+LughaRpSession *lugha_rpx_start(const char *host, bool ps5, const char *regist_key_b64, const char *rp_key_b64,
+                                unsigned int height, LughaRpFrameCb frame, LughaRpStateCb state, void *ctx);
+void lugha_rpx_request_keyframe(LughaRpSession *session);
+void lugha_rpx_set_pin(LughaRpSession *session, const char *pin);
+void lugha_rpx_stop(LughaRpSession *session);
+
 #ifdef __cplusplus
 }
 #endif
 
 #endif
+

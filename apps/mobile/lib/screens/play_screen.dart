@@ -1,5 +1,8 @@
 // PS5 tab: sign in to PSN, link the PS5 once, then read the game's subtitles from the console while the player plays
 // on the TV. Part of the AGPL-3.0 Remote Play feature (packages/lugha_remoteplay/LICENSE).
+import 'dart:async';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:lugha_remoteplay/lugha_remoteplay.dart';
 
@@ -19,6 +22,7 @@ class _PlayScreenState extends State<PlayScreen> {
   List<Console>? _consoles;
   bool _searching = false;
   final _pin = TextEditingController();
+  final _host = TextEditingController();
 
   Future<void> _find() async {
     setState(() => _searching = true);
@@ -57,6 +61,12 @@ class _PlayScreenState extends State<PlayScreen> {
         const SizedBox(height: 8),
         FilledButton.tonalIcon(key: const Key('find-ps5'), onPressed: _searching ? null : _find, icon: _searching ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.search), label: Text(L.t('Find PS5'))),
         if (_consoles != null && _consoles!.isEmpty) Padding(padding: const EdgeInsets.only(top: 8), child: Text(L.t('No PS5 found on this Wi‑Fi.'))),
+        // The address by hand (the PS5 shows it under Settings › Network › Connection Status), when searching finds nothing.
+        Row(children: [
+          Expanded(child: TextField(key: const Key('ps5-host'), controller: _host, keyboardType: TextInputType.url, textDirection: TextDirection.ltr, decoration: InputDecoration(labelText: L.t('Or the PS5 address'), hintText: '192.168.1.20'))),
+          const SizedBox(width: 8),
+          OutlinedButton(onPressed: () { final h = _host.text.trim(); if (h.isNotEmpty) setState(() => _consoles = [Console(host: h, name: 'PS5', ready: true, ps5: true)]); }, child: Text(L.t('Use'))),
+        ]),
         for (final c in _consoles ?? const <Console>[]) ...[
           const Divider(),
           Text('${c.name} · ${c.host}${c.ready ? '' : ' · ${L.t('Resting')}'}', textDirection: TextDirection.ltr),
@@ -86,6 +96,7 @@ class _PlayScreenState extends State<PlayScreen> {
         ),
         if (app.rpStatus.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 8), child: Text(app.rpStatus)),
         if (app.rpRunning) Padding(padding: const EdgeInsets.only(top: 4), child: Text(L.t('Keep this phone on and LUGHA open while you play.'), style: t.bodySmall)),
+        if (app.rpRunning) _PictureAreas(app: app),
         if (app.rpRunning && app.history.isNotEmpty) ...[
           const Divider(),
           // The phone doubles as a history screen: the latest line first, a few earlier ones under it.
@@ -103,6 +114,87 @@ class _PlayScreenState extends State<PlayScreen> {
       if (app.rpStatus.isNotEmpty && app.ps5 == null) Text(app.rpStatus, style: const TextStyle(color: Colors.orange)),
       if (app.ps5 != null) _AreasEditor(app: app),
     ]);
+  }
+}
+
+/// The PS5's picture with the reading areas over it; dragging on it adds an area.
+class _PictureAreas extends StatefulWidget {
+  const _PictureAreas({required this.app});
+  final AppState app;
+  @override
+  State<_PictureAreas> createState() => _PictureAreasState();
+}
+
+class _PictureAreasState extends State<_PictureAreas> {
+  Uint8List? _png;
+  Timer? _timer;
+  Offset? _start, _now;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+    _timer = Timer.periodic(const Duration(milliseconds: 1500), (_) => _load());
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final p = await RemotePlay.snapshot();
+    if (mounted && p != null) setState(() => _png = p);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final png = _png;
+    if (png == null) return const SizedBox.shrink();
+    final areas = widget.app.display.areas;
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        AspectRatio(
+          aspectRatio: 16 / 9,
+          child: LayoutBuilder(builder: (context, box) {
+            Offset frac(Offset p) => Offset((p.dx / box.maxWidth).clamp(0.0, 1.0), (p.dy / box.maxHeight).clamp(0.0, 1.0));
+            Widget rect(double x, double y, double w, double h, String label, {bool on = true}) => Positioned(
+                  left: x * box.maxWidth, top: y * box.maxHeight, width: w * box.maxWidth, height: h * box.maxHeight,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(border: Border.all(color: Colors.amber.withValues(alpha: on ? 1 : 0.4), width: 2), color: Colors.amber.withValues(alpha: 0.12)),
+                    child: Align(alignment: AlignmentDirectional.topStart, child: Text(label, style: const TextStyle(color: Colors.amber, fontSize: 11))),
+                  ),
+                );
+            return GestureDetector(
+              onPanStart: (d) => setState(() { _start = frac(d.localPosition); _now = _start; }),
+              onPanUpdate: (d) => setState(() => _now = frac(d.localPosition)),
+              onPanEnd: (_) {
+                final a = _start, b = _now;
+                setState(() { _start = null; _now = null; });
+                if (a == null || b == null) return;
+                final x = a.dx < b.dx ? a.dx : b.dx, y = a.dy < b.dy ? a.dy : b.dy;
+                final w = (a.dx - b.dx).abs(), h = (a.dy - b.dy).abs();
+                if (w < 0.03 || h < 0.02) return;
+                widget.app.setDisplay(widget.app.display.copyWith(areas: [...areas, ReadingArea('${L.t('Area')} ${areas.length + 1}', x, y, w, h)]));
+              },
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Stack(fit: StackFit.expand, children: [
+                  Image.memory(png, fit: BoxFit.fill, gaplessPlayback: true),
+                  for (final a in areas) rect(a.x, a.y, a.w, a.h, a.name, on: a.enabled),
+                  if (_start != null && _now != null)
+                    rect(_start!.dx < _now!.dx ? _start!.dx : _now!.dx, _start!.dy < _now!.dy ? _start!.dy : _now!.dy, (_start!.dx - _now!.dx).abs(), (_start!.dy - _now!.dy).abs(), ''),
+                ]),
+              ),
+            );
+          }),
+        ),
+        const SizedBox(height: 4),
+        Text(L.t('Drag on the picture to draw a box around the English subtitles. Only text inside the boxes is translated.'), style: Theme.of(context).textTheme.bodySmall),
+      ]),
+    );
   }
 }
 
