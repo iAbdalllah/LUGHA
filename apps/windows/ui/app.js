@@ -215,9 +215,9 @@ const PRESETS = {
   subtitles: () => [{ name: 'الترجمة', x: 0.08, y: 0.72, w: 0.84, h: 0.24, enabled: true, place: 'over', look: 'box', box_h: 0.8 }],
   full: () => [{ name: 'الشاشة كاملة', x: 0, y: 0, w: 1, h: 1, enabled: true }],
   game: () => [
-    { name: 'الترجمة', x: 0.12, y: 0.78, w: 0.78, h: 0.11, enabled: true, place: 'over', look: 'box', box_h: 0.8 },
-    { name: 'التعليمات (أعلى اليسار)', x: 0.01, y: 0.18, w: 0.30, h: 0.30, enabled: true, place: 'below', look: 'card', align: 'left' },
-    { name: 'التعليمات (الأسفل)', x: 0.20, y: 0.935, w: 0.60, h: 0.06, enabled: true, place: 'custom', tx: 0.10, ty: 0.765, tw: 0.80, th: 0.05, look: 'subtitle', font: 0.92, accent: '#FF3FA4' },
+    { name: 'الترجمة', x: 0.12, y: 0.79, w: 0.76, h: 0.145, enabled: true, place: 'over', look: 'box', box_h: 0.8 },
+    { name: 'التعليمات (أعلى اليسار)', x: 0.01, y: 0.12, w: 0.32, h: 0.36, enabled: true, place: 'below', look: 'card', align: 'left' },
+    { name: 'التعليمات (الأسفل)', x: 0.18, y: 0.94, w: 0.64, h: 0.06, enabled: true, place: 'custom', tx: 0.10, ty: 0.765, tw: 0.80, th: 0.05, look: 'subtitle', font: 0.92, accent: '#FF3FA4' },
   ],
 };
 

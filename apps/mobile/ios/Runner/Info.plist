@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>UIBackgroundModes</key>
+	<array><string>audio</string></array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>LUGHA connects to your PS5 and your LUGHA TV on this Wi-Fi to read the game's subtitles and show the Arabic on the TV.</string>
 	<key>NSBonjourServices</key>

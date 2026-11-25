@@ -100,10 +100,12 @@ class ReadingArea {
         'full' => [ReadingArea(t('Full screen'), 0, 0, 1, 1)],
         'game' => [
             // Over the English subtitle on a plate, anchored to its bottom line: steady, and the English is hidden.
-            ReadingArea(t('Subtitles'), 0.12, 0.78, 0.78, 0.11, place: 'over', look: 'box', boxH: 0.8),
+            // GTA VI: subtitle lines sit at 85–92% of the height (two lines), centred.
+            ReadingArea(t('Subtitles'), 0.12, 0.79, 0.76, 0.145, place: 'over', look: 'box', boxH: 0.8),
             // Under the game's hint box, same left edge and width, as a dark game-style card.
-            ReadingArea(t('Instructions (top left)'), 0.01, 0.18, 0.30, 0.30, place: 'below', look: 'card', align: 'left'),
-            ReadingArea(t('Instructions (bottom)'), 0.20, 0.935, 0.60, 0.06,
+            ReadingArea(t('Instructions (top left)'), 0.01, 0.12, 0.32, 0.36, place: 'below', look: 'card', align: 'left'),
+            // The mission hint at the very bottom (95–99%).
+            ReadingArea(t('Instructions (bottom)'), 0.18, 0.94, 0.64, 0.06,
                 place: 'custom', tx: 0.10, ty: 0.765, tw: 0.80, th: 0.05, look: 'subtitle', font: 0.92, accent: '#FF3FA4'),
           ],
         _ => [ReadingArea(t('Subtitles'), 0.08, 0.72, 0.84, 0.24, place: 'over', look: 'box', boxH: 0.8)],

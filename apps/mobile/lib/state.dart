@@ -550,9 +550,18 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void _showByArea(RpText ev, List<ReadingArea> areas, Hit? Function(String) look) {
+    // A subtitle of two lines whose second line strays into a neighbouring area is still one paragraph: lines right
+    // under each other (gap under one line height, overlapping horizontally) take the area of the paragraph's first line.
+    final area = [...ev.areas];
+    for (var n = 1; n < ev.lines.length; n++) {
+      final p = ev.boxes[n - 1], b = ev.boxes[n];
+      final gap = b[1] - (p[1] + p[3]);
+      final overlap = math.min(p[0] + p[2], b[0] + b[2]) - math.max(p[0], b[0]);
+      if (gap < math.max(p[3], b[3]) && overlap > 0) area[n] = area[n - 1];
+    }
     final groups = <int, List<int>>{};
     for (var n = 0; n < ev.lines.length; n++) {
-      groups.putIfAbsent(ev.areas[n], () => []).add(n);
+      groups.putIfAbsent(area[n], () => []).add(n);
     }
     final items = <Map<String, dynamic>>[];
     final shown = <String>[];

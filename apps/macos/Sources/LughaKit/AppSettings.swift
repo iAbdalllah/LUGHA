@@ -171,11 +171,11 @@ public struct ReadingArea: Codable, Equatable, Identifiable, Sendable {
         case "full":
             return [ReadingArea(name: "Full screen", rect: CGRect(x: 0, y: 0, width: 1, height: 1))]
         case "game":
-            var subs = ReadingArea(name: "Subtitles", rect: CGRect(x: 0.12, y: 0.78, width: 0.78, height: 0.11))
+            var subs = ReadingArea(name: "Subtitles", rect: CGRect(x: 0.12, y: 0.79, width: 0.76, height: 0.145))
             subs.place = "over"; subs.look = "box"; subs.boxH = 0.8
-            var left = ReadingArea(name: "Instructions (top left)", rect: CGRect(x: 0.01, y: 0.18, width: 0.30, height: 0.30))
+            var left = ReadingArea(name: "Instructions (top left)", rect: CGRect(x: 0.01, y: 0.12, width: 0.32, height: 0.36))
             left.place = "below"; left.look = "card"; left.align = "left"
-            var bottom = ReadingArea(name: "Instructions (bottom)", rect: CGRect(x: 0.20, y: 0.935, width: 0.60, height: 0.06))
+            var bottom = ReadingArea(name: "Instructions (bottom)", rect: CGRect(x: 0.18, y: 0.94, width: 0.64, height: 0.06))
             bottom.place = "custom"; bottom.translation = CGRect(x: 0.10, y: 0.765, width: 0.80, height: 0.05)
             bottom.look = "subtitle"; bottom.font = 0.92; bottom.accent = "#FF3FA4"
             return [subs, left, bottom]

@@ -5,6 +5,7 @@
 // and is decoded here with VideoToolbox; a few times a second the newest frame is read with Vision's on-device text
 // recognizer and the lines inside the reading areas go to Dart. Nothing is shown and no game audio is played.
 
+import AVFoundation
 import CoreImage
 import CoreMedia
 import Flutter
@@ -39,6 +40,47 @@ private func takeJSON(_ p: UnsafeMutablePointer<CChar>?) -> Any? {
     guard let p else { return nil }
     defer { lugha_string_free(p) }
     return try? JSONSerialization.jsonObject(with: Data(String(cString: p).utf8))
+}
+
+/// Keeps the app running in the background while a session is open: iOS suspends apps that leave the screen, unless
+/// they play audio. A silent, looping sound that mixes with other apps (their audio is not interrupted) does that.
+final class BackgroundKeeper {
+    static let shared = BackgroundKeeper()
+    private var player: AVAudioPlayer?
+
+    func start() {
+        guard player == nil else { return }
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.playback, options: [.mixWithOthers])
+            try AVAudioSession.sharedInstance().setActive(true)
+            let p = try AVAudioPlayer(data: Self.silence(seconds: 2))
+            p.numberOfLoops = -1
+            p.volume = 0
+            p.play()
+            player = p
+        } catch {
+            player = nil
+        }
+    }
+
+    func stop() {
+        player?.stop()
+        player = nil
+        try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+    }
+
+    /// A WAV file of silence (16-bit mono, 8 kHz).
+    private static func silence(seconds: Int) -> Data {
+        let rate = 8000, samples = rate * seconds, bytes = samples * 2
+        var d = Data()
+        func u32(_ v: Int) { var x = UInt32(v).littleEndian; d.append(Data(bytes: &x, count: 4)) }
+        func u16(_ v: Int) { var x = UInt16(v).littleEndian; d.append(Data(bytes: &x, count: 2)) }
+        d.append(contentsOf: Array("RIFF".utf8)); u32(36 + bytes); d.append(contentsOf: Array("WAVEfmt ".utf8))
+        u32(16); u16(1); u16(1); u32(rate); u32(rate * 2); u16(2); u16(16)
+        d.append(contentsOf: Array("data".utf8)); u32(bytes)
+        d.append(Data(count: bytes))
+        return d
+    }
 }
 
 /// Reading areas as fractions of the frame (x, y, w, h; origin top-left).
@@ -103,6 +145,8 @@ public class LughaRemotePlayPlugin: NSObject, FlutterPlugin, FlutterStreamHandle
             }
             session = s
             UIApplication.shared.isIdleTimerDisabled = true // the phone must stay awake while LUGHA reads the PS5
+            // Keep reading while the player uses another app or locks the phone.
+            if a["background"] as? Bool ?? true { BackgroundKeeper.shared.start() }
             result(nil)
         case "setArea":
             session?.areas = Self.areas(a)
@@ -118,6 +162,7 @@ public class LughaRemotePlayPlugin: NSObject, FlutterPlugin, FlutterStreamHandle
             session?.stop()
             session = nil
             UIApplication.shared.isIdleTimerDisabled = false
+            BackgroundKeeper.shared.stop()
             result(nil)
         default:
             result(FlutterMethodNotImplemented)
@@ -217,30 +262,39 @@ final class RemoteSession {
         if frame === lastRead { return }
         lastRead = frame
         let boxes = areas
-        let req = VNRecognizeTextRequest()
-        req.recognitionLevel = .accurate
-        req.usesLanguageCorrection = false
-        req.recognitionLanguages = ["en-US"]
-        // Read only where the reading areas are (much faster than the whole frame). Vision's origin is bottom-left.
-        let union = boxes.map { CGRect(x: $0.x, y: $0.y, width: $0.w, height: $0.h) }.reduce(CGRect.null) { $0.union($1) }
-            .intersection(CGRect(x: 0, y: 0, width: 1, height: 1))
-        let roi = union.isNull || union.isEmpty ? CGRect(x: 0, y: 0, width: 1, height: 1)
-            : CGRect(x: union.minX, y: 1 - union.maxY, width: union.width, height: union.height)
-        req.regionOfInterest = roi
-        try? VNImageRequestHandler(cvPixelBuffer: frame, options: [:]).perform([req])
-        // Each line with the reading area it is in (index into the areas Dart sent) and where it is.
-        let found = (req.results ?? [])
-            .compactMap { o -> (text: String, area: Int, box: CGRect)? in
-                guard let text = o.topCandidates(1).first?.string, !text.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+        // Each reading area is read on its own (together far smaller than the whole picture, so much faster), with a
+        // small margin so a line at the edge is not cut; a line belongs to the area that holds its centre.
+        let unit = CGRect(x: 0, y: 0, width: 1, height: 1)
+        let jobs: [(area: Int, roi: CGRect, req: VNRecognizeTextRequest)] = boxes.enumerated().compactMap { n, a in
+            let padded = CGRect(x: a.x - 0.02, y: a.y - 0.025, width: a.w + 0.04, height: a.h + 0.05).intersection(unit)
+            guard !padded.isNull, padded.width > 0.01, padded.height > 0.01 else { return nil }
+            let req = VNRecognizeTextRequest()
+            req.recognitionLevel = .accurate
+            req.usesLanguageCorrection = false
+            req.recognitionLanguages = ["en-US"]
+            // Vision's origin is bottom-left; the areas' is top-left.
+            let roi = CGRect(x: padded.minX, y: 1 - padded.maxY, width: padded.width, height: padded.height)
+            req.regionOfInterest = roi
+            return (n, roi, req)
+        }
+        try? VNImageRequestHandler(cvPixelBuffer: frame, options: [:]).perform(jobs.map(\.req))
+        var found: [(text: String, area: Int, box: CGRect)] = []
+        var seen = Set<String>()
+        for job in jobs {
+            for o in job.req.results ?? [] {
+                guard let text = o.topCandidates(1).first?.string, !text.trimmingCharacters(in: .whitespaces).isEmpty else { continue }
                 // Boxes come relative to the region read; back to the whole frame, origin top-left like the areas.
-                let r = o.boundingBox
+                let r = o.boundingBox, roi = job.roi
                 let fx = roi.minX + r.minX * roi.width, fy = roi.minY + r.minY * roi.height
                 let fw = r.width * roi.width, fh = r.height * roi.height
-                let b = CGRect(x: fx, y: 1 - (fy + fh), width: fw, height: fh)
-                guard let n = boxes.firstIndex(where: { b.midX >= $0.x && b.midX <= $0.x + $0.w && b.midY >= $0.y && b.midY <= $0.y + $0.h }) else { return nil }
-                return (text, n, b)
+                let bx = CGRect(x: fx, y: 1 - (fy + fh), width: fw, height: fh)
+                guard let n = boxes.firstIndex(where: { bx.midX >= $0.x && bx.midX <= $0.x + $0.w && bx.midY >= $0.y && bx.midY <= $0.y + $0.h }) else { continue }
+                // Padded regions overlap a little: the same line read twice is kept once.
+                let key = "\(Int(bx.midX * 200)):\(Int(bx.midY * 200)):\(text)"
+                if seen.insert(key).inserted { found.append((text, n, bx)) }
             }
-            .sorted { $0.box.minY < $1.box.minY }
+        }
+        found.sort { $0.box.minY < $1.box.minY }
         let lines = found.map(\.text)
         if lines != lastLines {
             lastLines = lines
