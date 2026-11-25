@@ -235,6 +235,14 @@ struct SubtitleOverlayView: View {
         return out
     }
 
+    /// One history line: the speaker in amber, then the Arabic (split up so the compiler checks it quickly).
+    private func historyLine(_ i: SubtitleItem, size f: CGFloat) -> Text {
+        let font: Font = ArabicFonts.family(settings.fontName).map { Font.custom($0, size: f) } ?? Font.system(size: f, weight: .medium)
+        let name: Text = Text(i.speaker.map { "\($0): " } ?? "").foregroundColor(SubtitlePlate.amber).font(.system(size: f * 0.82, weight: .bold))
+        let line: Text = Text(i.text).foregroundColor(SubtitlePlate.plateTextColor(settings)).font(font)
+        return name + line
+    }
+
     /// Narrow panel at the side of the game picture with the recent dialogue, newest at the bottom and brightest.
     private func historyPanel(in size: CGSize) -> some View {
         let a = model.anchor ?? CGRect(origin: .zero, size: size)
@@ -243,8 +251,7 @@ struct SubtitleOverlayView: View {
         let items = model.recent
         return VStack(alignment: .trailing, spacing: f * 0.5) {
             ForEach(Array(items.enumerated()), id: \.element.text) { n, i in
-                (Text(i.speaker.map { "\($0): " } ?? "").foregroundColor(SubtitlePlate.amber).font(.system(size: f * 0.82, weight: .bold))
-                    + Text(i.text).foregroundColor(SubtitlePlate.plateTextColor(settings)).font(ArabicFonts.family(settings.fontName).map { .custom($0, size: f) } ?? .system(size: f, weight: .medium)))
+                historyLine(i, size: f)
                     .multilineTextAlignment(.trailing)
                     .frame(maxWidth: .infinity, alignment: .trailing)
                     .opacity(0.45 + 0.55 * Double(n + 1) / Double(items.count))
