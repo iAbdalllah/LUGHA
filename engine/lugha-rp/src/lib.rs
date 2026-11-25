@@ -97,7 +97,7 @@ fn init() -> Result<(), Error> {
     if unsafe { ffi::lugha_rp_init() } == 0 { Ok(()) } else { Err(Error::Init) }
 }
 
-/// Sends chiaki's log lines (level 1 debug … 16 error) to `f`, e.g. the app's diagnostics log.
+/// Sends chiaki's log lines (level 1 error, 2 warning, 4 info, 8 verbose, 16 debug) to `f`.
 pub fn set_log(f: impl Fn(u32, &str) + Send + Sync + 'static) {
     type Sink = Box<dyn Fn(u32, &str) + Send + Sync>;
     static SINK: Mutex<Option<Sink>> = Mutex::new(None);

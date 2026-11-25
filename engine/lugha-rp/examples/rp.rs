@@ -5,7 +5,7 @@
 use std::time::Duration;
 
 fn main() {
-    lugha_rp::set_log(|level, m| if level >= 4 { eprintln!("[{level}] {m}") });
+    lugha_rp::set_log(|level, m| if level <= 4 { eprintln!("[{level}] {m}") }); // errors, warnings, info
     let a: Vec<String> = std::env::args().skip(1).collect();
     match a.first().map(String::as_str) {
         Some("discover") => {

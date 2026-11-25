@@ -18,7 +18,7 @@ extern "C" {
 /* Call once before anything else; 0 = ok. */
 int lugha_rp_init(void);
 
-/* Optional: every chiaki log line (level 1 debug .. 16 error). */
+/* Optional: every chiaki log line (level 1 error, 2 warning, 4 info, 8 verbose, 16 debug). */
 typedef void (*lugha_rp_log_cb)(int level, const char *msg, void *user);
 void lugha_rp_set_log(lugha_rp_log_cb cb, void *user);
 

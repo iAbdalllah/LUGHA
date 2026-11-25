@@ -125,6 +125,9 @@ endif()
 add_library(lugha_rp STATIC lugha_rp.c)
 target_include_directories(lugha_rp PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(lugha_rp PUBLIC chiaki-lib)
+# chiaki's headers change struct sizes with this (set by chiaki's own CMakeLists for its directory only); without
+# it here, chiaki and this file disagree on sizeof(ChiakiSession) and the session overwrites our fields.
+target_compile_definitions(lugha_rp PRIVATE CHIAKI_LIB_ENABLE_MBEDTLS)
 
 add_executable(lugha_rp_probe EXCLUDE_FROM_ALL probe.c)
 target_link_libraries(lugha_rp_probe lugha_rp)

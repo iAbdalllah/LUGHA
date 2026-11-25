@@ -15,7 +15,8 @@ jobs:
           submodules: recursive # chiaki-ng, built by the Remote Play plugin
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - run: pip install protobuf grpcio-tools
+      # chiaki-ng's Android build looks for a protoc binary on PATH.
+      - run: pip install protobuf grpcio-tools && sudo apt-get install -y protobuf-compiler
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android

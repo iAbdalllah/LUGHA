@@ -17,7 +17,8 @@ fn log_once() {
     static ONCE: std::sync::Once = std::sync::Once::new();
     ONCE.call_once(|| {
         lugha_rp::set_log(|level, m| {
-            if level >= 4 {
+            if level <= 4 {
+                // 1 error, 2 warning, 4 info (8 verbose and 16 debug are too chatty to keep)
                 let mut l = LOG.lock().unwrap();
                 l.push(m.to_string());
                 let n = l.len();
