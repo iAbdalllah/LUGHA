@@ -22,6 +22,7 @@ fn main() {
     println!("cargo:rerun-if-changed=native/lugha_rp.h");
     println!("cargo:rerun-if-changed=native/CMakeLists.txt");
     println!("cargo:rerun-if-env-changed=LUGHA_RP_NO_NATIVE");
+    println!("cargo:rerun-if-env-changed=LUGHA_RP_CL");
     if std::env::var_os("LUGHA_RP_NO_NATIVE").is_some() {
         return;
     }
@@ -32,6 +33,11 @@ fn main() {
         cfg.define("CMAKE_OSX_DEPLOYMENT_TARGET", if target.contains("ios") { "15.0" } else { "13.0" });
     }
     if target.contains("msvc") {
+        // chiaki-ng is C99 (variable-length arrays), which MSVC's cl cannot compile: build with Visual Studio's
+        // clang-cl toolset, as chiaki-ng's own Windows builds do. Same ABI, links with the Rust side as usual.
+        if std::env::var_os("LUGHA_RP_CL").is_none() {
+            cfg.generator_toolset("ClangCL");
+        }
         // Match Rust's release runtime (/MD) everywhere, also for the fetched projects.
         cfg.define("CMAKE_MSVC_RUNTIME_LIBRARY", "MultiThreadedDLL").define("CMAKE_POLICY_DEFAULT_CMP0091", "NEW");
     }
