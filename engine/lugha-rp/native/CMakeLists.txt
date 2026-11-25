@@ -100,6 +100,13 @@ if(MSVC)
             target_compile_definitions(${t} PRIVATE ssize_t=${LUGHA_SSIZE_T})
         endif()
     endforeach()
+    # Two libraries call functions whose headers they never include on Windows; clang-cl refuses that.
+    if(TARGET gf_complete)
+        target_compile_options(gf_complete PRIVATE /FIintrin.h)  # __cpuidex
+    endif()
+    if(TARGET json-c)
+        target_compile_options(json-c PRIVATE /FIio.h)  # read, write, open, close
+    endif()
 endif()
 
 add_library(lugha_rp STATIC lugha_rp.c)
