@@ -96,6 +96,11 @@ class LughaRemotePlayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Ev
                 }
                 "setArea" -> { session?.area = areasOf(call); result.success(null) }
                 "setLoginPin" -> { session?.setLoginPin(call.argument<String>("pin") ?: ""); result.success(null) }
+                // The newest frame as JPEG, for drawing reading areas on it (null until one arrived).
+                "snapshot" -> {
+                    val s = session ?: return result.success(null)
+                    Thread { val jpg = s.snapshotJpeg(); main.post { result.success(jpg) } }.start()
+                }
                 "stop" -> { session?.stop(); session = null; result.success(null) }
                 else -> result.notImplemented()
             }
@@ -220,24 +225,67 @@ private class SessionHost(
         busy = true
         lastRun = now
         val (w, h) = image.width to image.height
+        // Keep a copy of the frame for snapshots (the area editor shows the picture), at most about once a second.
+        if (now - lastCopy > 1000) {
+            lastCopy = now
+            runCatching { lastFrame = Triple(nv21(image), w, h) }
+        }
         val boxes = area.map { a -> Rect((a[0] * w).toInt(), (a[1] * h).toInt(), ((a[0] + a[2]) * w).toInt(), ((a[1] + a[3]) * h).toInt()) }
         recognizer.process(InputImage.fromMediaImage(image, 0))
             .addOnSuccessListener { text ->
-                // Lines whose centre falls inside a reading area, top to bottom.
-                val lines = text.textBlocks.flatMap { it.lines }
-                    .filter { l -> l.boundingBox?.let { b -> boxes.any { it.contains(b.centerX(), b.centerY()) } } == true }
-                    .sortedBy { it.boundingBox?.top ?: 0 }
-                    .map { it.text.trim() }
-                    .filter { it.isNotEmpty() }
+                // Lines whose centre falls inside a reading area, top to bottom, each with its area and box.
+                val found = text.textBlocks.flatMap { it.lines }
+                    .mapNotNull { l ->
+                        val b = l.boundingBox ?: return@mapNotNull null
+                        val n = boxes.indexOfFirst { it.contains(b.centerX(), b.centerY()) }
+                        val t = l.text.trim()
+                        if (n < 0 || t.isEmpty()) null else Triple(t, n, b)
+                    }
+                    .sortedBy { it.third.top }
+                val lines = found.map { it.first }
                 if (lines != lastLines) {
                     lastLines = lines
-                    emit(mapOf("type" to "text", "lines" to lines))
+                    emit(mapOf("type" to "text", "lines" to lines, "areas" to found.map { it.second },
+                        "boxes" to found.map { (_, _, b) -> listOf(b.left / w.toDouble(), b.top / h.toDouble(), b.width() / w.toDouble(), b.height() / h.toDouble()) }))
                 }
             }
             .addOnCompleteListener {
                 image.close()
                 busy = false
             }
+    }
+
+    @Volatile private var lastFrame: Triple<ByteArray, Int, Int>? = null
+    private var lastCopy = 0L
+
+    fun snapshotJpeg(): ByteArray? {
+        val (nv, w, h) = lastFrame ?: return null
+        val out = java.io.ByteArrayOutputStream()
+        android.graphics.YuvImage(nv, ImageFormat.NV21, w, h, null).compressToJpeg(Rect(0, 0, w, h), 70, out)
+        return out.toByteArray()
+    }
+
+    /** YUV_420_888 (any strides) → NV21. */
+    private fun nv21(image: android.media.Image): ByteArray {
+        val w = image.width
+        val h = image.height
+        val out = ByteArray(w * h * 3 / 2)
+        val y = image.planes[0]
+        var pos = 0
+        for (row in 0 until h) {
+            val buf = y.buffer
+            val start = row * y.rowStride
+            for (col in 0 until w) out[pos++] = buf.get(start + col * y.pixelStride)
+        }
+        val u = image.planes[1]
+        val v = image.planes[2]
+        for (row in 0 until h / 2) {
+            for (col in 0 until w / 2) {
+                out[pos++] = v.buffer.get(row * v.rowStride + col * v.pixelStride)
+                out[pos++] = u.buffer.get(row * u.rowStride + col * u.pixelStride)
+            }
+        }
+        return out
     }
 
     fun setLoginPin(pin: String) = session.setLoginPin(pin)
