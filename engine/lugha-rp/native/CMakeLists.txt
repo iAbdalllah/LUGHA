@@ -87,6 +87,21 @@ set(CHIAKI_LIB_JSONC_EXTERNAL_PROJECT ON CACHE BOOL "" FORCE)
 set(CHIAKI_LIB_MINIUPNPC_EXTERNAL_PROJECT ON CACHE BOOL "" FORCE)
 add_subdirectory("${CHIAKI_DIR}" chiaki EXCLUDE_FROM_ALL)
 
+# curl and json-c share the cached SIZEOF_SSIZE_T check; with it set for json-c (above), curl no longer defines
+# ssize_t itself on MSVC, so give it to curl's own sources (curl's public headers do not use it).
+if(MSVC)
+    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        set(LUGHA_SSIZE_T __int64)
+    else()
+        set(LUGHA_SSIZE_T int)
+    endif()
+    foreach(t libcurl_object libcurl_static libcurl_shared)
+        if(TARGET ${t})
+            target_compile_definitions(${t} PRIVATE ssize_t=${LUGHA_SSIZE_T})
+        endif()
+    endforeach()
+endif()
+
 add_library(lugha_rp STATIC lugha_rp.c)
 target_include_directories(lugha_rp PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(lugha_rp PUBLIC chiaki-lib)
