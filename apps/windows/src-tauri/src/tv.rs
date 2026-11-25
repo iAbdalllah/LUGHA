@@ -114,6 +114,15 @@ impl TvSender {
         self.next_id - 1
     }
 
+    /// Placed pieces, each with where its English is (fractions of the picture) and its reading area's design
+    /// (`area`). `text` is what older TVs show.
+    pub fn show_items(&mut self, text: &str, items: serde_json::Value) -> Result<(), TvError> {
+        let id = self.id();
+        let m = serde_json::json!({"t": "sub.show", "id": id, "sid": id, "text": text, "dir": "rtl", "ack": false, "items": items});
+        let c = self.session.encrypt(m.to_string().as_bytes()).map_err(|e| TvError::Protocol(e.to_string()))?;
+        Ok(write_frame(&mut self.stream, frame::DATA, &c)?)
+    }
+
     /// Show a line; with `wait_for_ack`, returns the round trip until the TV painted it.
     pub fn show(&mut self, text: &str, speaker: Option<&str>, wait_for_ack: bool) -> Result<Option<Duration>, TvError> {
         let id = self.id();

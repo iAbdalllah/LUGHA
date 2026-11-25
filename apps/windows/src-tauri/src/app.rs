@@ -91,6 +91,57 @@ pub struct Area {
     pub h: f32,
     #[serde(default = "yes")]
     pub enabled: bool,
+    // ---- How this area's translation looks and where it goes (sent to the TV; same keys on every app) ----
+    /// "auto", "over" / "below" / "above" the English, or "custom" = inside tx, ty, tw, th.
+    #[serde(default = "auto")]
+    pub place: String,
+    #[serde(default = "d_tx")]
+    pub tx: f32,
+    #[serde(default = "d_ty")]
+    pub ty: f32,
+    #[serde(default = "d_tw")]
+    pub tw: f32,
+    #[serde(default = "d_th")]
+    pub th: f32,
+    #[serde(default = "bottom")]
+    pub valign: String,
+    /// "auto", "subtitle", "box" or "card".
+    #[serde(default = "auto")]
+    pub look: String,
+    #[serde(default = "center")]
+    pub align: String,
+    #[serde(default = "one")]
+    pub font: f32,
+    #[serde(default = "one")]
+    pub box_w: f32,
+    #[serde(default = "one")]
+    pub box_h: f32,
+    #[serde(default)]
+    pub accent: Option<String>,
+}
+
+fn auto() -> String { "auto".into() }
+fn bottom() -> String { "bottom".into() }
+fn center() -> String { "center".into() }
+fn one() -> f32 { 1.0 }
+fn d_tx() -> f32 { 0.1 }
+fn d_ty() -> f32 { 0.76 }
+fn d_tw() -> f32 { 0.8 }
+fn d_th() -> f32 { 0.06 }
+
+impl Area {
+    /// The design as the TV reads it (`area` on a sub.show item).
+    pub fn tv_style(&self) -> serde_json::Value {
+        let mut v = serde_json::json!({
+            "name": self.name, "place": self.place, "valign": self.valign, "look": self.look, "align": self.align,
+            "font": self.font, "box_w": self.box_w, "box_h": self.box_h,
+        });
+        if self.place == "custom" {
+            v["tx"] = self.tx.into(); v["ty"] = self.ty.into(); v["tw"] = self.tw.into(); v["th"] = self.th.into();
+        }
+        if let Some(a) = &self.accent { v["accent"] = a.clone().into(); }
+        v
+    }
 }
 
 fn yes() -> bool {
@@ -754,6 +805,9 @@ fn capture_loop(app: tauri::AppHandle, shared: Shared, running: Arc<AtomicBool>)
         }
     };
     let mut pipeline = Pipeline::default();
+    // Reading areas on the TV: what was last sent, and since when nothing was read.
+    let mut area_sig = String::new();
+    let mut area_empty_since: Option<Instant> = None;
     while running.load(Ordering::SeqCst) {
         let t0 = Instant::now();
         let (region, interval, window, area, use_ps5) = {
@@ -777,6 +831,8 @@ fn capture_loop(app: tauri::AppHandle, shared: Shared, running: Arc<AtomicBool>)
         let areas: Vec<Area> = shared.lock().map(|c| c.settings.areas.iter().filter(|a| a.enabled).cloned().collect()).unwrap_or_default();
         // Where the Arabic goes in "above" mode is just above the text: sample the top band of the (first) area.
         let mut tone = None;
+        // Each area's lines on their own (index into `areas`), for sending every area with its design to the TV.
+        let mut per_area: Vec<(usize, Vec<String>)> = Vec::new();
         let lines = match frame {
             None => vec![],
             Some(f) => {
@@ -786,11 +842,13 @@ fn capture_loop(app: tauri::AppHandle, shared: Shared, running: Arc<AtomicBool>)
                     ocr.recognize(&f).unwrap_or_default()
                 } else {
                     // Reading areas: OCR each box on its own; text elsewhere (signs, the HUD) is never read.
-                    areas
-                        .iter()
-                        .filter_map(|a| crate::frame::crop(f.width, f.height, &f.bgra, (a.x, a.y, a.w, a.h)))
-                        .flat_map(|(width, height, bgra)| ocr.recognize(&crate::capture::Frame { width, height, bgra }).unwrap_or_default())
-                        .collect()
+                    for (n, a) in areas.iter().enumerate() {
+                        if let Some((width, height, bgra)) = crate::frame::crop(f.width, f.height, &f.bgra, (a.x, a.y, a.w, a.h)) {
+                            let got = ocr.recognize(&crate::capture::Frame { width, height, bgra }).unwrap_or_default();
+                            if !got.is_empty() { per_area.push((n, got)); }
+                        }
+                    }
+                    per_area.iter().flat_map(|(_, l)| l.clone()).collect()
                 }
             }
         };
@@ -811,7 +869,7 @@ fn capture_loop(app: tauri::AppHandle, shared: Shared, running: Arc<AtomicBool>)
                 core.history.insert(0, sub.clone());
                 core.history.truncate(100);
             }
-            if let Some(tv) = core.tv.as_mut() {
+            if let (Some(tv), true) = (core.tv.as_mut(), areas.is_empty()) {
                 let sent = match &line {
                     Some(l) => tv.show(&l.text, l.speaker.as_deref(), false).map(|_| ()),
                     None => tv.clear(),
@@ -820,6 +878,50 @@ fn capture_loop(app: tauri::AppHandle, shared: Shared, running: Arc<AtomicBool>)
                     core.tv = None;
                     let _ = app.emit("tv-lost", ());
                 }
+            }
+        }
+        // Reading areas: every area's text matched on its own and sent to the TV with the area's design.
+        if !areas.is_empty() {
+            let mut items = Vec::new();
+            let mut shown = Vec::new();
+            for (n, ls) in &per_area {
+                let a = &areas[*n];
+                let text = ls.join(" ");
+                let mut look = |t: &str| core.matcher.as_mut()?.lookup(&Query::new(t)).map(|h| Found { text: h.target, speaker: h.speaker, entry_id: h.entry_id, package_id: h.package_id });
+                let found = crate::pipeline::find(&text, &mut look).map(|f| (f.text, f.speaker)).or_else(|| {
+                    // A list or a row of prompts: each line on its own.
+                    let known: Vec<String> = ls.iter().filter_map(|l| crate::pipeline::find(l, &mut look).map(|f| f.text)).collect();
+                    (!known.is_empty()).then(|| (known.join("\n"), None))
+                });
+                let Some((target, speaker)) = found else { continue };
+                items.push(serde_json::json!({
+                    "text": target, "speaker": speaker, "x": a.x, "y": a.y, "w": a.w, "h": a.h, "lines": ls.len(), "area": a.tv_style(),
+                }));
+                shown.push(target);
+            }
+            let sig = shown.join("\n");
+            if sig != area_sig {
+                let gone = core.settings.display.gone_after_ms as u64;
+                let now = Instant::now();
+                let send = if shown.is_empty() {
+                    let since = *area_empty_since.get_or_insert(now);
+                    now.duration_since(since) >= Duration::from_millis(gone)
+                } else {
+                    area_empty_since = None;
+                    true
+                };
+                if send {
+                    area_sig = sig.clone();
+                    if let Some(tv) = core.tv.as_mut() {
+                        let r = if shown.is_empty() { tv.clear() } else { tv.show_items(&sig, serde_json::Value::Array(items)) };
+                        if r.is_err() {
+                            core.tv = None;
+                            let _ = app.emit("tv-lost", ());
+                        }
+                    }
+                }
+            } else {
+                area_empty_since = None;
             }
         }
         drop(c);

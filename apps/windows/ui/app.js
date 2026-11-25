@@ -208,26 +208,88 @@ async function loadHistory() {
   });
 }
 
-// Reading areas: one row per box (name, X/Y/W/H in % of the captured picture, on/off, delete).
+// Reading areas: one block per box — name, X/Y/W/H in % of the captured picture, on/off, delete — and its design
+// (where the translation goes, its look, alignment, sizes, accent), the same options as the Mac and phone apps.
+const AREA_DEFAULTS = { place: 'auto', tx: 0.1, ty: 0.76, tw: 0.8, th: 0.06, valign: 'bottom', look: 'auto', align: 'center', font: 1, box_w: 1, box_h: 1, accent: null };
+const PRESETS = {
+  subtitles: () => [{ name: 'الترجمة', x: 0.08, y: 0.72, w: 0.84, h: 0.24, enabled: true }],
+  full: () => [{ name: 'الشاشة كاملة', x: 0, y: 0, w: 1, h: 1, enabled: true }],
+  game: () => [
+    { name: 'الترجمة', x: 0.12, y: 0.78, w: 0.78, h: 0.11, enabled: true, box_h: 0.8 },
+    { name: 'التعليمات (أعلى اليسار)', x: 0.01, y: 0.18, w: 0.30, h: 0.30, enabled: true, place: 'below', look: 'card', align: 'right' },
+    { name: 'التعليمات (الأسفل)', x: 0.20, y: 0.935, w: 0.60, h: 0.06, enabled: true, place: 'custom', tx: 0.10, ty: 0.765, tw: 0.80, th: 0.05, look: 'subtitle', font: 0.92, accent: '#E85FA0' },
+  ],
+};
+
 function renderAreas(areas) {
   const box = $('areas');
-  box.replaceChildren(...areas.map((a, n) => {
+  box.replaceChildren(...areas.map((a0) => {
+    const a = { ...AREA_DEFAULTS, ...a0 };
+    const wrap = document.createElement('div');
+    wrap.className = 'area';
     const row = document.createElement('div');
-    row.className = 'row area';
-    const num = (k, v) => { const l = document.createElement('label'); l.textContent = k + ' %'; const i = document.createElement('input'); i.type = 'number'; i.min = 0; i.max = 100; i.step = 0.5; i.value = Math.round(v * 1000) / 10; i.dataset.k = k.toLowerCase(); l.append(i); return l; };
-    const name = document.createElement('input'); name.value = a.name; name.dataset.k = 'name'; name.style.maxWidth = '9em';
+    row.className = 'row';
+    const num = (k, v, key) => { const l = document.createElement('label'); l.textContent = k + ' %'; const i = document.createElement('input'); i.type = 'number'; i.min = 0; i.max = 100; i.step = 0.5; i.value = Math.round(v * 1000) / 10; i.dataset.k = key; l.append(i); return l; };
+    const name = document.createElement('input'); name.value = a.name; name.dataset.k = 'name'; name.style.maxWidth = '11em';
     const on = document.createElement('input'); on.type = 'checkbox'; on.checked = a.enabled !== false; on.dataset.k = 'enabled';
-    const del = btn('حذف', () => { row.remove(); }, 'link');
-    row.append(on, name, num('X', a.x), num('Y', a.y), num('W', a.w), num('H', a.h), del);
-    return row;
+    const del = btn('حذف', () => { wrap.remove(); drawBoxes(); }, 'link');
+    row.append(on, name, num('X', a.x, 'x'), num('Y', a.y, 'y'), num('W', a.w, 'w'), num('H', a.h, 'h'), del);
+
+    const sel = (label, key, value, options) => {
+      const l = document.createElement('label'); l.textContent = label;
+      const s = document.createElement('select'); s.dataset.k = key;
+      options.forEach(([v, t]) => s.append(new Option(t, v)));
+      s.value = value; l.append(s); return l;
+    };
+    const range = (label, key, value, min, max) => {
+      const l = document.createElement('label'); l.textContent = label;
+      const i = document.createElement('input'); i.type = 'range'; i.min = min; i.max = max; i.step = 0.05; i.value = value; i.dataset.k = key;
+      const out = document.createElement('span'); out.className = 'muted'; out.textContent = Math.round(value * 100) + '%';
+      i.oninput = () => (out.textContent = Math.round(i.value * 100) + '%');
+      l.append(i, out); return l;
+    };
+    const design = document.createElement('details');
+    const sum = document.createElement('summary'); sum.textContent = 'التصميم';
+    const r1 = document.createElement('div'); r1.className = 'row';
+    r1.append(
+      sel('الترجمة', 'place', a.place, [['auto', 'تلقائي'], ['over', 'فوق النص الإنجليزي'], ['below', 'أسفل مربع النص'], ['above', 'أعلى مربع النص'], ['custom', 'مكان مخصص']]),
+      sel('الشكل', 'look', a.look, [['auto', 'تلقائي'], ['subtitle', 'نص فوق الصورة'], ['box', 'مربع'], ['card', 'بطاقة بأسلوب اللعبة']]),
+      sel('المحاذاة', 'align', a.align, [['right', 'يمين'], ['center', 'وسط'], ['left', 'يسار']]),
+      sel('موضع النص', 'valign', a.valign, [['top', 'الأعلى'], ['center', 'الوسط'], ['bottom', 'الأسفل']]),
+    );
+    const r2 = document.createElement('div'); r2.className = 'row custom-rect';
+    const cap = document.createElement('span'); cap.className = 'muted'; cap.textContent = 'منطقة الترجمة (المكان المخصص):';
+    r2.append(cap, num('X', a.tx, 'tx'), num('Y', a.ty, 'ty'), num('W', a.tw, 'tw'), num('H', a.th, 'th'));
+    const r3 = document.createElement('div'); r3.className = 'row';
+    r3.append(range('حجم النص', 'font', a.font, 0.5, 2), range('عرض المربع', 'box_w', a.box_w, 0.3, 2), range('ارتفاع المربع', 'box_h', a.box_h, 0, 2.5));
+    const r4 = document.createElement('div'); r4.className = 'row';
+    const acc = document.createElement('label'); acc.textContent = 'لون الحافة';
+    const accOn = document.createElement('input'); accOn.type = 'checkbox'; accOn.checked = !!a.accent; accOn.dataset.k = 'accent_on';
+    const accC = document.createElement('input'); accC.type = 'color'; accC.value = a.accent || '#E85FA0'; accC.dataset.k = 'accent';
+    acc.append(accOn, accC); r4.append(acc);
+    design.append(sum, r1, r2, r3, r4);
+    wrap.append(row, design);
+    return wrap;
   }));
 }
 
 function readAreas() {
   return [...document.querySelectorAll('#areas .area')].map((row, n) => {
-    const v = (k) => +row.querySelector(`[data-k="${k}"]`).value / 100;
-    return { name: row.querySelector('[data-k="name"]').value || `منطقة ${n + 1}`, x: v('x'), y: v('y'), w: v('w'), h: v('h'), enabled: row.querySelector('[data-k="enabled"]').checked };
+    const q = (k) => row.querySelector(`[data-k="${k}"]`);
+    const v = (k) => +q(k).value / 100;
+    return {
+      name: q('name').value || `منطقة ${n + 1}`, x: v('x'), y: v('y'), w: v('w'), h: v('h'), enabled: q('enabled').checked,
+      place: q('place').value, tx: v('tx'), ty: v('ty'), tw: v('tw'), th: v('th'), valign: q('valign').value,
+      look: q('look').value, align: q('align').value, font: +q('font').value, box_w: +q('box_w').value, box_h: +q('box_h').value,
+      accent: q('accent_on').checked ? q('accent').value.toUpperCase() : null,
+    };
   });
+}
+
+function applyPreset(kind) {
+  renderAreas(PRESETS[kind]());
+  drawBoxes();
+  toast('اضغط «حفظ» في «مناطق القراءة» لاعتماد القالب.');
 }
 
 // ---- PS5 (LUGHA's own Remote Play) ----
@@ -268,13 +330,28 @@ async function loadShot() {
 // The reading areas drawn over the live picture; dragging on it adds one.
 function drawBoxes() {
   const host = $('ps5-boxes');
-  host.replaceChildren(...readAreas().map((a) => {
+  const areas = readAreas();
+  const boxes = areas.map((a) => {
     const d = document.createElement('div');
     d.className = 'box' + (a.enabled ? '' : ' off');
     Object.assign(d.style, { left: a.x * 100 + '%', top: a.y * 100 + '%', width: a.w * 100 + '%', height: a.h * 100 + '%' });
     const l = document.createElement('span'); l.textContent = a.name; d.append(l);
     return d;
-  }));
+  });
+  // Hand-placed translation boxes, in pink.
+  const targets = areas.filter((a) => a.place === 'custom').map((a) => {
+    const d = document.createElement('div');
+    d.className = 'box tr';
+    Object.assign(d.style, { left: a.tx * 100 + '%', top: a.ty * 100 + '%', width: a.tw * 100 + '%', height: a.th * 100 + '%' });
+    const l = document.createElement('span'); l.textContent = '↳ ' + a.name; d.append(l);
+    return d;
+  });
+  host.replaceChildren(...boxes, ...targets);
+  // What dragging draws: a new area, or where an area's translation goes.
+  const sel = $('draw-target');
+  const cur = sel.value;
+  sel.replaceChildren(new Option('الرسم: منطقة قراءة جديدة', '-1'), ...areas.map((a, n) => new Option(`الرسم: مكان ترجمة «${a.name}»`, String(n))));
+  sel.value = [...sel.options].some((o) => o.value === cur) ? cur : '-1';
 }
 
 (() => {
@@ -298,8 +375,16 @@ function drawBoxes() {
     start = null;
     if (box.w > 0.03 && box.h > 0.02) {
       const now = readAreas();
-      renderAreas([...now, { name: `منطقة ${now.length + 1}`, ...box, enabled: true }]);
-      toast('أُضيفت المنطقة. اضغط «حفظ» في «مناطق القراءة».');
+      const t = +$('draw-target').value;
+      if (t >= 0 && now[t]) {
+        // Where this area's translation goes.
+        Object.assign(now[t], { place: 'custom', tx: box.x, ty: box.y, tw: box.w, th: box.h });
+        renderAreas(now);
+        toast('حُدد مكان الترجمة. اضغط «حفظ» في «مناطق القراءة».');
+      } else {
+        renderAreas([...now, { name: `منطقة ${now.length + 1}`, ...box, enabled: true }]);
+        toast('أُضيفت المنطقة. اضغط «حفظ» في «مناطق القراءة».');
+      }
     }
     drawBoxes();
   };
@@ -353,6 +438,7 @@ $('area-add').onclick = () => {
   const now = readAreas();
   renderAreas([...now, { name: `منطقة ${now.length + 1}`, x: 0.1, y: 0.8, w: 0.8, h: 0.12, enabled: true }]);
 };
+document.querySelectorAll('[data-preset]').forEach((b) => (b.onclick = () => applyPreset(b.dataset.preset)));
 $('areas-save').onclick = async () => { await call('set_areas', { areas: readAreas() }); toast('حُفظت مناطق القراءة'); refresh(); };
 
 $('display-save').onclick = async () => {

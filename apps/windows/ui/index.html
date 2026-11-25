@@ -100,6 +100,7 @@
           <button id="ps5-wake" class="ghost">إيقاظ الجهاز</button><button id="ps5-forget" class="link">إلغاء الربط</button>
         </div>
         <div class="shot" id="ps5-shot" hidden><img id="ps5-img" alt=""><div id="ps5-boxes"></div></div>
+        <div class="row" id="draw-row"><select id="draw-target"><option value="-1">الرسم: منطقة قراءة جديدة</option></select></div>
         <p class="muted" id="ps5-hint" hidden>اسحب على الصورة لرسم مربع حول مكان الترجمة الإنجليزية، ثم اضغط «حفظ» في «مناطق القراءة».</p>
       </div>
     </div>
@@ -117,6 +118,11 @@
       <p class="muted">تُترجم النصوص داخل هذه المربعات فقط (نسبة مئوية من الصورة الملتقطة). بدونها تُقرأ الصورة كلها.</p>
       <div id="areas"></div>
       <div class="row"><button id="area-add" class="ghost">إضافة منطقة</button><button id="areas-save">حفظ</button></div>
+      <div class="row"><span class="muted">قوالب:</span>
+        <button class="ghost" data-preset="subtitles">الترجمة فقط</button>
+        <button class="ghost" data-preset="full">الشاشة كاملة</button>
+        <button class="ghost" data-preset="game">الترجمة + التعليمات</button>
+      </div>
     </div>
     <div class="card" id="display-card">
       <h2>طريقة العرض</h2>
