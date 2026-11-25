@@ -27,7 +27,7 @@ fn main() {
     }
     let target = std::env::var("TARGET").unwrap();
     let mut cfg = cmake::Config::new("native");
-    cfg.build_target("lugha_rp").profile("Release");
+    cfg.build_target("lugha_rp").profile("Release").define("CMAKE_POLICY_VERSION_MINIMUM", "3.5");
     if target.contains("apple") {
         cfg.define("CMAKE_OSX_DEPLOYMENT_TARGET", if target.contains("ios") { "15.0" } else { "13.0" });
     }

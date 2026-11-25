@@ -6,6 +6,8 @@ project(lugha_rp C CXX)
 
 set(CHIAKI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../apps/mobile/third_party/chiaki-ng" CACHE PATH "chiaki-ng source")
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+# CMake 4 refuses projects that ask for a version below 3.5 (libevent, json-c, ...); let them build.
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "" FORCE)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 # Never link what Homebrew/MacPorts installed (other CPU type, other versions): everything here is built from source.
 list(APPEND CMAKE_IGNORE_PATH /usr/local/bin /usr/local/lib /usr/local/include /usr/local/opt
