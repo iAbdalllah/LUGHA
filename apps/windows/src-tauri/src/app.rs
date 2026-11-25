@@ -120,10 +120,13 @@ impl Default for Display {
     }
 }
 
+/// Release builds talk to the live server; debug builds to a local backend (`php artisan serve --port=8040`).
+const DEFAULT_SERVER: &str = if cfg!(debug_assertions) { "http://127.0.0.1:8040" } else { "https://lugha.iabdallah.com" };
+
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            server: std::env::var("LUGHA_API").unwrap_or_else(|_| "http://127.0.0.1:8040".into()),
+            server: std::env::var("LUGHA_API").unwrap_or_else(|_| DEFAULT_SERVER.into()),
             ocr_language: "en-US".into(),
             region: None,
             tv_addr: None,
@@ -140,7 +143,12 @@ impl Default for Settings {
 
 impl Settings {
     fn load() -> Self {
-        std::fs::read(data_dir().join("settings.json")).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+        let mut s: Self = std::fs::read(data_dir().join("settings.json")).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
+        // Installers before 0.1.1 saved the developer's local backend; a release build moves them to the live server.
+        if !cfg!(debug_assertions) && s.server.starts_with("http://127.0.0.1:8040") && std::env::var("LUGHA_API").is_err() {
+            s.server = DEFAULT_SERVER.into();
+        }
+        s
     }
     fn save(&self) {
         let _ = std::fs::write(data_dir().join("settings.json"), serde_json::to_vec_pretty(self).unwrap_or_default());
