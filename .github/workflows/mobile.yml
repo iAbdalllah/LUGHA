@@ -11,6 +11,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive # chiaki-ng, built by the Remote Play plugin
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install protobuf grpcio-tools
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
