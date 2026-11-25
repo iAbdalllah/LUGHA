@@ -43,6 +43,10 @@ class OverlayRenderer(private val context: Context, private val layer: FrameLayo
     private val amber = Color.rgb(0xE9, 0xB4, 0x4C)
     private val dm get() = context.resources.displayMetrics
 
+    /** Where each designed area's card is attached and its text size, so it stays put between frames. */
+    private class Slot(val ax: Float, val ay: Float, val px: Float, val at: Long = System.currentTimeMillis())
+    private val slots = mutableMapOf<String, Slot>()
+
     /** Pieces on screen keyed by their text, so a piece that stays is updated in place (no flicker, no re-fade). */
     private val views = mutableMapOf<String, View>()
 
@@ -52,6 +56,7 @@ class OverlayRenderer(private val context: Context, private val layer: FrameLayo
         views.clear()
         hold.clear()
         history.clear()
+        slots.clear()
         lastSid = null
     }
 
@@ -129,47 +134,72 @@ class OverlayRenderer(private val context: Context, private val layer: FrameLayo
             val top = if (above) (i.y * sh - gap - h) else ((i.y + i.h / 2f) * sh - h / 2f)
             pieces += Piece(key, v, Rect((cx - w / 2f).toInt(), top.toInt(), w, h), if (old) 0.6f else 1f)
         }
-        // Areas the player designed: one card per area (its lines together), placed by the area's own rule.
+        // Areas the player designed: one card per area (its lines together), placed by the area's own rule and kept
+        // steady — the text recogniser's boxes wobble a little every frame, so a card keeps its place, size and text
+        // size until the English really moves (more than a few percent of the screen) or its size really changes.
         val fixedOwn = mutableListOf<Piece>()
         val movableOwn = mutableListOf<Piece>()
-        for ((name, list) in own.groupBy { it.first.area!!.name.ifEmpty { it.first.text } }) {
+        for ((name, all) in own.groupBy { it.first.area!!.name.ifEmpty { it.first.text } }) {
+            // Busy scenes (several people talking): only the newest lines, never a growing stack — an earlier line is
+            // shown (dimmed) only while nothing new is on screen in this area.
+            val current = all.filter { !it.second }
+            val list = (if (current.isEmpty()) all.take(1) else current).sortedBy { it.first.y }.takeLast(2)
             val a = list.first().first.area!!
-            val its = list.map { it.first }
+            val place = if (a.place == "auto") "over" else a.place
+            val its = list.filter { !it.second }.map { it.first }.ifEmpty { list.map { it.first } }
             val ux = its.minOf { it.x }; val uy = its.minOf { it.y }
             val ur = its.maxOf { it.x + it.w }; val ub = its.maxOf { it.y + it.h }
-            val lineH = its.map { it.h / it.lines.coerceAtLeast(1) }.sorted().let { it[it.size / 2] } * sh
-            val px = (lineH * 0.9f * style.fontScale * a.font).coerceIn(14f, 110f)
             val key = "area:$name"
+            val slot = slots[key]
+            val lineH = its.map { it.h / it.lines.coerceAtLeast(1) }.sorted().let { it[it.size / 2] } * sh
+            var px = (lineH * 0.9f * style.fontScale * a.font).coerceIn(14f, sh * 0.05f * a.font.coerceAtLeast(0.5f))
+            if (slot != null && kotlin.math.abs(px - slot.px) / slot.px < 0.3f) px = slot.px
             val v = (views[key] as? LinearLayout) ?: LinearLayout(context)
             fillArea(v, list, a, px, style)
-            val baseW = (if (a.place == "custom") a.tw else ur - ux) * sw
-            val maxW = (baseW * a.boxW).coerceIn(sw * 0.1f, sw * 0.96f).toInt()
-            // Over the English: at least as wide as it, so it hides it; elsewhere as wide as the text needs.
-            v.minimumWidth = if (a.place == "over" && a.look != "subtitle") maxW else 0
+            // Width: the English (or the reading area / custom box), times the player's box width; never the whole screen.
+            val englishW = (ur - ux) * sw
+            val baseW = when {
+                place == "custom" -> a.tw * sw
+                a.rw > 0f && place != "over" -> maxOf(englishW, a.rw * sw * 0.5f)
+                else -> englishW
+            }
+            val maxW = (baseW * a.boxW).coerceIn(sw * 0.12f, sw * 0.9f).toInt()
+            // Over the English (or below a game box): as wide as it, so it lines up with what the game drew.
+            v.minimumWidth = if ((place == "over" || place == "below" || place == "above") && a.look != "subtitle") (englishW * a.boxW).toInt().coerceAtMost(maxW) else 0
             v.measure(View.MeasureSpec.makeMeasureSpec(maxW, View.MeasureSpec.AT_MOST), View.MeasureSpec.UNSPECIFIED)
             val w = v.measuredWidth
-            val h = v.measuredHeight
-            fun leftFor(l: Float, r: Float) = when (a.align) {
-                "right" -> r * sw - w
-                "left" -> l * sw
-                else -> (l + r) / 2f * sw - w / 2f
+            val h = v.measuredHeight.coerceAtMost((sh * 0.3f).toInt())
+            // The anchor point: where the card attaches (fractions of the screen), held while the English barely moves.
+            var ax = when {
+                place == "custom" -> when (a.align) { "right" -> a.tx + a.tw; "left" -> a.tx; else -> a.tx + a.tw / 2f }
+                a.align == "right" -> ur
+                a.align == "left" || place == "below" || place == "above" -> ux
+                else -> (ux + ur) / 2f
             }
-            val r = when (a.place) {
-                "custom" -> {
-                    val top = when (a.valign) {
-                        "top" -> a.ty * sh
-                        "center" -> (a.ty + a.th / 2f) * sh - h / 2f
-                        else -> (a.ty + a.th) * sh - h
-                    }
-                    Rect(leftFor(a.tx, a.tx + a.tw).toInt(), top.toInt(), w, h)
-                }
-                "below" -> Rect(leftFor(ux, ur).toInt(), (ub * sh + gap).toInt(), w, h)
-                "above" -> Rect(leftFor(ux, ur).toInt(), (uy * sh - gap - h).toInt(), w, h)
-                else -> Rect(((ux + ur) / 2f * sw - w / 2f).toInt(), ((uy + ub) / 2f * sh - h / 2f).toInt(), w, h)
+            var ay = when (place) {
+                "custom" -> when (a.valign) { "top" -> a.ty; "center" -> a.ty + a.th / 2f; else -> a.ty + a.th }
+                "below" -> ub
+                "above" -> uy
+                else -> ub
             }
+            if (slot != null && kotlin.math.abs(ax - slot.ax) < 0.04f && kotlin.math.abs(ay - slot.ay) < 0.04f) { ax = slot.ax; ay = slot.ay }
+            slots[key] = Slot(ax, ay, px)
+            val hAlign = if (place == "custom") a.align else if (a.align == "right") "right" else if (a.align == "left" || place == "below" || place == "above") "left" else "center"
+            val left = when (hAlign) { "right" -> ax * sw - w; "left" -> ax * sw; else -> ax * sw - w / 2f }
+            val top = when (place) {
+                "custom" -> when (a.valign) { "top" -> ay * sh; "center" -> ay * sh - h / 2f; else -> ay * sh - h }
+                "below" -> ay * sh + gap
+                "above" -> ay * sh - gap - h
+                // Over: bottom-anchored on the English's last line, growing upward — the subtitle line stays put.
+                else -> ay * sh + px * 0.2f - h
+            }
+            val r = Rect(left.toInt().coerceIn(0, (sw - w).coerceAtLeast(0)), top.toInt().coerceIn(0, (sh - h).coerceAtLeast(0)), w, h)
             val alpha = if (list.all { it.second }) 0.6f else 1f
-            if (a.place == "custom") fixedOwn += Piece(key, v, r, alpha) else movableOwn += Piece(key, v, r, alpha)
+            // Designed areas keep their place; only the general pieces make way around them.
+            fixedOwn += Piece(key, v, r, alpha)
         }
+        // A card whose area has nothing now: forget its slot after a while so the next line can settle afresh.
+        slots.keys.retainAll(own.map { "area:" + it.first.area!!.name.ifEmpty { it.first.text } }.toSet() + slots.filter { now - it.value.at < 4000 }.keys)
         // The subtitle block and hand-placed areas stay put; everything else makes way for them.
         val blockPieces = pieces.take(if (sc.block != null) 1 else 0)
         val ordered = blockPieces + fixedOwn + movableOwn + pieces.drop(blockPieces.size)
@@ -331,10 +361,26 @@ class OverlayRenderer(private val context: Context, private val layer: FrameLayo
                 textDirection = View.TEXT_DIRECTION_RTL
                 gravity = g
                 setLineSpacing(0f, 1.1f)
+                // Subtitles: 2 lines at most (busy scenes stay compact). Hints and cards keep their whole text.
+                maxLines = if (look == "card" || look == "box" && a.place != "over") 5 else 2
+                ellipsize = android.text.TextUtils.TruncateAt.END
                 typeface = typeface(style.font)
                 text = line(i.text, i.speaker)
                 setTextColor(fg)
-                if (look == "subtitle") setShadowLayer(px * 0.16f, 0f, 0f, edge(fg))
+                // Text on the picture: an outline for contrast, in the area's accent colour when it has one (a frame in
+                // the game's own colours, like the reference's "Vice City" style).
+                if (look == "subtitle") {
+                    val acc = a.accent
+                    if (acc != null) {
+                        // GTA VI style: the text in a sunset gradient from the accent to warm orange, dark outline.
+                        setTextColor(Color.WHITE)
+                        setShadowLayer(px * 0.2f, 0f, px * 0.04f, Color.argb(235, 12, 10, 28))
+                        addOnLayoutChangeListener { tv, _, _, _, _, _, _, _, _ ->
+                            (tv as TextView).paint.shader = android.graphics.LinearGradient(0f, 0f, tv.width.toFloat(), 0f,
+                                intArrayOf(acc, Color.rgb(0xFF, 0x8A, 0x5C), Color.rgb(0xFF, 0xC8, 0x57)), null, android.graphics.Shader.TileMode.CLAMP)
+                        }
+                    } else setShadowLayer(px * 0.18f, 0f, 0f, edge(fg))
+                }
                 alpha = if (old) 0.55f else 1f
             }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         }

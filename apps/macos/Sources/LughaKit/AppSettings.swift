@@ -147,8 +147,11 @@ public struct ReadingArea: Codable, Equatable, Identifiable, Sendable {
 
     /// The design as the TV reads it (`area` on each sub.show item). `toTV` maps a picture rect to the TV screen.
     public func tvStyle(toTV: (CGRect) -> CGRect) -> [String: Any] {
+        let r = toTV(rect)
         var d: [String: Any] = ["name": name, "place": place, "valign": valign, "look": look, "align": align,
-                                "font": font, "box_w": boxW, "box_h": boxH]
+                                "font": font, "box_w": boxW, "box_h": boxH,
+                                // The reading area itself, so the TV can size and anchor the card steadily.
+                                "rx": r.minX, "ry": r.minY, "rw": r.width, "rh": r.height]
         if place == "custom" {
             let t = toTV(translation)
             d["tx"] = t.minX; d["ty"] = t.minY; d["tw"] = t.width; d["th"] = t.height
@@ -169,15 +172,17 @@ public struct ReadingArea: Codable, Equatable, Identifiable, Sendable {
             return [ReadingArea(name: "Full screen", rect: CGRect(x: 0, y: 0, width: 1, height: 1))]
         case "game":
             var subs = ReadingArea(name: "Subtitles", rect: CGRect(x: 0.12, y: 0.78, width: 0.78, height: 0.11))
-            subs.boxH = 0.8
+            subs.place = "over"; subs.look = "box"; subs.boxH = 0.8
             var left = ReadingArea(name: "Instructions (top left)", rect: CGRect(x: 0.01, y: 0.18, width: 0.30, height: 0.30))
-            left.place = "below"; left.look = "card"; left.align = "right"
+            left.place = "below"; left.look = "card"; left.align = "left"
             var bottom = ReadingArea(name: "Instructions (bottom)", rect: CGRect(x: 0.20, y: 0.935, width: 0.60, height: 0.06))
             bottom.place = "custom"; bottom.translation = CGRect(x: 0.10, y: 0.765, width: 0.80, height: 0.05)
-            bottom.look = "subtitle"; bottom.font = 0.92; bottom.accent = "#E85FA0"
+            bottom.look = "subtitle"; bottom.font = 0.92; bottom.accent = "#FF3FA4"
             return [subs, left, bottom]
         default:
-            return [ReadingArea(name: "Subtitles", rect: CGRect(x: 0.08, y: 0.72, width: 0.84, height: 0.24))]
+            var subs = ReadingArea(name: "Subtitles", rect: CGRect(x: 0.08, y: 0.72, width: 0.84, height: 0.24))
+            subs.place = "over"; subs.look = "box"; subs.boxH = 0.8
+            return [subs]
         }
     }
 

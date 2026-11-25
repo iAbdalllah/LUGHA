@@ -169,6 +169,8 @@ class LinkServer(private val scope: CoroutineScope, private val hub: LinkHub = L
                                 boxW = (af("box_w") ?: 1f).coerceIn(0.3f, 2.5f),
                                 boxH = (af("box_h") ?: 1f).coerceIn(0f, 3f),
                                 accent = ac("accent"), bg = ac("bg"),
+                                rx = (af("rx") ?: 0f).coerceIn(0f, 1f), ry = (af("ry") ?: 0f).coerceIn(0f, 1f),
+                                rw = (af("rw") ?: 0f).coerceIn(0f, 1f), rh = (af("rh") ?: 0f).coerceIn(0f, 1f),
                             )
                         }
                         SubItem(o["text"]?.jsonPrimitive?.content ?: return@mapNotNull null, o["speaker"]?.jsonPrimitive?.content?.takeIf { it != "null" },

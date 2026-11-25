@@ -69,6 +69,8 @@ class ReadingArea {
   /// The design as the TV reads it (`area` on a sub.show item).
   Map<String, dynamic> tvStyle() => {
         'name': name, 'place': place, 'valign': valign, 'look': look, 'align': align, 'font': font, 'box_w': boxW, 'box_h': boxH,
+        // The reading area itself, so the TV can size and anchor the card steadily.
+        'rx': x, 'ry': y, 'rw': w, 'rh': h,
         if (place == 'custom') ...{'tx': tx, 'ty': ty, 'tw': tw, 'th': th},
         'accent': ?accent,
       };
@@ -97,12 +99,14 @@ class ReadingArea {
   static List<ReadingArea> preset(String kind, String Function(String) t) => switch (kind) {
         'full' => [ReadingArea(t('Full screen'), 0, 0, 1, 1)],
         'game' => [
-            ReadingArea(t('Subtitles'), 0.12, 0.78, 0.78, 0.11, boxH: 0.8),
-            ReadingArea(t('Instructions (top left)'), 0.01, 0.18, 0.30, 0.30, place: 'below', look: 'card', align: 'right'),
+            // Over the English subtitle on a plate, anchored to its bottom line: steady, and the English is hidden.
+            ReadingArea(t('Subtitles'), 0.12, 0.78, 0.78, 0.11, place: 'over', look: 'box', boxH: 0.8),
+            // Under the game's hint box, same left edge and width, as a dark game-style card.
+            ReadingArea(t('Instructions (top left)'), 0.01, 0.18, 0.30, 0.30, place: 'below', look: 'card', align: 'left'),
             ReadingArea(t('Instructions (bottom)'), 0.20, 0.935, 0.60, 0.06,
-                place: 'custom', tx: 0.10, ty: 0.765, tw: 0.80, th: 0.05, look: 'subtitle', font: 0.92, accent: '#E85FA0'),
+                place: 'custom', tx: 0.10, ty: 0.765, tw: 0.80, th: 0.05, look: 'subtitle', font: 0.92, accent: '#FF3FA4'),
           ],
-        _ => [ReadingArea(t('Subtitles'), 0.08, 0.72, 0.84, 0.24)],
+        _ => [ReadingArea(t('Subtitles'), 0.08, 0.72, 0.84, 0.24, place: 'over', look: 'box', boxH: 0.8)],
       };
 }
 

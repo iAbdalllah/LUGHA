@@ -212,12 +212,12 @@ async function loadHistory() {
 // (where the translation goes, its look, alignment, sizes, accent), the same options as the Mac and phone apps.
 const AREA_DEFAULTS = { place: 'auto', tx: 0.1, ty: 0.76, tw: 0.8, th: 0.06, valign: 'bottom', look: 'auto', align: 'center', font: 1, box_w: 1, box_h: 1, accent: null };
 const PRESETS = {
-  subtitles: () => [{ name: 'الترجمة', x: 0.08, y: 0.72, w: 0.84, h: 0.24, enabled: true }],
+  subtitles: () => [{ name: 'الترجمة', x: 0.08, y: 0.72, w: 0.84, h: 0.24, enabled: true, place: 'over', look: 'box', box_h: 0.8 }],
   full: () => [{ name: 'الشاشة كاملة', x: 0, y: 0, w: 1, h: 1, enabled: true }],
   game: () => [
-    { name: 'الترجمة', x: 0.12, y: 0.78, w: 0.78, h: 0.11, enabled: true, box_h: 0.8 },
-    { name: 'التعليمات (أعلى اليسار)', x: 0.01, y: 0.18, w: 0.30, h: 0.30, enabled: true, place: 'below', look: 'card', align: 'right' },
-    { name: 'التعليمات (الأسفل)', x: 0.20, y: 0.935, w: 0.60, h: 0.06, enabled: true, place: 'custom', tx: 0.10, ty: 0.765, tw: 0.80, th: 0.05, look: 'subtitle', font: 0.92, accent: '#E85FA0' },
+    { name: 'الترجمة', x: 0.12, y: 0.78, w: 0.78, h: 0.11, enabled: true, place: 'over', look: 'box', box_h: 0.8 },
+    { name: 'التعليمات (أعلى اليسار)', x: 0.01, y: 0.18, w: 0.30, h: 0.30, enabled: true, place: 'below', look: 'card', align: 'left' },
+    { name: 'التعليمات (الأسفل)', x: 0.20, y: 0.935, w: 0.60, h: 0.06, enabled: true, place: 'custom', tx: 0.10, ty: 0.765, tw: 0.80, th: 0.05, look: 'subtitle', font: 0.92, accent: '#FF3FA4' },
   ],
 };
 

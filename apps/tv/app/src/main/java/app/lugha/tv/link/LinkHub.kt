@@ -46,9 +46,11 @@ data class AreaStyle(
     val boxH: Float = 1f,
     val accent: Int? = null,
     val bg: Int? = null,
+    /** The reading area itself (fractions of the screen; 0 = not sent by an older sender), to size and anchor steadily. */
+    val rx: Float = 0f, val ry: Float = 0f, val rw: Float = 0f, val rh: Float = 0f,
 ) {
     /** Drawn by its own rules rather than the general subtitle block / HUD layout. */
-    val own get() = place != "auto" || look != "auto"
+    val own get() = place != "auto" || look != "auto" || rw > 0f
 }
 
 /** [items] place each piece over its English; empty = show [text] at the style's position. */

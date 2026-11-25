@@ -148,6 +148,7 @@ final class RemoteSession {
     private var timer: DispatchSourceTimer?
     private let ocrQueue = DispatchQueue(label: "app.lugha.remoteplay.ocr", qos: .userInitiated)
     private var lastLines: [String] = []
+    private var lastRead: CVPixelBuffer?
     private var reading = false
 
     init(plugin: LughaRemotePlayPlugin, areas: [ReadArea], fps: Int) {
@@ -212,18 +213,30 @@ final class RemoteSession {
         guard !reading, let frame = newest() else { return }
         reading = true
         defer { reading = false }
+        // The same picture as last time: nothing new to read.
+        if frame === lastRead { return }
+        lastRead = frame
+        let boxes = areas
         let req = VNRecognizeTextRequest()
         req.recognitionLevel = .accurate
         req.usesLanguageCorrection = false
         req.recognitionLanguages = ["en-US"]
+        // Read only where the reading areas are (much faster than the whole frame). Vision's origin is bottom-left.
+        let union = boxes.map { CGRect(x: $0.x, y: $0.y, width: $0.w, height: $0.h) }.reduce(CGRect.null) { $0.union($1) }
+            .intersection(CGRect(x: 0, y: 0, width: 1, height: 1))
+        let roi = union.isNull || union.isEmpty ? CGRect(x: 0, y: 0, width: 1, height: 1)
+            : CGRect(x: union.minX, y: 1 - union.maxY, width: union.width, height: union.height)
+        req.regionOfInterest = roi
         try? VNImageRequestHandler(cvPixelBuffer: frame, options: [:]).perform([req])
-        let boxes = areas
         // Each line with the reading area it is in (index into the areas Dart sent) and where it is.
         let found = (req.results ?? [])
             .compactMap { o -> (text: String, area: Int, box: CGRect)? in
                 guard let text = o.topCandidates(1).first?.string, !text.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
-                // Vision's origin is bottom-left; the areas' is top-left.
-                let b = CGRect(x: o.boundingBox.minX, y: 1 - o.boundingBox.maxY, width: o.boundingBox.width, height: o.boundingBox.height)
+                // Boxes come relative to the region read; back to the whole frame, origin top-left like the areas.
+                let r = o.boundingBox
+                let fx = roi.minX + r.minX * roi.width, fy = roi.minY + r.minY * roi.height
+                let fw = r.width * roi.width, fh = r.height * roi.height
+                let b = CGRect(x: fx, y: 1 - (fy + fh), width: fw, height: fh)
                 guard let n = boxes.firstIndex(where: { b.midX >= $0.x && b.midX <= $0.x + $0.w && b.midY >= $0.y && b.midY <= $0.y + $0.h }) else { return nil }
                 return (text, n, b)
             }

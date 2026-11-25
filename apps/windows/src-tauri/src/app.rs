@@ -135,6 +135,8 @@ impl Area {
         let mut v = serde_json::json!({
             "name": self.name, "place": self.place, "valign": self.valign, "look": self.look, "align": self.align,
             "font": self.font, "box_w": self.box_w, "box_h": self.box_h,
+            // The reading area itself, so the TV can size and anchor the card steadily.
+            "rx": self.x, "ry": self.y, "rw": self.w, "rh": self.h,
         });
         if self.place == "custom" {
             v["tx"] = self.tx.into(); v["ty"] = self.ty.into(); v["tw"] = self.tw.into(); v["th"] = self.th.into();

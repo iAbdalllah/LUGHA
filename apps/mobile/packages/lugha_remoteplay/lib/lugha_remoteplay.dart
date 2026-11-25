@@ -157,7 +157,7 @@ class RemotePlay {
 
   /// Open the Remote Play session and start reading [area] of each frame (no video is shown, no audio played).
   /// [areas]: reading areas — text is read only inside them (empty: just [area]).
-  static Future<void> start(Registration r, {Area area = Area.subtitles, List<Area> areas = const [], int fps = 4}) => _call('start', {
+  static Future<void> start(Registration r, {Area area = Area.subtitles, List<Area> areas = const [], int fps = 6}) => _call('start', {
         'host': r.host,
         'ps5': r.ps5,
         'registKey': base64Encode(r.registKey),
