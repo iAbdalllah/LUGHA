@@ -67,7 +67,8 @@ class LinkServer(private val scope: CoroutineScope, private val hub: LinkHub = L
         var session = 0L
         try {
             socket.tcpNoDelay = true
-            socket.soTimeout = 20_000
+            // Senders ping every 8 s; a phone the OS paused for a moment gets some slack before the link is dropped.
+            socket.soTimeout = 45_000
             val input = DataInputStream(BufferedInputStream(socket.getInputStream()))
             val out = DataOutputStream(BufferedOutputStream(socket.getOutputStream()))
             val store = hub.store

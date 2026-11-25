@@ -42,5 +42,21 @@ final class LiveTVTests: XCTestCase {
         let pong = try await again.ping()
         XCTAssertTrue(pong)
         try await again.show("نطلع مع الفجر. وأحد ما يتكلم عن الليلة.", speaker: "ريم", waitForAck: true)
+
+        // What the phone sends with designed reading areas: placed items with an `area`, keep-alive pings, clear-all.
+        let style: [String: any Sendable] = ["name": "Instructions", "place": "custom", "tx": 0.1, "ty": 0.76, "tw": 0.8, "th": 0.05,
+                                             "valign": "bottom", "look": "card", "align": "right", "font": 0.9, "box_w": 1.0, "box_h": 0.8,
+                                             "accent": "#E85FA0"]
+        let item = TVSender.Item(text: "اضغط مطولاً لتخفيف السرعة.", speaker: nil, x: 0.2, y: 0.93, w: 0.6, h: 0.06, lines: 1, area: style)
+        let ack = try await again.show("اضغط مطولاً لتخفيف السرعة.", speaker: nil, items: [item], waitForAck: true)
+        XCTAssertNotNil(ack)
+        for _ in 1 ... 4 {
+            try await Task.sleep(nanoseconds: 8_000_000_000)
+            let alive = try await again.ping()
+            XCTAssertTrue(alive, "the TV dropped the link while idle")
+        }
+        try await again.clearAll()
+        let after = try await again.show("الماء هنا أغلى من الذهب.", speaker: "تاجر", items: [item], waitForAck: true)
+        XCTAssertNotNil(after)
     }
 }

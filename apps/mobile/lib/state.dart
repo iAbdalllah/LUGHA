@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:lugha_engine/lugha_engine.dart';
 import 'package:lugha_remoteplay/lugha_remoteplay.dart';
@@ -32,7 +33,7 @@ class Line {
 const reportReasons = ['wrong_meaning', 'typo', 'awkward', 'wrong_speaker', 'offensive', 'other'];
 
 /// App-wide state. Secrets (API token, device key, link key) are in the platform keystore.
-class AppState extends ChangeNotifier {
+class AppState extends ChangeNotifier with WidgetsBindingObserver {
   AppState({FlutterSecureStorage? storage}) : _secure = storage ?? const FlutterSecureStorage();
 
   static const appVersion = '0.1.0';
@@ -78,6 +79,9 @@ class AppState extends ChangeNotifier {
     if (d != null) display = DisplayPrefs.fromJson(jsonDecode(d) as Map<String, dynamic>);
     final tvs = await _secure.read(key: 'paired_tvs');
     if (tvs != null) pairedTvs = (jsonDecode(tvs) as List).map((e) => PairedTv.fromJson(e as Map<String, dynamic>)).toList();
+    // Back on the TV by itself: now, and whenever the app returns to the screen.
+    WidgetsBinding.instance.addObserver(this);
+    unawaited(ensureTv());
     store = PackageStore(Directory('${(await getApplicationSupportDirectory()).path}/packages'));
     notifyListeners();
     if (signedIn) {
@@ -258,11 +262,10 @@ class AppState extends ChangeNotifier {
     status = '';
     try {
       final k = await _linkKeys();
-      tv = await TvSender.pair(host: host, port: port, code: code, name: name, senderName: _senderName, secretHex: k.secretHex);
-      _startTvKeepAlive();
+      _tvWanted = true;
+      _watchTv(await TvSender.pair(host: host, port: port, code: code, name: name, senderName: _senderName, secretHex: k.secretHex));
       pairedTvs = [...pairedTvs.where((t) => t.publicKey != tv!.tv.publicKey), tv!.tv];
       await _secure.write(key: 'paired_tvs', value: jsonEncode(pairedTvs.map((t) => t.toJson()).toList()));
-      _pushStyle();
     } on LinkException catch (e) {
       status = e.message == 'wrong_code' ? L.t('Wrong code') : e.message;
     } catch (e) {
@@ -273,20 +276,76 @@ class AppState extends ChangeNotifier {
 
   Future<void> reconnectTv() async {
     if (pairedTvs.isEmpty) return;
+    _tvWanted = true;
     try {
       final k = await _linkKeys();
-      tv = await TvSender.connect(pairedTvs.last, senderName: _senderName, secretHex: k.secretHex);
-      _startTvKeepAlive();
-      _pushStyle();
+      _watchTv(await TvSender.connect(pairedTvs.last, senderName: _senderName, secretHex: k.secretHex));
+      status = '';
     } catch (e) {
       status = '$e';
     }
     notifyListeners();
   }
 
+  bool _tvWanted = true;
+  bool _tvConnecting = false;
+  Timer? _tvRetry;
+  int _tvRetries = 0;
+
+  /// Uses [s] as the TV link and reconnects by itself when the TV drops it (a paused app, a Wi-Fi blip, a TV
+  /// restart) — the phone used to keep "sending" into a dead link until Reconnect was pressed.
+  void _watchTv(TvSender s) {
+    tv = s;
+    _tvRetries = 0;
+    s.onClosed = () {
+      if (tv != s) return;
+      tv = null;
+      notifyListeners();
+      _scheduleTvReconnect();
+    };
+    _startTvKeepAlive();
+    _pushStyle();
+  }
+
+  void _scheduleTvReconnect() {
+    if (!_tvWanted || pairedTvs.isEmpty || _tvRetry != null) return;
+    final wait = Duration(seconds: [1, 2, 4, 8, 15][_tvRetries.clamp(0, 4)]);
+    _tvRetries++;
+    _tvRetry = Timer(wait, () async {
+      _tvRetry = null;
+      await ensureTv();
+      if (tv == null) _scheduleTvReconnect();
+    });
+  }
+
+  /// Connects to the paired TV when not connected (at launch, when the app comes back, after a drop).
+  Future<void> ensureTv() async {
+    if (!_tvWanted || pairedTvs.isEmpty || _tvConnecting) return;
+    if (tv != null && !tv!.closed) return;
+    _tvConnecting = true;
+    try {
+      final k = await _linkKeys();
+      _watchTv(await TvSender.connect(pairedTvs.last, senderName: _senderName, secretHex: k.secretHex));
+      notifyListeners();
+    } catch (_) {
+      // Not reachable right now: the retry timer tries again.
+    } finally {
+      _tvConnecting = false;
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) ensureTv();
+  }
+
   Future<void> disconnectTv() async {
-    await tv?.close();
+    _tvWanted = false;
+    _tvRetry?.cancel();
+    _tvRetry = null;
+    final t = tv;
     tv = null;
+    await t?.close();
     notifyListeners();
   }
 
@@ -331,9 +390,11 @@ class AppState extends ChangeNotifier {
         tv?.keepAlive();
       } catch (_) {
         tv = null;
-        _tvKeepAlive?.cancel();
         notifyListeners();
+        _scheduleTvReconnect();
       }
+      // Also covers a link that never came back after a retry gave up.
+      if (tv == null) ensureTv();
     });
   }
 
@@ -390,6 +451,8 @@ class AppState extends ChangeNotifier {
         notifyListeners();
         await Future<void>.delayed(const Duration(seconds: 12));
       }
+      _tvWanted = true;
+      unawaited(ensureTv());
       _rpSub ??= RemotePlay.events.listen(_onRp);
       await RemotePlay.start(r, area: area, areas: _rpAreas());
     } on RemotePlayException catch (e) {

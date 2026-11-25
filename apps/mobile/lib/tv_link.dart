@@ -38,6 +38,10 @@ class _FramedSocket {
     }, onDone: () => _fail(LinkException('connection closed')), onError: (Object e) => _fail(LinkException('$e')));
   }
 
+  /// Called once when the TV closes the link or it breaks (Wi-Fi drop, the TV timing out a paused app).
+  void Function()? onClosed;
+  bool get closed => _error != null;
+
   final Socket _s;
   late final StreamSubscription<Uint8List> _sub;
   final _buf = BytesBuilder(copy: false);
@@ -72,7 +76,9 @@ class _FramedSocket {
   }
 
   void _fail(Object e) {
+    final first = _error == null;
     _error ??= e;
+    if (first) onClosed?.call();
     for (final w in _waiters) {
       if (!w.isCompleted) w.completeError(e);
     }
@@ -88,6 +94,7 @@ class _FramedSocket {
   }
 
   void send(int type, List<int> payload) {
+    if (_error != null) throw LinkException('connection closed');
     final head = ByteData(5)
       ..setUint32(0, payload.length + 1)
       ..setUint8(4, type);
@@ -159,6 +166,10 @@ class TvSender {
   }
 
   void _send(Map<String, dynamic> m) => _sock.send(Frame.data, _crypto.encrypt(_session!, jsonEncode(m)));
+
+  /// The link to the TV is gone; [onClosed] fires when that happens.
+  bool get closed => _sock.closed;
+  set onClosed(void Function()? f) => _sock.onClosed = f;
 
   Future<Map<String, dynamic>> _receive() async {
     final (t, body) = await _sock.read();
