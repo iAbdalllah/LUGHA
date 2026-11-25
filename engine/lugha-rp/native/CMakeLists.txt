@@ -13,6 +13,19 @@ set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 list(APPEND CMAKE_IGNORE_PATH /usr/local/bin /usr/local/lib /usr/local/include /usr/local/opt
     /opt/homebrew/bin /opt/homebrew/lib /opt/homebrew/include /opt/homebrew/opt /opt/local/bin /opt/local/lib)
 
+# Windows (clang-cl): recent clang turns several old-C habits into errors that these libraries still have; keep
+# them warnings so one missing prototype in a dependency does not stop the build.
+if(MSVC AND CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    add_compile_options(
+        $<$<COMPILE_LANGUAGE:C>:-Wno-error=implicit-function-declaration>
+        $<$<COMPILE_LANGUAGE:C>:-Wno-error=implicit-int>
+        $<$<COMPILE_LANGUAGE:C>:-Wno-error=int-conversion>
+        $<$<COMPILE_LANGUAGE:C>:-Wno-error=incompatible-pointer-types>
+        $<$<COMPILE_LANGUAGE:C>:-Wno-error=incompatible-function-pointer-types>
+        $<$<COMPILE_LANGUAGE:C>:-Wno-error=return-type>)
+    add_compile_definitions(_CRT_SECURE_NO_WARNINGS _CRT_NONSTDC_NO_DEPRECATE)
+endif()
+
 # libevent (chiaki's internet hole punching links it on desktop even though LAN play never uses it).
 include(FetchContent)
 set(EVENT__DISABLE_OPENSSL ON CACHE BOOL "" FORCE)
