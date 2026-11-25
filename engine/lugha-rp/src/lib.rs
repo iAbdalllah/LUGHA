@@ -97,7 +97,8 @@ fn init() -> Result<(), Error> {
 
 /// Sends chiaki's log lines (level 1 debug … 16 error) to `f`, e.g. the app's diagnostics log.
 pub fn set_log(f: impl Fn(u32, &str) + Send + Sync + 'static) {
-    static SINK: Mutex<Option<Box<dyn Fn(u32, &str) + Send + Sync>>> = Mutex::new(None);
+    type Sink = Box<dyn Fn(u32, &str) + Send + Sync>;
+    static SINK: Mutex<Option<Sink>> = Mutex::new(None);
     extern "C" fn cb(level: c_int, msg: *const c_char, _: *mut c_void) {
         if msg.is_null() { return }
         let m = unsafe { CStr::from_ptr(msg) }.to_string_lossy();
@@ -360,7 +361,7 @@ impl Session {
 
 impl Shared {
     fn frame(&self, data: &[u8]) {
-        let due = self.last.lock().unwrap().map_or(true, |t| t.elapsed() >= self.every);
+        let due = self.last.lock().unwrap().is_none_or(|t| t.elapsed() >= self.every);
         let mut guard = self.decoder.lock().unwrap();
         let d = &mut *guard;
         let Some(dec) = d.inner.as_mut() else { return };
@@ -388,7 +389,7 @@ impl Shared {
             Err(()) => {
                 d.errors += 1;
                 // A lost packet breaks the picture until the next key frame: ask for one (not on every error).
-                if d.errors == 1 || d.errors % 30 == 0 { *self.keyframe_wanted.lock().unwrap() = true }
+                if d.errors == 1 || d.errors.is_multiple_of(30) { *self.keyframe_wanted.lock().unwrap() = true }
             }
         }
     }

@@ -14,6 +14,10 @@ jobs:
         working-directory: engine
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive # chiaki-ng, for lugha-rp
+      # lugha-rp builds chiaki-ng with CMake; its nanopb step needs Python's protobuf module.
+      - run: sudo apt-get install -y python3-protobuf
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
