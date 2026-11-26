@@ -568,7 +568,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     for (final MapEntry(key: a, value: idx) in groups.entries) {
       if (a < 0 || a >= areas.length) continue;
       final area = areas[a];
-      final text = [for (final n in idx) ev.lines[n]].join(' ').trim();
+      final text = fromSpeaker([for (final n in idx) ev.lines[n]]).join(' ').trim();
       String? target, speaker;
       final f = findLine(text, look);
       if (f != null) {

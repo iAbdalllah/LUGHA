@@ -21,6 +21,19 @@ String plain(String t) => t
   return ok ? (name, rest) : (null, text);
 }
 
+/// The lines of one subtitle paragraph, starting at its speaker: a game puts "Name:" at the start of a subtitle, so a
+/// short scrap read above it (a logo, a sign, a menu word: "Effievzx" + "Brian: Uh, I think…") is not part of it —
+/// joined in front, it would become part of the speaker's name.
+List<String> fromSpeaker(List<String> lines) {
+  for (var n = 1; n < lines.length; n++) {
+    if (splitSpeaker(plain(lines[n]).trim()).$1 == null) continue;
+    final before = lines.sublist(0, n);
+    final scraps = before.every((l) => splitSpeaker(plain(l).trim()).$1 == null && l.trim().split(RegExp(r'\s+')).length <= 2);
+    return scraps ? lines.sublist(n) : lines;
+  }
+  return lines;
+}
+
 /// A button icon read as text: a lone symbol, or X/O/C/0 alone or in brackets.
 bool isGlyph(String w) {
   final core = w.replaceAll(RegExp(r'[\[\](){}]'), '');
