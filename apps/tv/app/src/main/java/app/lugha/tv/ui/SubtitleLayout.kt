@@ -120,22 +120,37 @@ fun scene(shown: List<Pair<SubItem, Boolean>>): Scene {
 }
 
 /**
- * Recent dialogue for the side panel: newest last, each line once, at most [max]. Only lines the game showed long
- * enough to be real (not a one-frame misread) are kept by the caller.
+ * Recent dialogue for the side panel: newest last, each sentence once, at most [max] lines. Items are split into their
+ * lines first, because the sender merges a speaker's lines into one paragraph that changes as it grows ("A", then
+ * "A\nB", or a speaker name read on its own line) — comparing whole items let the same sentence in again and again.
  */
-class History(private val max: Int = 6) {
+class History(private val max: Int = 8) {
     private val lines = ArrayDeque<SubItem>()
     var changedAt = 0L
         private set
 
     fun add(items: List<SubItem>, now: Long) {
-        for (i in items.filter(::isDialogue)) {
-            if (lines.any { it.text == i.text }) continue
-            lines.addLast(i)
-            while (lines.size > max) lines.removeFirst()
-            changedAt = now
+        for (i in items.filter { isDialogue(it) && it.area?.instructions != true }) {
+            for (raw in i.text.split('\n')) {
+                val text = raw.trim()
+                val key = norm(text)
+                // A lone word is a speaker name or a HUD scrap ("Cal", "Right"), not a sentence.
+                if (key.length < 6 || !text.contains(' ')) continue
+                val same = lines.indexOfFirst { val k = norm(it.text); k == key || k.contains(key) || key.contains(k) }
+                if (same >= 0) {
+                    // The longer reading wins (the line finished typing in, or the OCR got more of it), in place.
+                    if (key.length > norm(lines[same].text).length) { lines[same] = i.copy(text = text); changedAt = now }
+                    continue
+                }
+                lines.addLast(i.copy(text = text))
+                while (lines.size > max) lines.removeFirst()
+                changedAt = now
+            }
         }
     }
+
+    /** Letters and digits only, so punctuation and spacing differences between two readings don't count. */
+    private fun norm(s: String) = s.filter { it.isLetterOrDigit() }
 
     val items: List<SubItem> get() = lines.toList()
     fun clear() = lines.clear()

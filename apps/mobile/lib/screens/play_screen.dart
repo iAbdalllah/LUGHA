@@ -1,6 +1,7 @@
 // PS5 tab: sign in to PSN, link the PS5 once, then read the game's subtitles from the console while the player plays
 // on the TV. Part of the AGPL-3.0 Remote Play feature (packages/lugha_remoteplay/LICENSE).
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -96,6 +97,16 @@ class _PlayScreenState extends State<PlayScreen> {
         ),
         if (app.rpStatus.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 8), child: Text(app.rpStatus)),
         if (app.rpRunning) Padding(padding: const EdgeInsets.only(top: 4), child: Text(L.t('Keep this phone on and LUGHA open while you play.'), style: t.bodySmall)),
+        // A floating window with the game and the Arabic, to keep reading while using another app.
+        if (app.rpRunning && Platform.isIOS)
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: TextButton.icon(
+              onPressed: RemotePlay.pictureInPicture,
+              icon: const Icon(Icons.picture_in_picture_alt),
+              label: Text(L.t('Floating window')),
+            ),
+          ),
         if (app.rpRunning) _PictureAreas(app: app),
         if (app.rpRunning && app.history.isNotEmpty) ...[
           const Divider(),

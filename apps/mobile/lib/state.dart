@@ -593,9 +593,11 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     }
     if (items.isEmpty) {
       tv?.clear();
+      RemotePlay.caption('');
       return;
     }
     tv?.showItems(shown.join('\n'), items);
+    RemotePlay.caption(shown.join('\n'));
   }
 
   Future<void> sendTestLine() async {

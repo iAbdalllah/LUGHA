@@ -87,8 +87,8 @@ class OverlayRenderer(private val context: Context, private val layer: FrameLayo
         }
         val shownAll = if (style.readHold) hold.visible(now) else items.map { it to false }
         // Lines from reading areas the player designed go by their area's rules; the rest by the general ones.
-        val (own, shown) = if (style.display == "history") emptyList<Pair<SubItem, Boolean>>() to emptyList() else shownAll.partition { it.first.area?.own == true }
-        // History only: nothing over the game, just the side panel.
+        // History only: the dialogue goes to the side panel, but instruction areas (bottom hints, top-left box) still show.
+        val (own, shown) = if (style.display == "history") shownAll.filter { it.first.area?.instructions == true } to emptyList() else shownAll.partition { it.first.area?.own == true }
         val sc = if (style.display == "history") app.lugha.tv.ui.Scene(null, emptyList()) else scene(shown)
         val (sw, sh) = dm.widthPixels to dm.heightPixels
         val gap = (sh * 0.006f).toInt()
@@ -211,7 +211,13 @@ class OverlayRenderer(private val context: Context, private val layer: FrameLayo
             val v = (views["history"] as? LinearLayout) ?: LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
             fillHistory(v, style, sh)
             val w = (sw * 0.22f).toInt()
-            v.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec((sh * 0.6f).toInt(), View.MeasureSpec.AT_MOST))
+            val unbound = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+            v.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY), unbound)
+            // Too tall: drop the oldest lines rather than cutting off the newest at the bottom.
+            while (v.childCount > 1 && v.measuredHeight > sh * 0.6f) {
+                v.removeViewAt(0)
+                v.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY), unbound)
+            }
             val left = if (style.historySide == "left") (sw * 0.015f).toInt() else sw - w - (sw * 0.015f).toInt()
             val top = (sh * 0.45f - v.measuredHeight / 2f).toInt().coerceAtLeast((sh * 0.1f).toInt())
             // Bright for a few seconds after a new line, then it steps back so it doesn't pull the eye.

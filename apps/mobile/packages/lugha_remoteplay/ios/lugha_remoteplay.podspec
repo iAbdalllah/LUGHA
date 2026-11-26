@@ -12,6 +12,6 @@ Pod::Spec.new do |s|
   s.dependency 'Flutter'
   # The Remote Play core (lugha_rpx_*) is inside lugha_engine's Rust library.
   s.dependency 'lugha_engine'
-  s.frameworks       = 'VideoToolbox', 'CoreMedia', 'CoreVideo', 'CoreImage', 'Vision'
+  s.frameworks       = 'VideoToolbox', 'CoreMedia', 'CoreVideo', 'AVKit', 'CoreImage', 'Vision'
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES' }
 end

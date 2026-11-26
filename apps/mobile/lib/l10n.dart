@@ -12,7 +12,7 @@ class L {
     'Sync now': 'مزامنة الآن', 'Installed': 'مثبّتة', 'Not installed': 'غير مثبّتة', 'No release yet': 'لا يوجد إصدار بعد', 'Install': 'تثبيت', 'Update': 'تحديث', 'Remove': 'إزالة',
     'No packages yet. Buy one in the LUGHA store.': 'لا توجد باقات بعد. اشترِ باقة من متجر لغة.',
     'Try a line': 'جرّب سطرًا', 'Type an English line from the game…': 'اكتب سطرًا إنجليزيًا من اللعبة…', 'No translation found': 'لا توجد ترجمة',
-    'History': 'السجل', 'This device': 'هذا الجهاز', 'Last seen': 'آخر ظهور',
+    'History': 'السجل', 'Floating window': 'نافذة عائمة', 'This device': 'هذا الجهاز', 'Last seen': 'آخر ظهور',
     'Pair a TV': 'ربط تلفاز', 'TVs on this network': 'أجهزة التلفاز على هذه الشبكة', 'Searching…': 'جارٍ البحث…',
     'Address (IP:port)': 'العنوان (IP:المنفذ)', 'Code on the TV': 'الرمز على التلفاز', 'Pair': 'ربط',
     'Connected to %s': 'متصل بـ %s', 'Disconnect': 'قطع الاتصال', 'Reconnect': 'إعادة الاتصال',

@@ -3,7 +3,7 @@
 // Same Dart API as the Android plugin. The Remote Play session itself is LUGHA's shared core (engine/lugha-rp, on
 // chiaki-ng), linked into the app through the lugha_engine pod (lugha_rpx_* in lugha.h). Video arrives as H.264
 // and is decoded here with VideoToolbox; a few times a second the newest frame is read with Vision's on-device text
-// recognizer and the lines inside the reading areas go to Dart. Nothing is shown and no game audio is played.
+// recognizer and the lines inside the reading areas go to Dart. No game audio is played; the picture is shown only in the optional picture-in-picture window (LivePiP.swift).
 
 import AVFoundation
 import CoreImage
@@ -147,6 +147,14 @@ public class LughaRemotePlayPlugin: NSObject, FlutterPlugin, FlutterStreamHandle
             UIApplication.shared.isIdleTimerDisabled = true // the phone must stay awake while LUGHA reads the PS5
             // Keep reading while the player uses another app or locks the phone.
             if a["background"] as? Bool ?? true { BackgroundKeeper.shared.start() }
+            // The floating window (game + Arabic) — opens by itself when the player leaves LUGHA.
+            if a["pip"] as? Bool ?? true { LivePiP.shared.prepare() }
+            result(nil)
+        case "pip":
+            LivePiP.shared.start()
+            result(LivePiP.supported)
+        case "caption":
+            LivePiP.shared.setCaption(a["text"] as? String ?? "")
             result(nil)
         case "setArea":
             session?.areas = Self.areas(a)
@@ -163,6 +171,7 @@ public class LughaRemotePlayPlugin: NSObject, FlutterPlugin, FlutterStreamHandle
             session = nil
             UIApplication.shared.isIdleTimerDisabled = false
             BackgroundKeeper.shared.stop()
+            LivePiP.shared.teardown()
             result(nil)
         default:
             result(FlutterMethodNotImplemented)
@@ -206,6 +215,7 @@ final class RemoteSession {
         decoder = H264Decoder { [weak self] buffer in
             guard let self else { return }
             self.lock.lock(); self.latest = buffer; self.lock.unlock()
+            LivePiP.shared.push(buffer)
         } onError: { [weak self] in
             if let h = self?.handle { rpx_request_keyframe(h) }
         }

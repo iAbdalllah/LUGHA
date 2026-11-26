@@ -51,6 +51,10 @@ data class AreaStyle(
 ) {
     /** Drawn by its own rules rather than the general subtitle block / HUD layout. */
     val own get() = place != "auto" || look != "auto" || rw > 0f
+
+    /** A designed area that is not the dialogue one (hints, prompts, mission text): still drawn in history-only
+     *  display, and kept out of the history panel. */
+    val instructions get() = own && !((place == "over" || place == "auto") && (look == "box" || look == "auto"))
 }
 
 /** [items] place each piece over its English; empty = show [text] at the style's position. */

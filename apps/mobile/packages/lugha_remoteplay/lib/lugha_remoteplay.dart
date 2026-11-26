@@ -179,4 +179,19 @@ class RemotePlay {
     }
   }
   static Future<void> stop() => _call('stop');
+
+  /// Opens the picture-in-picture window (the live game with the Arabic under it) now; it also opens by itself when
+  /// the player leaves LUGHA during a session. iPhone only; elsewhere this does nothing.
+  static Future<void> pictureInPicture() async {
+    try {
+      await _ch.invokeMethod('pip');
+    } catch (_) {}
+  }
+
+  /// The Arabic shown under the picture in the picture-in-picture window (empty: none).
+  static Future<void> caption(String text) async {
+    try {
+      await _ch.invokeMethod('caption', {'text': text});
+    } catch (_) {}
+  }
 }
