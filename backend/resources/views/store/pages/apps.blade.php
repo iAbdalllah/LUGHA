@@ -4,7 +4,7 @@
     <section class="mx-auto grid max-w-5xl gap-4 px-4 pb-12 sm:grid-cols-2 sm:px-6">
         <div class="card flex flex-col p-6">
             <p class="text-lg font-semibold" dir="ltr">macOS</p>
-            <p class="mt-1 flex-1 text-sm text-ink-2">{{ __('macOS 13 or later on a Mac with Apple silicon (M1 or newer). Open the file and drag LUGHA to Applications. The first time, if macOS won't open it, go to System Settings › Privacy & Security and choose “Open Anyway”.') }}</p>
+            <p class="mt-1 flex-1 text-sm text-ink-2">{{ __('macOS 13 or later on a Mac with Apple silicon (M1 or newer). Open the file and drag LUGHA to Applications. The first time, if macOS won\'t open it, go to System Settings › Privacy & Security and choose “Open Anyway”.') }}</p>
             <a class="btn-primary mt-4 self-start" href="{{ asset('mac.dmg') }}" download>{{ __('Download for Mac') }}</a>
         </div>
         <div class="card flex flex-col p-6">
