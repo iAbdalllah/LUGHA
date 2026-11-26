@@ -14,6 +14,7 @@ Route::prefix('{locale}')->whereIn('locale', ['ar', 'en'])->group(function () {
     Route::get('/packages/{package:slug}', [Store\PackageController::class, 'show'])->name('packages.show');
     Route::get('/support', [Store\SupportController::class, 'index'])->name('support.index');
     Route::view('/how-it-works', 'store.pages.how')->name('pages.how');
+    Route::view('/apps', 'store.pages.apps')->name('pages.apps');
     Route::view('/refund-policy', 'store.pages.refunds')->name('pages.refunds');
     Route::view('/privacy', 'store.pages.privacy')->name('pages.privacy');
 

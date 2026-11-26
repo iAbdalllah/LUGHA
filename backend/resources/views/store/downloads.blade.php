@@ -6,11 +6,7 @@
             <section class="card p-6">
                 <h2 class="text-lg font-semibold">{{ __('Packages install through the LUGHA app') }}</h2>
                 <p class="mt-2 text-ink-2">{{ __('For security, packages are encrypted and licensed to your devices, so they are installed from the LUGHA desktop app rather than downloaded here. Sign in to the app with this account and your library appears automatically.') }}</p>
-                <div class="mt-5 grid gap-3 sm:grid-cols-3">
-                    @foreach (['macOS', 'Windows', 'Android TV'] as $app)
-                        <div class="rounded-xl border border-line p-4"><p class="font-semibold" dir="ltr">{{ $app }}</p><p class="text-sm text-muted">{{ __('Coming soon — we\'ll email you when it\'s ready.') }}</p></div>
-                    @endforeach
-                </div>
+                <a class="btn-primary mt-5 inline-block" href="{{ route('pages.apps') }}">{{ __('Download the apps') }}</a>
             </section>
             <section>
                 <h2 class="mb-3 text-lg font-semibold">{{ __('Your packages') }}</h2>

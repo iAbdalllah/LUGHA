@@ -25,6 +25,7 @@ rsync -az --delete -e "ssh -i $KEY -p $PORT" \
   --exclude='.env' --exclude='.env.*' --exclude='/vendor/' --exclude='/node_modules/' --exclude='/storage/' \
   --exclude='/bin/' --exclude='/database/*.sqlite' --exclude='/public/hot' --exclude='/public/storage' \
   --exclude='/bootstrap/cache/*.php' --exclude='.phpunit*' --exclude='/tests/' --exclude='/deploy/' \
+  --exclude='/public/tv.apk' --exclude='/public/windows.exe' --exclude='/public/mac.dmg' \
   --exclude='.git' --exclude='CLAUDE.md' --exclude='AGENTS.md' --exclude='.DS_Store' \
   ./ "$HOST:$APP/"
 

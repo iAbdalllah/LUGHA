@@ -29,7 +29,7 @@
             @if($locale === 'ar')<span class="hidden text-xs tracking-[0.18em] text-muted sm:inline">LUGHA</span>@endif
         </a>
         <nav aria-label="{{ __('Main') }}" class="order-3 flex w-full gap-1 overflow-x-auto [scrollbar-width:none] text-sm sm:order-none sm:w-auto">
-            @foreach ([['games.index', __('Store')], ['library', __('My library')], ['pages.how', __('How it works')], ['support.index', __('Support')]] as [$name, $label])
+            @foreach ([['games.index', __('Store')], ['library', __('My library')], ['pages.how', __('How it works')], ['pages.apps', __('Download')], ['support.index', __('Support')]] as [$name, $label])
                 <a href="{{ route($name) }}" @class(['whitespace-nowrap rounded-lg px-3.5 py-2', 'bg-surface-2 text-ink' => request()->routeIs($name.'*'), 'text-muted hover:text-ink' => ! request()->routeIs($name.'*')])>{{ $label }}</a>
             @endforeach
         </nav>
