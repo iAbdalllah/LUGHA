@@ -152,8 +152,12 @@ class OverlayRenderer(private val context: Context, private val layer: FrameLayo
             val key = "area:$name"
             val slot = slots[key]
             val lineH = its.map { it.h / it.lines.coerceAtLeast(1) }.sorted().let { it[it.size / 2] } * sh
-            var px = (lineH * 0.9f * style.fontScale * a.font).coerceIn(14f, sh * 0.05f * a.font.coerceAtLeast(0.5f))
-            if (slot != null && kotlin.math.abs(px - slot.px) / slot.px < 0.3f) px = slot.px
+            // The dialogue area (subtitles) keeps one text size for the whole game: sizing it from each frame's English
+            // made it jump whenever the recogniser read a line taller, merged two rows, or caught a speaker name.
+            val dialogue = !a.instructions
+            var px = if (dialogue) (sh * 0.03f * style.fontScale * a.font).coerceIn(14f, sh * 0.06f)
+                     else (lineH * 0.9f * style.fontScale * a.font).coerceIn(14f, sh * 0.05f * a.font.coerceAtLeast(0.5f))
+            if (!dialogue && slot != null && kotlin.math.abs(px - slot.px) / slot.px < 0.3f) px = slot.px
             val v = (views[key] as? LinearLayout) ?: LinearLayout(context)
             fillArea(v, list, a, px, style)
             // Width: the English (or the reading area / custom box), times the player's box width; never the whole screen.
@@ -163,9 +167,12 @@ class OverlayRenderer(private val context: Context, private val layer: FrameLayo
                 a.rw > 0f && place != "over" -> maxOf(englishW, a.rw * sw * 0.5f)
                 else -> englishW
             }
-            val maxW = (baseW * a.boxW).coerceIn(sw * 0.12f, sw * 0.9f).toInt()
+            // Dialogue: as wide as the reading area allows, so a short English line doesn't squeeze the Arabic onto two
+            // lines; the card itself fits its text (a pill), whatever else the recogniser caught beside the subtitle.
+            val maxW = if (dialogue) (maxOf(a.rw * sw, englishW, sw * 0.6f) * a.boxW).coerceIn(sw * 0.3f, sw * 0.9f).toInt()
+                       else (baseW * a.boxW).coerceIn(sw * 0.12f, sw * 0.9f).toInt()
             // Over the English (or below a game box): as wide as it, so it lines up with what the game drew.
-            v.minimumWidth = if ((place == "over" || place == "below" || place == "above") && a.look != "subtitle") (englishW * a.boxW).toInt().coerceAtMost(maxW) else 0
+            v.minimumWidth = if (!dialogue && (place == "over" || place == "below" || place == "above") && a.look != "subtitle") (englishW * a.boxW).toInt().coerceAtMost(maxW) else 0
             v.measure(View.MeasureSpec.makeMeasureSpec(maxW, View.MeasureSpec.AT_MOST), View.MeasureSpec.UNSPECIFIED)
             val w = v.measuredWidth
             val h = v.measuredHeight.coerceAtMost((sh * 0.3f).toInt())
@@ -174,6 +181,9 @@ class OverlayRenderer(private val context: Context, private val layer: FrameLayo
                 place == "custom" -> when (a.align) { "right" -> a.tx + a.tw; "left" -> a.tx; else -> a.tx + a.tw / 2f }
                 a.align == "right" -> ur
                 a.align == "left" || place == "below" || place == "above" -> ux
+                // Dialogue: centred on the reading area (the game centres its subtitles), not on whatever text was
+                // caught — a menu or sign at one side pulled the card off centre.
+                dialogue && a.rw > 0f -> a.rx + a.rw / 2f
                 else -> (ux + ur) / 2f
             }
             var ay = when (place) {
