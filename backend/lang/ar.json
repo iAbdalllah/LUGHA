@@ -634,7 +634,7 @@
     "Download": "التحميل",
     "Download LUGHA": "حمّل لغة",
     "Install the app on the device you play on, sign in with your LUGHA account, and your packages appear automatically.": "ثبّت التطبيق على الجهاز الذي تلعب عليه، وسجّل الدخول بحساب لغة، وستظهر حزمك تلقائيًا.",
-    "macOS 13 or later on a Mac with Apple silicon (M1 or newer). Open the file and drag LUGHA to Applications. The first time, if macOS won't open it, go to System Settings › Privacy & Security and choose “Open Anyway”.": "macOS 13 أو أحدث على جهاز Mac بمعالج Apple (M1 أو أحدث). افتح الملف واسحب لغة إلى مجلد التطبيقات. في أول مرة، إذا رفض macOS فتحه، اذهب إلى إعدادات النظام › الخصوصية والأمان واختر «فتح على أي حال».",
+    "macOS 13 or later on a Mac with Apple silicon (M1 or newer). Open the file and drag LUGHA to Applications.": "macOS 13 أو أحدث على جهاز Mac بمعالج Apple (M1 أو أحدث). افتح الملف واسحب لغة إلى مجلد التطبيقات.",
     "Download for Mac": "تحميل لنظام Mac",
     "Windows 10 or 11 (64-bit). If Windows SmartScreen appears, choose “More info” then “Run anyway”.": "Windows 10 أو 11 (64-بت). إذا ظهرت نافذة SmartScreen اختر «مزيد من المعلومات» ثم «تشغيل على أي حال».",
     "Download for Windows": "تحميل لنظام Windows",
